@@ -5,7 +5,7 @@ In order to work with the Lex Bot, it needs a client. The easiest way to spin up
  3. In the Quick create stack screen, enter a Stack name, such as MyAppointmentBotWebUIStack.
  4. Change the CodeBuildName to something unique to the region, such as MyAppointmentBotWebUI.
  5. Scroll down to the Lex V2 Bot section. Flip back to the Bot tab and copy the Bot ID and paste it into the LexV2BotId parameter in the CloudFormation - Stack tab.  
- ![Copy the Bot ID](./images/image-7.png) 
+ ![Copy the Bot ID](./images/image-7.png)  
  6. Click on the View aliases button back in the Bot tab. Click the Create alias button. Enter PROD as the name. Choose Version 1 as the version. Click Create.
  7. Select the PROD Alias. Copy the Alias ID into the LexV2BotAliasId parameter in the CloudFormation - Stack tab.
  8. Scroll down to Web Application Parameters. Enter the web address of the S3 bucket for the ToDo WebApp in the WebAppPath. To get this value, you will need to open a new tab to the AWS Console and search for the CloudFront service. Now, select the distribution for the ToDo WebApp. Then select the Origins tab. Select Origin1. Click Edit. Copy the URL shown in the Origin domain field. Paste this URL into the WebAppParentOrigin parameter.

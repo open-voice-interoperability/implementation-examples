@@ -28,22 +28,7 @@ The final part of this sample shows how to implement bot-to-bot communication us
 
 ## Step-by-Step Instructions for the AWS Components
 
-[Step 1: Create the ToDo WebApp as an Amazon CodeCatalyst Project](./Step%201.md)
-[Step 2: Create the Lex Appointment Bot](./Step%202.md)
-[Step 3: Create a Web UI for the Lex Bot](./Step%203.md)
-[Step 4: Wire up the Lex Bot to the ToDo WebApp](./Step%204.md)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+- [Step 1: Create the ToDo WebApp as an Amazon CodeCatalyst Project](./Step%201.md)
+- [Step 2: Create the Lex Appointment Bot](./Step%202.md)
+- [Step 3: Create a Web UI for the Lex Bot](./Step%203.md)
+- [Step 4: Wire up the Lex Bot to the ToDo WebApp](./Step%204.md)

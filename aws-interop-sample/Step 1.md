@@ -29,7 +29,7 @@ The following steps will walk you through the creation of the Amazon CodeCatalys
  13. Expand the Code Repository Options and change the name to something like your project name, such as MyToDoApp-Repo.
  14. Expand the Frontend Options and select the language of your choice. Then change the name of the stack to something like your project name, such as MyToDoApp-FrontendStack, and change the Region to your preferred Region.
  15. Expand the Backend Options and select the language of your choice. Then change the name of the stack to something like your project name, such as MyToDoApp-BackendStack, and change the Region to your preferred Region.
- 16. Verify that all the settings are as you want.
+ 16. Verify that all the settings are as you want.  
  ![Verify the Project Settings](./images/image-5.png)  
  17. Click the Create project button. This will create the project and kick off a workflow run to build and deploy the frontend and backend components to AWS. Sit back and relax, this part takes 10 minutes or so.
  18. Refresh the browser to View the Workflow Runs. Select the active or most recent run. In the flow diagram, wait for the last step to complete (it will have a green checkmark in it). 

@@ -1,4 +1,4 @@
-# Step 3: Create a Web UI for the Lex Bot
+# Step 3: Create a Web UI for the Appointment Bot
 In order to work with the Lex Bot, it needs a client. The easiest way to spin up a client is to use the Sample Amazon Lex Web Interface from GitHub. To create this, follow these steps:
  1. In a new tab, navigate to https://github.com/aws-samples/aws-lex-web-ui.
  2. Scroll down to the getting started section and click the Launch Stack button for the region you want the Web UI to be hosted in.
@@ -16,4 +16,40 @@ In order to work with the Lex Bot, it needs a client. The easiest way to spin up
  13. Set the ShouldLoadIframeMinimized parameter to true.
  14. Scroll to the bottom, check the warnings and click Create stack.
  15. Wait for CloudFormation to finish the deployment. Then click on the parent stack, such as MyAppointmentBotWebUIStack. Click the Outputs tab. Click the WebAppDomainName link (a CloudFront domain). NOTE: Despite all the settings, the page title will be Order Flowers Bot. We'll fix that in a minute.
- 16. 
+
+The next step is to add an icon to the ToDo WebApp so the chat window is available there. To do this, we need to:
+
+ 16. Launch CodeCatalyst: https://codecatalyst.aws and navigate to your ToDo WebApp project.
+ 17. Select the Dev Environments link on the left.
+ 18. Create a Dev Environment for VS Code. Leave all the defaults and click Create.
+ 19. 
+
+
+
+
+ ```HTML
+<script src="https://d34vwi0rcczc41.cloudfront.net/lex-web-ui-loader.min.js"></script>
+<script>
+  var loaderOpts = {
+    baseUrl: 'https://d34vwi0rcczc41.cloudfront.net/',
+    shouldLoadMinDeps: true
+  };
+  var loader = new ChatBotUiLoader.IframeLoader(loaderOpts);
+  var chatbotUiConfig = {
+          /* Example of setting session attributes on parent page
+          lex: {
+            sessionAttributes: {
+              userAgent: navigator.userAgent,
+              QNAClientFilter: ''
+            }
+          }
+          */
+        };
+  loader.load(chatbotUiConfig)
+    .catch(function (error) { console.error(error); });
+</script>```
+
+TODO:
+- Get the Icon to show on the parent page (index.html)
+- Fix the Page title.
+- Add an icon to the app.

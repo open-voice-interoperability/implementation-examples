@@ -19,6 +19,8 @@ Using this sample, you will deploy myriad AWS objects that set up:
  4. A second Amazon Lex Bot that can be used to Book A Flight.
  5. A Lambda function that implements the Open Voice Network's Bot Interoperability Standard to provide an interface between the Appointment Bot and the Book a Flight Bot so that the former can use the latter to create a Flight Appointment, which will appear as a ToDo Item in the website.
 
+![Solution Components Diagram](./images/image-8.png)
+
 ## Sample Project and CloudFormation Templates
 Some of this sample is provided by creating a new Amazon CodeCatalyst Project. 
 
@@ -30,5 +32,9 @@ The final part of this sample shows how to implement bot-to-bot communication us
 
 - [Step 1: Create the ToDo WebApp as an Amazon CodeCatalyst Project](./Step%201.md)
 - [Step 2: Create the Lex Appointment Bot](./Step%202.md)
-- [Step 3: Create a Web UI for the Lex Bot](./Step%203.md)
+- [Step 3: Create a Web UI for the Appointment Bot](./Step%203.md)
 - [Step 4: Wire up the Lex Bot to the ToDo WebApp](./Step%204.md)
+- [Step 5: Create the Airline System Lex Bot](Step%205.md)
+- [Step 6: Create a Web UI for the Airline System Bot](Step%206.md)
+- [Step 7: Modify the Airline System Bot to Expose the OVON Interface](Step%207.md)
+- [Step 8: Create the OVON Interface for the Appointment Bot](Step%208.md)

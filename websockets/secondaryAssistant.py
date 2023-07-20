@@ -4,7 +4,7 @@ import datetime
 import requests
 import json
 
-scriptpath = "../../python/lib"
+scriptpath = "../../lib-interop/python/lib"
 sys.path.append(os.path.abspath(scriptpath))
 import dialog_event as de
 

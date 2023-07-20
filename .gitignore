@@ -1,0 +1,10 @@
+
+websockets/.ipynb_checkpoints/fastspeech2_inference-checkpoint.ipynb
+websockets/__pycache__/assistant.cpython-39.pyc
+websockets/__pycache__/secondaryAssistant.cpython-39.pyc
+websockets/assistantBak.py
+websockets/notes.txt
+websockets/output_audio_file
+websockets/output_audio_file.wav
+*.wav
+*.js

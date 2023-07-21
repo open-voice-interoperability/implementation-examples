@@ -15,41 +15,54 @@ In order to work with the Lex Bot, it needs a client. The easiest way to spin up
  12. Enter **Make an Appointment** in the WebAppConfToolbarTitle parameter.
  13. Set the ShouldLoadIframeMinimized parameter to true.
  14. Scroll to the bottom, check the warnings and click Create stack.
- 15. Wait for CloudFormation to finish the deployment. Then click on the parent stack, such as MyAppointmentBotWebUIStack. Click the Outputs tab. Click the WebAppDomainName link (a CloudFront domain). NOTE: Despite all the settings, the page title will be Order Flowers Bot. We'll fix that in a minute.
+ 15. Wait for CloudFormation to finish the deployment. Then click on the parent stack, such as MyAppointmentBotWebUIStack. Click the Outputs tab. Click the WebAppDomainName link (a CloudFront domain). NOTE: Despite all the settings, the page title will be Order Flowers Bot. 
 
-The next step is to add an icon to the ToDo WebApp so the chat window is available there. To do this, we need to:
-
- 16. Launch CodeCatalyst: https://codecatalyst.aws and navigate to your ToDo WebApp project.
- 17. Select the Dev Environments link on the left.
- 18. Create a Dev Environment for VS Code. Leave all the defaults and click Create.
- 19. 
-
-
-
-
- ```HTML
-<script src="https://d34vwi0rcczc41.cloudfront.net/lex-web-ui-loader.min.js"></script>
-<script>
-  var loaderOpts = {
-    baseUrl: 'https://d34vwi0rcczc41.cloudfront.net/',
-    shouldLoadMinDeps: true
-  };
-  var loader = new ChatBotUiLoader.IframeLoader(loaderOpts);
-  var chatbotUiConfig = {
-          /* Example of setting session attributes on parent page
-          lex: {
-            sessionAttributes: {
-              userAgent: navigator.userAgent,
-              QNAClientFilter: ''
-            }
-          }
-          */
-        };
-  loader.load(chatbotUiConfig)
-    .catch(function (error) { console.error(error); });
-</script>```
+ 
 
 TODO:
-- Get the Icon to show on the parent page (index.html)
+- Get the chatbot icon to show on the ToDo WebApp page
 - Fix the Page title.
-- Add an icon to the app.
+- Add a favicon to the app.
+
+In CodeCatalyst, clone the repo to your local machine.
+Then, navigate to the frontend folder and open a command window.
+Then:
+```bash
+# install npm package from github repo
+npm install --save awslabs/aws-lex-web-ui
+# you may need to install co-dependencies:
+npm install --save vue vuex vuetify material-design-icons roboto-fontface
+```
+ In frontend/src/App.tsx:
+ ```javascript
+  // dependencies
+  import Vue from 'vue';
+  import Vuex from 'vuex';
+  import Vuetify from 'vuetify';
+
+  // import the component constructor
+  import { Loader as LexWebUi } from 'aws-lex-web-ui';
+
+  Vue.use(Vuetify);
+  Vue.use(Vuex);
+
+  // plugin creates the LexWebUi component
+  const lexWebUi = new LexWebUi({
+    // pass your own configuration
+    cognito: {
+      poolId: 'us-east-1:momrules-fade-babe-cafe-0123456789ab',
+    },
+    lex: {
+      initialText: 'How can I help you?',
+      botName: 'helpBot',
+      botAlias: '$LATEST',
+    },
+    ui: {
+      toolbarTitle: 'Help Bot',
+      toolbarLogo: '',
+    },
+  });
+ ```
+
+Replace the cognito poolId (get from CloudFormation Stack) and the botName (get from Lex).
+

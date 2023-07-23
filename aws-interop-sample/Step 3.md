@@ -15,54 +15,5 @@ In order to work with the Lex Bot, it needs a client. The easiest way to spin up
  12. Enter **Make an Appointment** in the WebAppConfToolbarTitle parameter.
  13. Set the ShouldLoadIframeMinimized parameter to true.
  14. Scroll to the bottom, check the warnings and click Create stack.
- 15. Wait for CloudFormation to finish the deployment. Then click on the parent stack, such as MyAppointmentBotWebUIStack. Click the Outputs tab. Click the WebAppDomainName link (a CloudFront domain). NOTE: Despite all the settings, the page title will be Order Flowers Bot. 
-
- 
-
-TODO:
-- Get the chatbot icon to show on the ToDo WebApp page
-- Fix the Page title.
-- Add a favicon to the app.
-
-In CodeCatalyst, clone the repo to your local machine.
-Then, navigate to the frontend folder and open a command window.
-Then:
-```bash
-# install npm package from github repo
-npm install --save awslabs/aws-lex-web-ui
-# you may need to install co-dependencies:
-npm install --save vue vuex vuetify material-design-icons roboto-fontface
-```
- In frontend/src/App.tsx:
- ```javascript
-  // dependencies
-  import Vue from 'vue';
-  import Vuex from 'vuex';
-  import Vuetify from 'vuetify';
-
-  // import the component constructor
-  import { Loader as LexWebUi } from 'aws-lex-web-ui';
-
-  Vue.use(Vuetify);
-  Vue.use(Vuex);
-
-  // plugin creates the LexWebUi component
-  const lexWebUi = new LexWebUi({
-    // pass your own configuration
-    cognito: {
-      poolId: 'us-east-1:momrules-fade-babe-cafe-0123456789ab',
-    },
-    lex: {
-      initialText: 'How can I help you?',
-      botName: 'helpBot',
-      botAlias: '$LATEST',
-    },
-    ui: {
-      toolbarTitle: 'Help Bot',
-      toolbarLogo: '',
-    },
-  });
- ```
-
-Replace the cognito poolId (get from CloudFormation Stack) and the botName (get from Lex).
-
+ 15. Wait for CloudFormation to finish the deployment. Then click on the parent stack, such as MyAppointmentBotWebUIStack. Click the Outputs tab. Click the WebAppDomainName link (a CloudFront domain). NOTE: Despite all the settings, the page title will be Order Flowers Bot.  
+ (The easiest(?) way to fix this, is to navigate to the S3 Bucket: myappointmentbotwebuistack-codebuild-webappbucket-xxxxxxxx. Then, download the  lex-web-ui-min.js JavaScript file. Open it in a text editor and search for "Order Flowers Bot" and replace it with "Make an Appintment Bot". Save the file and upload it back to the bucket. Then, to clear the CloudFront cache, flip over to CloudFront, open the distribution for the lex-web-ui, select the invalidations tab, select one of the invalidations, select Copy to New, then select Create Invalidation. Once the cache is cleared, the changes to the JavaScript will be apparent when you hard refresh the Lex UI in your browser.)

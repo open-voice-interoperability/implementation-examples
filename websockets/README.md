@@ -1,9 +1,11 @@
 # Demonstration of using websockets to do server-side speech recognition and TTS
 The client is a web browser, the primary server is a websocket server, and the secondary server is an HTTP server.
-ASR and TTS are performed on the websocket server. There is no need for the browser to have any speech capabilities. Right now the browser must be able to record PCM-formatted audio (Chrome on Windows and Mac, Edge on Windows but not Firefox on Windows or Safari on Mac), but I believe this can be addressed by converting the audio on the server.
+ASR and TTS are performed on the websocket server. There is no need for the browser to have any speech capabilities. Right now the browser must be able to record PCM-formatted audio (Chrome on Windows and Mac, Edge on Windows but not Firefox on Windows or Safari on MacOS), but I believe this can be addressed by converting the audio to PCM on the server, although I haven't tried doing that.
 ASR is done locally on this server by the OpenAI Whisper speech recognizer.
 Currently TTS is done in the cloud.
-This could be used for the channeling pattern.
+This setup could be used for the channeling pattern.
+To run, open two terminal windows. Start the websocket server ("python websocketServer.py") in one window (assuming your "python" command starts Python 3).
+Start the secondary server in the other terminal window ("python secondaryAssistantHTTP.py". Finally, open "sendAudioToServer" in a Chrome browser on a Windows PC or Mac or an Edge browser on Windows.
 
 ## Client-side code (HTML/Javascript):
 ### sendAudioToServer.html
@@ -30,10 +32,10 @@ This could be used for the channeling pattern.
 4. The server waits for audio to be sent over a websocket
 5. when it receives the audio, it transcribes it with the open source OpenAI Whisper ASR software, which must be installed on the server, but which doesn't require internet access at runtime.
 6. More information about Whisper and instructions for installing can be found at https://github.com/openai/whisper. Note that Whisper can be configured to use many models and supports many languages besides the one used in this example. As the Whisper installation instructions state, the "ffmpeg" utility must be installed on this server for Whisper to work.
-7. After the audio is transcribed, the transcription, TTS wav file and associated dialog event are returned to the client, where they are displayed in a browser window. 
+7. After the audio is transcribed, the transcription, TTS wav file and associated dialog event are returned to the client, where they are displayed in a browser window or played, depending on whether they're text or audio. 
 8. Note that the only reason the dialog event is sent to the browser is so a developer can inspect it. The browser doesn't use it.
 9. Similarly, the secondary assistant's response (transcription and dialog event) is displayed on the web browser.
-10. TTS is performed on the server by the gTTS library, which does require internet access
+10. TTS is currently performed on the server by the gTTS library, which does require internet access
 11. Works on Chrome and Edge on Windows and Chrome on Mac
 
 

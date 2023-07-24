@@ -58,3 +58,5 @@ The following steps will walk you through the creation of the Amazon CodeCatalys
 
 20. Create a New ToDo item to test the page.
 21. Done.
+
+[Next > Step 2: Create the Lex Appointment Bot](./Step%202.md)

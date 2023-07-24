@@ -26,3 +26,6 @@ Follow these steps to create an Amazon Lex Appointment Bot.
 16. Select Bot Versions on the left.
 17. Create a new version named Prod.
 18. Done.
+
+- [Back < Step 1: Create the ToDo WebApp as an Amazon CodeCatalyst Project](./Step%201.md)
+- [Next > Step 3: Create a Web UI for the Appointment Bot](./Step%203.md)

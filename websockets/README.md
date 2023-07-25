@@ -56,8 +56,11 @@ Start the secondary server in the other terminal window ("python secondaryAssist
 1. add ASR confidence to OVON messages
 1. add alternatives to OVON messages
 1. provide for text input
-1. change languages
-1. find local TTS
+1. change languages (use Whisper multilingual model)
+1. use local TTS
+1. multi-turn conversation
+1. implement delegation pattern
+1. more capable assistants
 
 
 

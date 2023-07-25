@@ -2,6 +2,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from secondaryAssistant import *
 secondaryAssistant = SecondaryAssistant()
+serverPort = 8766
 
 # HTTPRequestHandler class
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -41,13 +42,13 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
 
 # Define the server address and port
-server_address = ('', 8766)
+server_address = ('', serverPort)
 
 # Create an HTTP server instance
 httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
 
 # Start the server
-print('HTTP Server started on port 8766...')
+print("HTTP Server started on port " + str(serverPort))
 httpd.serve_forever()
 
 def respond_to_query():

@@ -1,5 +1,8 @@
 var socket;
 var mediaRecorder;
+var audioQueue = []; 
+var audio = new Audio();
+var isPlaying = false;
 
 
 function startScript(){
@@ -32,8 +35,9 @@ socket.onerror = error => {
   console.error('WebSocket error:', error);
 };
 
-// the message can contain either a dialog event, the text transcription or an audio Blob
+// The message can contain either a dialog event, a text to display or an audio Blob to play
 socket.onmessage = function(event) {
+    // dialog event or text
   if (typeof event.data === 'string') {
     // Handle text data
     var receivedText = event.data;
@@ -44,28 +48,38 @@ socket.onmessage = function(event) {
     messageWindow = getWindow(messageType);
     appendText(messageWindow,processedMessage);
     
-    // Use the received text as needed
+    // Play the received audio
+    // must queue to ensure playing in order
   } else if (event.data instanceof Blob) {
-    // play the received data
-    // Create an audio element
-       const audio = new Audio();
-  
-  // Set the received audio data as the audio source
-       audio.src = URL.createObjectURL(event.data);
-  
-  // Play the audio
-  audio.play();
-  } else {
-    // Handle other types of data (if applicable)
-    console.log("Received data of unknown type");
-  }
-};
+       audioQueue.push(event.data);
+       if (!isPlaying) {
+           playNextAudio();
+           }
+           };
+  };
+       
+   
 // Handle WebSocket connection close event
 socket.onclose = () => {
   console.log('WebSocket connection closed');
 }
-
 }
+
+// manage audio queue
+function playNextAudio() {
+            if (audioQueue.length === 0) {
+                console.log("All audio files played.");
+                isPlaying = false;
+                return;
+            }
+            isPlaying = true;
+            const currentAudioData = audioQueue.shift();
+            const audioBlob = new Blob([currentAudioData], { type: "audio/wav" });
+            const audioURL = URL.createObjectURL(audioBlob);
+            audio.src = audioURL;
+            audio.addEventListener("ended", playNextAudio);
+            audio.play();
+        }
 
 
 function stopRecording(){
@@ -83,7 +97,7 @@ function processMessage(messageType,message){
     var formattedMessage = message;
     if(messageType == "dialogEventUser"){
         messageToFormat = message.replace("dialog event (from user input): ","");
-         messageToFormat = messageToFormat.replace(/'/g, '"');
+        messageToFormat = messageToFormat.replace(/'/g, '"');
         var parseJSON = JSON.parse(messageToFormat);
         var formattedMessage = JSON.stringify(parseJSON, undefined, 4);  
     }
@@ -98,7 +112,7 @@ function processMessage(messageType,message){
     return formattedMessage;
 }
 
-//decide where to display the text result vs the dialog event
+//decide where to display the text result vs the dialog events
 function getWindow(messageType){
     console.log("messageType is " + messageType);
     displayWindowName = ""

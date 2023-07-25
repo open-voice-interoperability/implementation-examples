@@ -21,23 +21,31 @@ async def audio_server(websocket, path):
                 audio_data += data
                
             if audio_data:
-                # Process the audio stream as needed
+                # recognize the input audio stream and create transcription
                 print("Received audio stream length:", len(audio_data))
                 with open('received_audio.wav', 'wb') as audio_file:
                    audio_file.write(audio_data)
                    print("Audio file saved successfully")
                    transcription = transcribe_file("received_audio.wav")
+                    # Send the transcription back to display to the user
+                   await websocket.send(transcription)
+                   print("transcription sent to client")
                    print(transcription)
-                   what_to_say = assistant.invoke_assistant(transcription)
-                   print(what_to_say)
-                # Send the transcription back to display to the user
-                await websocket.send("user:" + transcription)
-                print("transcription received by client")
-				
-                # Send assistant TTS response audio back to the client
+                   assistant.invoke_assistant(transcription)
+                if assistant.transfer:
+                # let the user know the request is being transferred
+                    assistant_message = assistant.get_primary_assistant_response()
+                    print(assistant_message)
+                    await websocket.send(assistant_message)
+                    # Send primary assistant TTS response audio back to the client
+                    primary_assistant_audio = gTTS(assistant_message)
+                    primary_assistant_audio.save("primary_assistant_audio.wav")
+                    with open("primary_assistant_audio.wav", "rb") as audio_file:
+                        await websocket.send(audio_file.read())
+                what_to_say = assistant.get_output_transcription()
                 output_audio = gTTS(what_to_say)
                 output_audio.save("output_audio_file.wav")
-                with open("output_audio_file.wav", 'rb') as audio_file:
+                with open("output_audio_file.wav", "rb") as audio_file:
                     await websocket.send(audio_file.read())
 				# send text response back to client
                 await websocket.send(what_to_say)

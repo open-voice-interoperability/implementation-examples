@@ -9,6 +9,7 @@ scriptpath = "../../lib-interop/python/lib"
 sys.path.append(os.path.abspath(scriptpath))
 import dialog_event as de
 remote_assistants = ["test-assistant1", "test1","test2"]
+assistant_name = "primary-assistant" 
 
 
 class Assistant:
@@ -17,7 +18,15 @@ class Assistant:
         self.output_message = ""
         self.output_transcription = ""
         self.current_remote_assistant = ""
-	
+        self.primary_assistant_response = ""
+        self.transfer = True
+	# the primary assistant has 4 items to send back
+    # 1. the transcription of the primary assistant's response, which will be displayed in the 
+    #    browser and rendered with TTS
+    # 2. the transcription of the secondary assistant's response, which will be displayed in the
+    #    browser and rendered with TTS
+    # 3. The input and output OVON messages, which will be displayed in the browser, but are
+    #    not actually used by the client 
     def invoke_assistant(self,transcription):
         print(transcription)
         # convert input to OVON
@@ -25,32 +34,36 @@ class Assistant:
         print(self.input_message)
         # handle locally?
         if self.handle_locally(transcription):
-            final_result = self.decide_what_to_say(transcription)
+           self.transfer = False
+           final_result = self.decide_what_to_say(transcription)
         # if not handle locally:
         else:
+            # should identify secondary assistant based on OVON message, not transcription
             self.identify_assistant(transcription)
-            resultOVON = self.send_message_to_assistant(self.input_message)
+            self.primary_assistant_response = self.notify_user_of_transfer()
+            resultOVON = self.send_message_to_secondary_assistant()
             self.output_transcription = self.parse_dialog_event(resultOVON)
             self.output_message = resultOVON
         # log result
         print(self.output_transcription)
-        return(self.output_transcription)
+        return(self.primary_assistant_response)
 
     # figure out if the local assistant can help	
     def handle_locally(self,transcription):
         return(False)
     
 # if it can't be handled locally, find a remote assistant that can help
+# hard-coded for now
     def identify_assistant(self,transcription):
         self.current_remote_assistant = remote_assistants[0]
 
-    def send_message_to_assistant(self,input_message):
+    def send_message_to_secondary_assistant(self):
     # URL endpoint to send the POST request
         url = 'http://localhost:8766'
         # Request payload data
         payload = self.input_message
         # Send an HTTP POST request to the remote server
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json = payload)
         # Print the HTTP response status code
         print('Response status code:', response.status_code)
         # Print the response content
@@ -59,6 +72,10 @@ class Assistant:
 
     def decide_what_to_say(self,transcription):
         return(transcription)
+        
+    def notify_user_of_transfer(self):
+        message_to_user = "I don't know the answer, I will ask " + self.current_remote_assistant
+        return(message_to_user)
     
     def convert_to_dialog_event(self,transcription):
         d=de.DialogEvent()
@@ -109,5 +126,11 @@ class Assistant:
     
     def get_output_message(self):
         return(self.output_message)
+        
+    def get_output_transcription(self):
+        return(self.output_transcription)
+    
+    def get_primary_assistant_response(self):
+        return(self.primary_assistant_response)
         
         

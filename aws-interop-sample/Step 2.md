@@ -1,4 +1,6 @@
-# Step 2: Create the Lex Appointment Bot
+# Step 2: Create the Lex Appointment Bot and Lambda Function
+
+## Part 1 - Create the Lex Appointment Bot
 
 Follow these steps to create an Amazon Lex Appointment Bot.
 
@@ -16,13 +18,36 @@ Follow these steps to create an Amazon Lex Appointment Bot.
 12. Shortly, you will be on the Intent: MakeAppointment screen. Click the Save intent button.
 13. At the top, click the Build button.
 14. Once built, click the Test button to try out your bot.
- Start with "I need to make an appointment."
- Then, "A dentist appointment."
- Then, "Tomorrow."
- Then, "Now."
- Then, "Yes."
- You should see the intent is fulfilled.
-15. Now, we need to release the bot to Prod. Select the link to go back to the intents list.
+
+- Start with "I need to make an appointment."
+- Then, "A dentist appointment."
+- Then, "Tomorrow."
+- Then, "Now."
+- Then, "Yes."
+
+   You should see the intent is fulfilled.
+
+15. Done.
+
+## Part 2 - Create the Lambda Function
+
+Follow these steps to create an Amazon Lambda Function for the Appointment Bot backend.
+
+1. In the AWS Console, search for the Lambda service.
+2. Select the Lambda tile.
+3. Select the Create function button.
+4. Select to Use a blueprint.
+5. Select the blueprint named Make an Appointment with Lex.
+6. Give the function a name, such as MyLexAppointmentBotFunction.
+7. Scroll down and select the Create function button.
+8. With the function created, flip back to the Lex console.
+9. Select the MakeAppointment bot you created in Part 1.
+10. Select the Aliases tab under Deployment.
+11. Select the TestBotAlias.
+12. Select the English language link.
+13. Change the Lambda function Source to the Lambda function you just created.
+14. Save the change.
+15. Now, we need to release the bot to Prod. Select the link to go back to the aliases list.
 16. Select Bot Versions on the left.
 17. Create a new version named Prod.
 18. Done.

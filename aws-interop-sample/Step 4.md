@@ -36,7 +36,7 @@ Now, we need to wire up the API call to put the appointment from the bot into th
             "description": description
         }
         # Replace with your API Gateway URL
-        gateway = "https://l2py6m5sqe.execute-api.us-east-1.amazonaws.com
+        gateway = "https://l2py6m5sqe.execute-api.us-east-1.amazonaws.com"
         url = f"{gateway}/prod/api/todos"
         response = requests.post(url, json=data)
 
@@ -46,7 +46,32 @@ Now, we need to wire up the API call to put the appointment from the bot into th
     ```
 
 14. Scroll up to the make_appointment() function.
-15. Near the end of that function is code that looks like this:
+15. At the top of that function, there is a block of code like this:
+
+```python
+    appointment_type = intent_request['currentIntent']['slots']['AppointmentType']
+    date = intent_request['currentIntent']['slots']['Date']
+    appointment_time = intent_request['currentIntent']['slots']['Time']
+    source = intent_request['invocationSource']
+    output_session_attributes = intent_request['sessionAttributes'] if intent_request['sessionAttributes'] is not None else {}
+    booking_map = json.loads(try_ex(lambda: output_session_attributes['bookingMap']) or '{}')
+```
+
+16. That code is out of date, and needs to be replaced with this:
+
+```python
+    session = intent_request['sessionState']
+    intent = session['intent']
+    slots = intent['slots']
+    appointment_type = slots['AppointmentType']['value']['interpretedValue']
+    date = slots['Date']['value']['interpretedValue']
+    appointment_time = slots['Time']['value']['interpretedValue']
+    source = intent_request['invocationSource']
+    output_session_attributes = session['sessionAttributes'] if session['sessionAttributes'] is not None else {}
+    booking_map = json.loads(try_ex(lambda: output_session_attributes['bookingMap']) or '{}')
+```
+
+17. Near the end of that function is code that looks like this:
 
 ```python
     else:
@@ -56,15 +81,15 @@ Now, we need to wire up the API call to put the appointment from the bot into th
     intent['state'] = 'Fulfilled'
 ```
 
-16. Comment out the entire else section.
-17. Then, insert the following two lines before the intent['state'] = 'Fulfilled' line:
+18. Comment out the entire else section.
+19. Then, insert the following two lines before the intent['state'] = 'Fulfilled' line:
 
 ```python
     send_booking_to_todo_app(appointment_type, date, appointment_time, duration)
     logging.debug('Saved the booking to the ToDo app.')
 ```
 
-18. The finished code will look like this:
+20. The finished code will look like this:
 
 ```python
     # else:
@@ -78,7 +103,7 @@ Now, we need to wire up the API call to put the appointment from the bot into th
     intent['state'] = 'Fulfilled'
 ```
 
-19. Then, change the return json to:
+21. Then, change the return json to:
 
 ```python
     return {
@@ -99,5 +124,41 @@ Now, we need to wire up the API call to put the appointment from the bot into th
 ```
 
 20. Deploy the Lambda function.
-21. Run the bot through the Web UI to ensure the ToDo item is created.
-22. Done.
+21. To test the Lambda, click on the Test button and choose to configure a test.
+22. Create a new event named MakeAnAppointment.
+23. In the event JSON, replace what is there with the following:
+
+```json
+{
+  "messageVersion": "1.0",
+  "invocationSource": "Delegate",
+  "userId": "John",
+  "sessionAttributes": {
+    "bookingMap": "{\"2030-11-08\": [\"10:00\", \"16:00\", \"16:30\"]}",
+    "formattedTime": "4:00 p.m."
+  },
+  "bot": {
+    "name": "MakeAppointment",
+    "alias": "$LATEST",
+    "version": "$LATEST"
+  },
+  "outputDialogMode": "Text",
+  "currentIntent": {
+    "name": "MakeAppointment",
+    "slots": {
+      "AppointmentType": "doctor",
+      "Date": "2030-11-08",
+      "Time": "16:00"
+    },
+    "confirmationStatus": "None"
+  }
+}
+```
+
+24. Save the event.
+25. Click the test button and choose the MakeAnAppointment event.
+26.
+
+
+24. Run the bot through the Web UI to ensure the ToDo item is created.
+25. Done.

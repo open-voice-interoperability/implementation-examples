@@ -11,7 +11,6 @@ import dialog_event as de
 remote_assistants = ["test-assistant1", "test1","test2"]
 assistant_name = "primary-assistant" 
 
-
 class Assistant:
     def __init__(self):
         self.input_message = ""

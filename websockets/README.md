@@ -27,17 +27,21 @@ Start the secondary server in the other terminal window ("python secondaryAssist
 
 ## Server-side code (Python):
 1. webSocketServer.py (primary assistant/websocket server)
-2. Start the server at the command line with "python webSocketServer.py"
-3. The server is set up to run on localhost, port 8765
-4. The server waits for audio to be sent over a websocket
-5. when it receives the audio, it transcribes it with the open source OpenAI Whisper ASR software, which must be installed on the server, but which doesn't require internet access at runtime.
-6. More information about Whisper and instructions for installing can be found at https://github.com/openai/whisper. Note that Whisper can be configured to use many models and supports many languages besides the one used in this example. As the Whisper installation instructions state, the "ffmpeg" utility must be installed on this server for Whisper to work.
-7. After the audio is transcribed, the transcription, TTS wav file and associated dialog event are returned to the client, where they are displayed in a browser window or played, depending on whether they're text or audio. 
-8. Note that the only reason the dialog event is sent to the browser is so a developer can inspect it. The browser doesn't use it.
-9. Similarly, the secondary assistant's response (transcription and dialog event) is displayed on the web browser.
-10. TTS is currently performed on the server by the gTTS library, which does require internet access
-11. Works on Chrome and Edge on Windows and Chrome on Mac
+1. Start the server at the command line with "python webSocketServer.py"
+1. The server is set up to run on localhost, port 8765
+1. The server waits for audio to be sent over a websocket
+1. When the server receives audio, it saves an audio file and uses the "audio_processing" object to transcribe the file
+1. It also sends the assistant responses to "audio_processing" to generate TTS
+1. After procssing on the server, the transcription, TTS wav file and associated dialog event are returned to the client, where they are displayed in a browser window or played, depending on whether they're text or audio. 
+1. Note that the only reason the dialog event is sent to the browser is so a developer can inspect it. The browser doesn't use it.
+1. Similarly, the secondary assistant's response (transcription and dialog event) is displayed on the web browser.
+1. Works on Chrome and Edge on Windows and Chrome on Mac
 
+## audioProcessing.py
+1. contains asr and tts functions
+1. Asr is done with the open source OpenAI Whisper ASR software, which must be installed on the server, but which doesn't require internet access at runtime.
+1. More information about Whisper and instructions for installing can be found at https://github.com/openai/whisper. Note that Whisper can be configured to use many models and supports many languages besides the one used in this example. As the Whisper installation instructions state, the "ffmpeg" utility must be installed on this server for Whisper to work.
+1. TTS is currently performed by the "audio_processing" object by the gTTS library, which does require internet access
 
 ## assistant.py
 1. called by the web socket server with a transcription

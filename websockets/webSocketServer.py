@@ -1,11 +1,11 @@
 import asyncio
 import websockets
-import whisper
 from assistant import *
-from gtts import gTTS
+from audioProcessing import *
 
 transcription = "initial transcription"
 assistant = Assistant()
+audio_processing = AudioProcessing()
 serverPort = 8765
 
 async def audio_server(websocket, path):
@@ -23,10 +23,11 @@ async def audio_server(websocket, path):
             if audio_data:
                 # recognize the input audio stream and create transcription
                 print("Received audio stream length:", len(audio_data))
-                with open('received_audio.wav', 'wb') as audio_file:
+                with open("received_audio.wav", 'wb') as audio_file:
                    audio_file.write(audio_data)
                    print("Audio file saved successfully")
-                   transcription = transcribe_file("received_audio.wav")
+                   audio_processing.transcribe_file("received_audio.wav")
+                   transcription = audio_processing.get_transcription()
                     # Send the transcription back to display to the user
                    await websocket.send(transcription)
                    print("transcription sent to client")
@@ -38,23 +39,22 @@ async def audio_server(websocket, path):
                     print(assistant_message)
                     await websocket.send(assistant_message)
                     # Send primary assistant TTS response audio back to the client
-                    primary_assistant_audio = gTTS(assistant_message)
-                    primary_assistant_audio.save("primary_assistant_audio.wav")
-                    with open("primary_assistant_audio.wav", "rb") as audio_file:
+                    audio_processing.text_to_speech(assistant_message)
+                    primary_assistant_audio = audio_processing.get_tts_file_name()
+                    with open(primary_assistant_audio, "rb") as audio_file:
                         await websocket.send(audio_file.read())
                 what_to_say = assistant.get_output_transcription()
-                output_audio = gTTS(what_to_say)
-                output_audio.save("output_audio_file.wav")
-                with open("output_audio_file.wav", "rb") as audio_file:
+                audio_processing.text_to_speech(what_to_say)
+                output_audio_file = audio_processing.get_tts_file_name()
+                with open(output_audio_file, "rb") as audio_file:
                     await websocket.send(audio_file.read())
 				# send text response back to client
                 await websocket.send(what_to_say)
-                # the client doesn't actually use this message, it only
+                # the client doesn't actually use the OVON message, it only
                 # uses the TTS, but we send it here so that it can be
                 # displayed to a user (probably a developer)
                 # send OVON-formatted input message back to the client for display
                 message_to_client = assistant.get_input_message()
-                print(message_to_client)
                 string_message = str(message_to_client)
                 to_send = "dialog event (from user input): " + string_message
 				# send input message back to client for user to look at
@@ -68,19 +68,6 @@ async def audio_server(websocket, path):
         print("WebSocket connection closed")
     except Exception as e:
         print("Error:", e)
-
-    
-# call speech recognizer (in this case Whisper) to transcribe file 
-def transcribe_file(name):
-    print("transcribing file")
-    print(name)
-    print("loading model")
-    model = whisper.load_model("base.en")
-    print("loaded model")
-    result = model.transcribe(name)
-    print("transcribed file")
-    transcription = result["text"]
-    return(transcription)
   
 
 # Create a WebSocket server

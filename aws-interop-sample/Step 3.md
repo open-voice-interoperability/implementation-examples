@@ -21,5 +21,9 @@ In order to work with the Lex Bot, it needs a client. The easiest way to spin up
 14. Scroll to the bottom, check the warnings and click Create stack.
 15. Wait for CloudFormation to finish the deployment. Then click on the parent stack, such as MyAppointmentBotWebUIStack. Click the Outputs tab. Click the WebAppDomainName link (a CloudFront domain). NOTE: Despite all the settings, the page title will be Order Flowers Bot.
 
-    (The easiest(?) way to fix this, is to navigate to the S3 Bucket: myappointmentbotwebuistack-codebuild-webappbucket-xxxxxxxx. Then, download the  lex-web-ui-min.js JavaScript file. Open it in a text editor and search for "Order Flowers Bot" and replace it with "Make an Appintment Bot". Save the file and upload it back to the bucket. Then, to clear the CloudFront cache, flip over to CloudFront, open the distribution for the lex-web-ui, select the invalidations tab, select one of the invalidations, select Copy to New, then select Create Invalidation. Once the cache is cleared, the changes to the JavaScript will be apparent when you hard refresh the Lex UI in your browser.)
+    (The easiest(?) way to fix this, is to navigate to the S3 Bucket: myappointmentbotwebuistack-codebuild-webappbucket-xxxxxxxx. Then, download the  lex-web-ui-min.js JavaScript file. Open it in a text editor and search for "Order Flowers Bot" and replace it with "Make an Appointment Bot". Save the file and upload it back to the bucket. Then, to clear the CloudFront cache, flip over to CloudFront, open the distribution for the lex-web-ui, select the invalidations tab, select one of the invalidations, select Copy to New, then select Create Invalidation. Once the cache is cleared, the changes to the JavaScript will be apparent when you hard refresh the Lex UI in your browser.)
 
+16. Done.
+
+- [Back < Step 2: Create the Lex Appointment Bot](./Step%202.md)
+- [Next > Step 4: Wire up the Lex Bot to the ToDo WebApp](./Step%204.md)

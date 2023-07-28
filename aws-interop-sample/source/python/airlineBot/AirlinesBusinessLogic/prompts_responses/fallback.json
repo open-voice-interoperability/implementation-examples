@@ -1,0 +1,10 @@
+{
+    "CancelFlightReservation": "Sorry? If you want to cancel a flight reservation, say, 'cancel my flight reservation'",
+    "BookAFlight": "Sorry? If you want to book a flight, say, 'book a flight'",
+    "GetFlightReservationReceipt":"Sorry? If you want to get a reservation receipt, say, 'get flight reservation receipt'",
+    "GetFlightStatus":"Sorry? If you want to get the flight status, say, 'get flight status'",
+    "CheckReservationDetails":"Sorry? If you want to check your reservation details, say, 'get reservation details'",
+    "RescheduleTrip":"Sorry? If you want to reschedule a trip, say, 'modify my reservation'",
+    "ShowFlightDetails":"Sorry? If you want to check for more flights, say, 'show more flights'",
+    "DefaultFallback": "Some of the things I can help you with are, book a flight, check a flight status, reschedule a trip, cancel a reservation. Now can you please rephrase your request?"
+}

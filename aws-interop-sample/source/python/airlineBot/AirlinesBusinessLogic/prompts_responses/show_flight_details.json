@@ -1,0 +1,21 @@
+{
+    "OnewayFlightDetails": "Okay. The other option I got for your departure flight is flight number {departure_flight_number} starting at {departure_start_time}. This trip price is ${price}. If you want to proceed with this, just say yes. Otherwise, say, get more options",
+    "RoundTripFlightDetails": "Okay. The other option I got for your departure flight is, {departure_flight_number} starting at {departure_start_time}, and return flight, {return_flight_number}, starting at {return_start_time}  and arriving at {return_arrival_time}. The price for this round trip is ${price}. If you want to proceed with this, just say yes. Otherwise, say, get more options",
+    "NoFlights": "Sorry! I couldn't find any more flights that match your trip. What else can I do for you?",
+    "BookingConfirmed": "Thank you for choosing ABC Airlines. You will receive a text with a link to complete the flight booking. Please click the link and follow the instructions. Anything else?",
+    "BookingDenied": "Okay. I can also show you some more options. What do you want to do?",
+    "PhoneNumberPrompt": "Got it. I need your phone number where I can send you a link to complete the booking. Can you please say or enter it?",
+    "PhoneConfirmationPrompt": "<speak>To confirm, I have your phone number as <say-as interpret-as='digits'>{phone_number}</say-as>. Is that correct?</speak>",
+    "Fulfilment": "Thank you for choosing ABC Airlines. You will receive a text with a link to complete the flight booking. Please click the link and follow the instructions. Anything else?",
+    "PhoneNumberReElicitPrompt": "I am sorry. Please give the phone number again.",
+    "CardLast4DigitsConfirmation1":"<speak>I didn't get that. Can I use the card on file ending in <say-as interpret-as='digits'>{card_last4_digits}</say-as> to make the reservation? Please say either yes or no.</speak>",
+    "CardLast4DigitsConfirmation":"<speak>Can I use the card on file ending in <say-as interpret-as='digits'>{card_last4_digits}</say-as> to make the reservation?</speak>",
+    "CardNumber":"All right. Please say or enter the full card number. If you need a moment to get it, just say wait.  Or, if you're ready, you may begin entering it.",
+    "CardNumberReElicitPrompt":"I didn't get that. Please say or enter the card number again.",
+    "CardNumberConfirmation":"<speak>I have your card number as <say-as interpret-as='digits'>{card_number}</say-as> . Is that correct?</speak>",
+    "CardExpiryDate":"And what's the expiry date on the card?",
+    "SecurityCode":"OK. Please say or enter the CVV number, or security code printed on the back of the card.",
+    "CardNumberConfirmation1":"<speak>I didn't get that. I have your card number as <say-as interpret-as='digits'>{card_number}</say-as>. Please say either yes or no.</speak>",
+    "OneWayFulfilment":"<speak>Great. I have you on the {departure_flight_number} to {destination_city} departing from {departure_city} on {departure_date} at {departure_start_time}. Your confirmation code is <say-as interpret-as='digits'>{confirmation_number}</say-as></speak>",
+    "RoundTripFulfilment":"<speak>Great. I have you on the {departure_flight_number} to {destination_city} departing from {departure_city} on {departure_date} at {departure_start_time} and returning from {departure_city} to {destination_city} on {return_date} at {return_start_time}. Your confirmation code is <say-as interpret-as='digits'>{confirmation_number}</say-as></speak>"
+} 

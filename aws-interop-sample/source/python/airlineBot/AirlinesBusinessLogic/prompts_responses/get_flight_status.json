@@ -1,0 +1,9 @@
+{
+    "FlightNumberPrompt": "<speak>Okay. What's the flight number? For example, you can say <say-as interpret-as='characters'>XYZ1234</say-as></speak>",
+    "DepartureCityPrompt":"No problem. What's the departure city?",
+    "ReElicitFlightNumber": "Sorry I didn't get that. Do you know the flight number? Please say either yes, or no.",
+    "FulfilmentPrompt1": "<speak>{departure_time}, got it. Let me check. <break time='3s'/> Here is the latest status. ABC Flight <say-as interpret-as='characters'>{flight_number}</say-as>, departed at {departure_time1} from {departure_city} and landed at 7 AM into {destination_city}, {destination_airport}, Terminal E. Anything else?</speak>",
+    "FulfilmentPrompt2": "<speak>{departure_time}, got it. Let me check. <break time='3s'/> Here is the latest status. ABC Flight <say-as interpret-as='characters'>{flight_number}</say-as>, departs at {departure_time1} from {departure_city}  and will land at 1 AM into {destination_city}, {destination_airport}, Terminal E. Anything else?</speak>",
+    "FulfilmentPrompt": "<speak>Got it. Let me check. <break time='3s'/> Here is the latest status. ABC Flight <say-as interpret-as='characters'>{flight_number}</say-as>, departed at {departure_time} from {departure_city} and arrived at {arriving_time} into {destination_city}, {destination_airport}, Terminal E. Anything else?</speak>",
+    "NoMatch": "I'm sorry. I could not find any flight for this criteria. Is there anything else I can help you with?"
+}

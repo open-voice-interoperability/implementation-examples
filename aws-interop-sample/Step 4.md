@@ -73,7 +73,7 @@ def send_booking_to_todo_app(appointment_type, date, appointment_time, duration)
 ```
 
 31. Scroll up to the make_appointment() function.
-32. That code is out of date, and needs to be replaced with this (see Python file [lambda_function.py](./source/python/lambda_function.py))):
+32. That code is out of date, and needs to be replaced with this (see Python file [lambda_function.py](./source/python/appointmentBot/lambda_function.py))):
 
 ```python
 def make_appointment(intent_request):

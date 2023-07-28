@@ -6,7 +6,9 @@ import json
 
 scriptpath = "../../lib-interop/python/lib"
 sys.path.append(os.path.abspath(scriptpath))
-import dialog_event as de
+#import dialog_event as de
+# copying Python dialog event library for convenience
+from dialog_event import *
 
 class SecondaryAssistant:
     def __init__(self):

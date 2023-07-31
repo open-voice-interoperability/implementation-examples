@@ -8,7 +8,7 @@ import json
 scriptpath = "../../lib-interop/python/lib"
 sys.path.append(os.path.abspath(scriptpath))
 import dialog_event as de
-remote_assistants = ["test-assistant1", "test1","test2"]
+remote_assistants = [{"name":"test-assistant1","url":"http://localhost:8766"},{"name":"test-assistant2","url":"https://secondassistant.pythonanywhere.com"}]
 assistant_name = "primary-assistant" 
 
 class Assistant:
@@ -17,6 +17,7 @@ class Assistant:
         self.output_message = ""
         self.output_transcription = ""
         self.current_remote_assistant = ""
+        self.current_remote_assistant_url = ""
         self.primary_assistant_response = ""
         self.transfer = True
 	# the primary assistant has 4 items to send back
@@ -54,11 +55,13 @@ class Assistant:
 # if it can't be handled locally, find a remote assistant that can help
 # hard-coded for now
     def identify_assistant(self,transcription):
-        self.current_remote_assistant = remote_assistants[0]
+        remote_assistant  = remote_assistants[0]
+        self.current_remote_assistant = remote_assistant.get("name")
+        self.current_remote_assistant_url = remote_assistant.get("url")
 
     def send_message_to_secondary_assistant(self):
     # URL endpoint to send the POST request
-        url = 'http://localhost:8766'
+        url = self.current_remote_assistant_url
         # Request payload data
         payload = self.input_message
         # Send an HTTP POST request to the remote server

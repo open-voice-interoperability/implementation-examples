@@ -6,9 +6,9 @@ import json
 
 scriptpath = "../../lib-interop/python/lib"
 sys.path.append(os.path.abspath(scriptpath))
-#import dialog_event as de
-# copying Python dialog event library for convenience
-from dialog_event import *
+import dialog_event as de
+# if you copy Python dialog event library for convenience
+#from dialog_event import *
 
 class SecondaryAssistant:
     def __init__(self):
@@ -18,7 +18,7 @@ class SecondaryAssistant:
         self.input_transcription = ""
 	
     def invoke_assistant(self,message):
-        self.input_message = message
+        self.parse_dialog_event(message)
         print(self.input_message)
         # handle locally?
         if self.handle_locally(message):
@@ -41,7 +41,7 @@ class SecondaryAssistant:
     def convert_to_dialog_event(self,transcription):
         d=de.DialogEvent()
         d.id='user-utterance-45'
-        d.speaker_id= self.name
+        d.speaker_id = self.name
         d.previous_id='user-utterance-44'
         d.add_span(de.Span(start_time=datetime.datetime.now().isoformat(),end_offset_msec=1045))
         '''
@@ -63,18 +63,27 @@ class SecondaryAssistant:
         #with open("../sample-yaml/utterance0.yml", "w")  as file: d.dump_yml(file)
         return(d.packet)
     
-    def parse_dialog_event(self,event):
-        #Now interrogate this object
-        self.input_transcription = d.get_feature('user-request-text').get_token().value
-        confidence1=d.get_feature('user-request-text').get_token().confidence
-        t2=d.get_feature('user-request-text').get_token(1)
-        l1=d.get_feature('user-request-text').get_token().linked_values(d)
+    def parse_dialog_event(self,message):
+        dIn = de.DialogEvent()
+        print(dIn)
+        # library method is for files
+        #dIn.load_json(message)
+        self.my_load_json(dIn,message)
+        #self._packet=json.load(s,**kwargs) 
+        self.input_transcription = dIn.get_feature('user-request-text').get_token().value
+        confidence1 = dIn.get_feature('user-request-text').get_token().confidence
+        dIn.get_feature('user-request-text').get_token(1)
+        l1=dIn.get_feature('user-request-text').get_token().linked_values(dIn)
 
         #Look at some of the variables
         # print(f'text packet: {f2.packet}')
         # print(f'text1: {text1} confidence1: {confidence1}')
         # print(f'text2: {t2.value} confidence1: {t2.confidence}')
         # print(f'l1: {l1}')
+        
+    def my_load_json(self,de,message):
+        stringMessage = json.dumps(message)
+        de._packet = json.loads(stringMessage) 
     
     def get_input_message(self):
         print("here's the input" + str(self.input_message))

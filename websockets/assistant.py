@@ -53,10 +53,15 @@ class Assistant:
         return(False)
     
 # if it can't be handled locally, find a remote assistant that can help
-# hard-coded for now
+# use pythonanywhere server if the user asks for it
     def identify_assistant(self,transcription):
-        remote_assistant  = remote_assistants[0]
+        print(transcription)
+        if "ask test assistant number 2" in transcription.lower():
+            remote_assistant = remote_assistants[1]
+        else:
+            remote_assistant  = remote_assistants[0]
         self.current_remote_assistant = remote_assistant.get("name")
+        print(self.current_remote_assistant)
         self.current_remote_assistant_url = remote_assistant.get("url")
 
     def send_message_to_secondary_assistant(self):

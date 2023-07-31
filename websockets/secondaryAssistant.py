@@ -92,3 +92,6 @@ class SecondaryAssistant:
     def get_output_message(self):
         return(self.output_message)
         
+    def get_transcription(self):
+        return(self.input_transcription)
+        

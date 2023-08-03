@@ -1,10 +1,11 @@
 from flask import Flask
 from flask import request
+import json
 from secondaryAssistant import *
 
 app = Flask(__name__)
 secondaryAssistant = SecondaryAssistant()
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/', methods=['GET','POST'])
 
 def home():
     data = json.loads(request.data)

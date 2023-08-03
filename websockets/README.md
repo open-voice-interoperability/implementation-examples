@@ -13,7 +13,7 @@ Finally, open "sendAudioToServer.html" in a Chrome browser on a Windows PC or Ma
 ### sendAudioToServer.html
 1. Click on "start listening" to start streaming audio to the server
 2. Give the application permission to use the microphone
-3. Speak your request
+3. Speak or type your request
 4. Click "Stop listening" when finished speaking
 5. The result will be displayed in the textarea in the browser
 6. Plays the audio output from the server
@@ -66,7 +66,6 @@ This html page uses the following two scripts:
 1. write a rudimentary discovery placeholder
 1. add ASR confidence to OVON messages
 1. add alternatives to OVON messages
-1. provide for text input
 1. change languages (use Whisper multilingual model)
 1. use local TTS
 1. multi-turn conversation

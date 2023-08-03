@@ -3,12 +3,13 @@ var mediaRecorder;
 var audioQueue = []; 
 var audio = new Audio();
 var isPlaying = false;
+var socketServerUrl = 'ws://localhost:8765'
 
 
 function startScript(){
 // Creating a WebSocket connection
 console.log("opening a socket")
-socket = new WebSocket('ws://localhost:8765');
+socket = new WebSocket(socketServerUrl);
    console.log('WebSocket connection opened');
 // Handle WebSocket connection open event
 socket.binaryType = 'blob';
@@ -64,6 +65,55 @@ socket.onclose = () => {
   console.log('WebSocket connection closed');
 }
 }
+
+function sendTyped(){
+    
+    // Creating a WebSocket connection
+console.log("opening a socket to send typed input")
+socket = new WebSocket(socketServerUrl);
+   console.log('WebSocket connection opened');
+// Handle WebSocket connection open event
+socket.onopen = event => {
+    console.log("[open] websocket connection established");
+    typedInputElement = document.getElementById("typedInputBox");
+    typedInput  = typedInputElement.value;
+    console.log("sending typed input");
+    socket.send(typedInput);
+};
+socket.onmessage = function(event) {
+     console.log("received response to typed input");
+    // dialog event or text
+  if (typeof event.data === 'string') {
+    // Handle text data
+    var receivedText = event.data;
+    console.log("Received text:", receivedText);
+	//console.log(event.data);
+    messageType = decideMessageType(event.data);
+    processedMessage = processMessage(messageType,event.data);
+    messageWindow = getWindow(messageType);
+    appendText(messageWindow,processedMessage);
+    
+    // Play the received audio
+    // must queue to ensure playing in order
+  } else if (event.data instanceof Blob) {
+       audioQueue.push(event.data);
+       if (!isPlaying) {
+           playNextAudio();
+           }
+           };
+  };
+
+// Handle WebSocket errors
+socket.onerror = error => {
+  console.error('WebSocket error:', error);
+};
+
+// Handle WebSocket connection close event
+socket.onclose = () => {
+  console.log('WebSocket connection closed');
+}
+}
+
 
 // manage audio queue
 function playNextAudio() {

@@ -26,7 +26,7 @@ class SecondaryAssistant:
         # if not handle locally:
         else:
            #can't help
-            result = self.convert_to_dialog_event("sorry, " + self.name + " cannot handle this request")
+            result = self.convert_to_dialog_event("sorry, " + self.name + " cannot handle the request: " + self.get_transcription())
             print(result)
         # log result
         return(result)

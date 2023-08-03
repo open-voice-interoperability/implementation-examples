@@ -28,10 +28,8 @@ class Assistant:
     # 3. The input and output OVON messages, which will be displayed in the browser, but are
     #    not actually used by the client 
     def invoke_assistant(self,transcription):
-        print(transcription)
         # convert input to OVON
         self.input_message = self.convert_to_dialog_event(transcription)
-        print(self.input_message)
         # handle locally?
         if self.handle_locally(transcription):
            self.transfer = False

@@ -5,7 +5,7 @@ from secondaryAssistant import *
 
 app = Flask(__name__)
 secondaryAssistant = SecondaryAssistant()
-@app.route('/', methods=['GET','POST'])
+@app.route('/', methods=[POST'])
 
 def home():
     data = json.loads(request.data)

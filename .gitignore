@@ -9,3 +9,5 @@ websockets/output_audio_file.wav
 *.wav
 *.js
 websockets/scripts/new 1.html
+websockets/playingAudio.txt
+*.py

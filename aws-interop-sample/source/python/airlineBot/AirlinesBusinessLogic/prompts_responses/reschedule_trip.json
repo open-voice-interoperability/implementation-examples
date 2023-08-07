@@ -1,0 +1,5 @@
+{
+    "InvalidFlightNumberPrompt": "Sorry. I couldn't find a match. Please tell me the confirmation number again",
+    "InvalidLastNamePrompt": "Sorry. I couldn't find a match. Please spell out your last name.",
+    "NewDepartureDateFromPast": "Departure date cannot be a past date. Please tell me the new departure date one more time"
+}

@@ -1,0 +1,113 @@
+{
+    "sessionId": "817861573333671",
+    "inputTranscript": "yes",
+    "interpretations": [
+        {
+            "intent": {
+                "confirmationState": "Confirmed",
+                "name": "MakeAppointment",
+                "slots": {
+                    "AppointmentType": {
+                        "shape": "Scalar",
+                        "value": {
+                            "originalValue": "haircut",
+                            "resolvedValues": [],
+                            "interpretedValue": "haircut"
+                        }
+                    },
+                    "Time": {
+                        "shape": "Scalar",
+                        "value": {
+                            "originalValue": "noon",
+                            "resolvedValues": [
+                                "12:00"
+                            ],
+                            "interpretedValue": "12:00"
+                        }
+                    },
+                    "Date": {
+                        "shape": "Scalar",
+                        "value": {
+                            "originalValue": "tomorrow",
+                            "resolvedValues": [
+                                "2023-07-27"
+                            ],
+                            "interpretedValue": "2023-07-27"
+                        }
+                    }
+                },
+                "state": "ReadyForFulfillment"
+            },
+            "nluConfidence": 1
+        },
+        {
+            "intent": {
+                "confirmationState": "None",
+                "name": "FallbackIntent",
+                "slots": {},
+                "state": "ReadyForFulfillment"
+            }
+        }
+    ],
+    "bot": {
+        "aliasId": "TSTALIASID",
+        "aliasName": "TestBotAlias",
+        "name": "MyAppointmentBot",
+        "version": "DRAFT",
+        "localeId": "en_US",
+        "id": "EAC0Z2GRC9"
+    },
+    "responseContentType": "text/plain; charset=utf-8",
+    "sessionState": {
+        "sessionAttributes": {},
+        "intent": {
+            "confirmationState": "Confirmed",
+            "name": "MakeAppointment",
+            "slots": {
+                "AppointmentType": {
+                    "shape": "Scalar",
+                    "value": {
+                        "originalValue": "haircut",
+                        "resolvedValues": [],
+                        "interpretedValue": "haircut"
+                    }
+                },
+                "Time": {
+                    "shape": "Scalar",
+                    "value": {
+                        "originalValue": "noon",
+                        "resolvedValues": [
+                            "12:00"
+                        ],
+                        "interpretedValue": "12:00"
+                    }
+                },
+                "Date": {
+                    "shape": "Scalar",
+                    "value": {
+                        "originalValue": "tomorrow",
+                        "resolvedValues": [
+                            "2023-07-27"
+                        ],
+                        "interpretedValue": "2023-07-27"
+                    }
+                }
+            },
+            "state": "ReadyForFulfillment"
+        },
+        "originatingRequestId": "bc967ef2-ee58-41b7-b5dc-becb7243e8f1"
+    },
+    "messageVersion": "1.0",
+    "invocationSource": "FulfillmentCodeHook",
+    "transcriptions": [
+        {
+            "resolvedContext": {
+                "intent": "MakeAppointment"
+            },
+            "transcription": "yes",
+            "resolvedSlots": {},
+            "transcriptionConfidence": 1
+        }
+    ],
+    "inputMode": "Text"
+}

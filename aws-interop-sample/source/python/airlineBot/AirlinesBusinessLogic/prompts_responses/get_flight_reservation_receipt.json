@@ -1,0 +1,8 @@
+{
+    "InvalidFlightNumberPrompt": "Sorry. I couldn't find a match. Please tell me the confirmation number again",
+    "InvalidLastNamePrompt": "Sorry. I couldn't find a match. Please spell out your last name?",
+    "PassengerLastName":"Please say the last name on the reservation",
+    "PassengerLastNameSpellOut": "I didn't get that. Can you please spell out your last name?",
+    "ReceiptDeliveryChannel":"How would you like to get the receipt? Via email or text",
+    "Response":"Okay. I will {receipt_delivery_channel} you the link to download your reservation receipt. Is there anything else I can help you with?"
+}

@@ -1,0 +1,6 @@
+{
+    "InvalidFlightNumberPrompt": "Sorry. I couldn't find a match. Please tell me the confirmation number again",
+    "InvalidLastNamePrompt": "Sorry. I couldn't find a match. Please tell me the last name of any passenger again",
+    "Fulfilment": "<speak>Thanks. Let me find your reservation details <break time='3s'/>. I found your reservation. Here are the details. The confirmation number is <say-as interpret-as='characters'>{flight_confirmation_number}</say-as>. This reservation is for {number_of_passenger} passengers. You will be flying on flight <say-as interpret-as='characters'>{flight_number}</say-as>, departing from {departure_airport} on Wednesday, {departure_date} at {departure_time}, and arriving into {destination_airport}, Terminal E at {arriving_time}. Anything else?</speak>",
+    "ReservationDetailsNotAvailable": "I coudn't find any reservation with this confirmation number and last name. Is there anything else I can help you with?"
+}

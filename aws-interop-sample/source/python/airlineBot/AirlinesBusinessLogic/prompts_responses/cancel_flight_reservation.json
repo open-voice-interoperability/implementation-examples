@@ -1,0 +1,8 @@
+{
+    "InvalidFlightNumberPrompt": "Sorry. I couldn't find a match. Please tell me the confirmation number again",
+    "InvalidLastNamePrompt": "Sorry. I couldn't find a match. Please spell out your last name.",
+    "FlightConfirmationNumber":"{flight_booking_date} okay. What's the confirmation number? You can find it in the email you received at the time of booking.",
+    "FulfilmentResponse": "Done. Your reservation has been cancelled. We will send the confirmation to your email. Anything else?",
+    "DeniedCancellation": "Okay then, I will not proceed. Is there anything I can help you with?",
+    "Confirmation": "{flight_booking_date}. Okay. Should I go ahead and cancel your reservation?"
+}

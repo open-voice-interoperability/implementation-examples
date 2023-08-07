@@ -2,8 +2,10 @@
 Websockets is a protocol that allows web servers to send messages directly to a client.
 In this demonstration, the client is a web browser, the primary assistant is hosted on a websocket server, and the secondary assistants are hosted on HTTP(S) servers.
 ASR and TTS are performed on the websocket server, so there is no need for the browser to have any speech capabilities. Right now the browser must be able to record PCM-formatted audio (Chrome on Windows and Mac, Edge on Windows but not Firefox on Windows or Safari on MacOS), but I believe this can be addressed by converting the audio to PCM on the server, although I haven't tried doing that.
+
 ASR is done locally on the websocket server by the OpenAI Whisper speech recognizer, so it does not require cloud access. 
 However, currently TTS is done in the cloud.
+
 This setup could be used for the channeling pattern.
 To run, open two terminal windows. Start the websocket server ("python websocketServer.py") in one window (assuming your "python" command starts Python 3).
 Start the secondary server in the other terminal window ("python secondaryAssistantHTTP.py". Alternatively, you can run the server as a Flask application by running "secondaryAssistantFlask.py" in the other terminal window (you may need to install Flask).

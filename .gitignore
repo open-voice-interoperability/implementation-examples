@@ -11,3 +11,10 @@ websockets/output_audio_file.wav
 websockets/scripts/new 1.html
 websockets/playingAudio.txt
 *.py
+websockets/__pycache__/assistant.cpython-311.pyc
+websockets/.ipynb_checkpoints/Untitled1-checkpoint.ipynb
+websockets/__pycache__/audioProcessing.cpython-311.pyc
+*.pyc
+websockets/.ipynb_checkpoints/Untitled-checkpoint.ipynb
+websockets/llama-2-7b-chat.ggmlv3.q8_0.bin
+websockets/llama-2-7b.ggmlv3.q4_0.bin

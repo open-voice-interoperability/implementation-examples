@@ -8,7 +8,7 @@ import json
 scriptpath = "../../lib-interop/python/lib"
 sys.path.append(os.path.abspath(scriptpath))
 import dialog_event as de
-remote_assistants = [{"name":"test-assistant1","url":"http://localhost:8766","protocols":["HTTP"]},{"name":"test-assistant2","url":"https://secondassistant.pythonanywhere.com","protocols":"[HTTP"]}]
+remote_assistants = [{"name":"test-assistant1","url":"http://localhost:8766","protocols":["HTTP"]},{"name":"test-assistant2","url":"https://secondassistant.pythonanywhere.com","protocols":"[HTTP"}]
 assistant_name = "primary-assistant" 
 
 class Assistant:

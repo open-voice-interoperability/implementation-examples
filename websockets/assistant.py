@@ -3,13 +3,16 @@ import sys
 import datetime
 import requests
 import json
+from nlp import *
 
 
 scriptpath = "../../lib-interop/python/lib"
 sys.path.append(os.path.abspath(scriptpath))
 import dialog_event as de
-remote_assistants = [{"name":"test-assistant1","url":"http://localhost:8766","protocols":["HTTP"]},{"name":"test-assistant2","url":"https://secondassistant.pythonanywhere.com","protocols":"[HTTP"}]
+remote_assistants = [{"name":"Superior Auto Service","url":"http://localhost:8766","protocols":["HTTP"]},{"name":"test-assistant2","url":"https://secondassistant.pythonanywhere.com","protocols":"[HTTP"}]
 assistant_name = "primary-assistant" 
+nlp = NLP()
+give_up = ["I'm sorry","I apologize", "I am sorry"]
 
 class Assistant:
     def __init__(self):
@@ -32,8 +35,9 @@ class Assistant:
         self.input_message = self.convert_to_dialog_event(transcription)
         # handle locally?
         if self.handle_locally(transcription):
+           print("handling locally with LLM")
            self.transfer = False
-           final_result = self.decide_what_to_say(transcription)
+           self.output_transcription = self.decide_what_to_say(transcription)
         # if not handle locally:
         else:
             # should identify secondary assistant based on OVON message, not transcription
@@ -48,7 +52,25 @@ class Assistant:
 
     # figure out if the local assistant can help	
     def handle_locally(self,transcription):
-        return(False)
+        local_processing = True
+        if ("my car" or "ask test assistant number 2") in transcription:
+            local_processing = False
+            print("can't handle locally")
+        else:
+            local_result = self.decide_what_to_say(transcription)
+            print("result from LLM is " + local_result)
+            self.output_transcription = local_result
+        # if the result contains an apology for not being able to handle the request, we need to find another assistant. this needs some work to make the LLM give up and not answer
+        '''
+        for apology in give_up:
+            print(apology)
+            print(local_result)
+            if apology in local_result:
+                handle_locally = False
+                break
+        '''
+        print(local_processing)
+        return(local_processing)
     
 # if it can't be handled locally, find a remote assistant that can help
 # use pythonanywhere server if the user asks for it
@@ -76,8 +98,9 @@ class Assistant:
         print('Response content:', response.text)
         return(response.text)
 
-    def decide_what_to_say(self,transcription):
-        return(transcription)
+    def decide_what_to_say(self,text):
+        nlp.answer_question(text)
+        return(nlp.get_current_result())
         
     def notify_user_of_transfer(self):
         message_to_user = "I don't know the answer, I will ask " + self.current_remote_assistant
@@ -125,7 +148,10 @@ class Assistant:
         #print(f'text2: {t2.value} confidence1: {t2.confidence}')
         #print(f'l1: {l1}')
         return(text1)
-    
+        
+    def warn_delay(self, transcription):
+        return("Ok, I'll check into your question: " + transcription + ".  just a minute")
+        
     def get_input_message(self):
         print("here's the input" + str(self.input_message))
         return(self.input_message)

@@ -2,8 +2,8 @@ function appendText(messageWindow,newText){
     console.log(messageWindow);
 	var textBox = document.getElementById(messageWindow);
 	var currentText = textBox.value;
-	textBox.value = currentText+ "\n" + newText;
-    textBox.scrollTop = 0;
+	textBox.value = currentText + '\n\n' + newText;
+    textBox.scrollTop = textBox.scrollHeight;
 }
 
 function decideMessageType(message){

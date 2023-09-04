@@ -3,42 +3,60 @@ import sys
 import datetime
 import requests
 import json
+from nlpDB import *
 
 scriptpath = "../../lib-interop/python/lib"
 sys.path.append(os.path.abspath(scriptpath))
 import dialog_event as de
 # if you copy Python dialog event library for convenience
 #from dialog_event import *
+nlp = NLPDB()
 
 class SecondaryAssistant:
     def __init__(self):
         self.input_message = ""
         self.output_message = ""
-        self.name = "test-assistant1"
+        self.name = "Superior Auto Service"
         self.input_transcription = ""
+        self.output_text = ""
 	
     def invoke_assistant(self,message):
         self.parse_dialog_event(message)
         print(self.input_message)
         # handle locally?
-        if self.handle_locally(message):
-            final_result = self.decide_what_to_say(message)
+        if self.handle_locally(self.input_transcription):
+            text_result = self.decide_what_to_say()
+            print("text result is ")
+            print(text_result)
+            self.output_message = self.convert_to_dialog_event(text_result)
+            print("output message is:")
+            print(self.output_message)
         # if not handle locally:
         else:
            #can't help
-            result = self.convert_to_dialog_event("sorry, " + self.name + " cannot handle the request: " + self.get_transcription())
-            print(result)
-        # log result
-        return(result)
+            self.output_message = self.convert_to_dialog_event("sorry, " + self.name + " cannot handle the request: " + self.get_transcription())
+            
+        # should also log result
+        print(self.output_message)
+        return(self.output_message)
 
     # figure out if this assistant can help	
-    def handle_locally(self,message):
-        return(False)
+    def handle_locally(self,text):
+        handle_locally = True
+        print("checking for local handling")
+        if not nlp.can_handle(text):
+            handle_locally = False
+        return(handle_locally)
 
-    def decide_what_to_say(self,transcription):
-        return(transcription)
+    def decide_what_to_say(self):
+        intent = nlp.get_current_intent()
+        nlp.answer_question(intent)
+        print("resulting answer is " + nlp.get_current_result())
+        return(nlp.get_current_result())
     
-    def convert_to_dialog_event(self,transcription):
+    def convert_to_dialog_event(self,text):
+        print("converting ")
+        print(text)
         d=de.DialogEvent()
         d.id='user-utterance-45'
         d.speaker_id = self.name
@@ -54,7 +72,7 @@ class SecondaryAssistant:
         #Now add a text feature
         f2=de.TextFeature(lang='en',encoding='utf-8')
         d.add_feature('user-request-text',f2)
-        f2.add_token(value= transcription,confidence=0.99,start_offset_msec=8790,end_offset_msec=8845,links=["$.user-request-audio.tokens[0].value-url"])
+        f2.add_token(value=text,confidence=0.99,start_offset_msec=8790,end_offset_msec=8845,links=["$.user-request-audio.tokens[0].value-url"])
    
         print(f'dialog packet: {d.packet}')
 
@@ -80,6 +98,7 @@ class SecondaryAssistant:
         # print(f'text1: {text1} confidence1: {confidence1}')
         # print(f'text2: {t2.value} confidence1: {t2.confidence}')
         # print(f'l1: {l1}')
+    
         
     def my_load_json(self,de,message):
         stringMessage = json.dumps(message)

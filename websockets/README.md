@@ -71,6 +71,18 @@ This html page uses the following two scripts:
 1. processes OVON messages from a primary assistant and returns a response
 1. contains the assistant functions; called from a server
 
+## nlp.py
+1. this component is called by "assistant.py" to do nlp with one of the "gpt4all" large language models. These are open source models that can be run locally on Windows, Mac and Linux computers, without requiring a GPU. Different models can be swapped in for experimentation after installing "gpt4all". 
+1. it is also possible to modify various parameters to affect the LLM performance
+
+## nlpDB.py
+1. a simple keyword based nlp, used by the secondary assistant
+1. knows about a few simple kinds of auto maintenance 
+
+## vehicle.py
+
+## vehicle.json
+
 ## todo:
 1. write a rudimentary discovery placeholder
 1. add ASR confidence to OVON messages

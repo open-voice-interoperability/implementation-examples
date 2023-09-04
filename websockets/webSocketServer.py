@@ -38,6 +38,15 @@ async def audio_server(websocket, path):
             await websocket.send(transcription)
             print("transcription sent to client")
             print(transcription)
+            # notify the user that the response will take a little time
+            delay_message = assistant.warn_delay(transcription)
+            await websocket.send(delay_message)
+            # Send primary assistant TTS response audio back to the client
+            audio_processing.text_to_speech(delay_message)
+            primary_assistant_audio = audio_processing.get_tts_file_name()
+            with open(primary_assistant_audio, "rb") as audio_file:
+                await websocket.send(audio_file.read())
+            print("sent delay warning")
             assistant.invoke_assistant(transcription)
             if assistant.transfer:
                 # let the user know the request is being transferred

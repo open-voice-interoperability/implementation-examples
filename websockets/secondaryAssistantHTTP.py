@@ -30,6 +30,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             # response_data = {'message': 'POST request received successfully'}
            
             response_data = secondaryAssistant.invoke_assistant(data)
+            print("response data is")
+            print(response_data)
             # Send the response back to the client
             response_bytes = json.dumps(response_data).encode('utf-8')
             self.wfile.write(response_bytes)

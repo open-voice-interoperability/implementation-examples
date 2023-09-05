@@ -16,7 +16,7 @@ class SecondaryAssistant:
     def __init__(self):
         self.input_message = ""
         self.output_message = ""
-        self.name = "Superior Auto Service"
+        self.name = "OVON Auto Service"
         self.input_transcription = ""
         self.output_text = ""
 	

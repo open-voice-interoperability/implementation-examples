@@ -9,7 +9,7 @@ from nlp import *
 scriptpath = "../../lib-interop/python/lib"
 sys.path.append(os.path.abspath(scriptpath))
 import dialog_event as de
-remote_assistants = [{"name":"Superior Auto Service","url":"http://localhost:8766","protocols":["HTTP"]},{"name":"test-assistant2","url":"https://secondassistant.pythonanywhere.com","protocols":"[HTTP"}]
+remote_assistants = [{"name":"test_assistant","url":"http://localhost:8766","protocols":["HTTP"]},{"name":"OVON Auto Service","url":"https://secondassistant.pythonanywhere.com","protocols":"[HTTP"}]
 assistant_name = "primary-assistant" 
 nlp = NLP()
 give_up = ["I'm sorry","I apologize", "I am sorry"]
@@ -53,7 +53,7 @@ class Assistant:
     # figure out if the local assistant can help	
     def handle_locally(self,transcription):
         local_processing = True
-        if ("my car" or "ask test assistant number 2") in transcription:
+        if ("my car" or "OVON Auto Service") in transcription:
             local_processing = False
             print("can't handle locally")
         else:

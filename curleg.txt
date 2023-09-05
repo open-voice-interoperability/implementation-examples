@@ -1,0 +1,37 @@
+curl -k -L 'https://secondAssistant.pythonanywhere.com' -H 'Content-Type: application/json' -d '{
+    "id": "user-utterance-45",
+    "speaker-id": "user1234",
+    "previous-id": "user-utterance-44",
+    "span": {
+        "start-time": "2023-09-04T16:01:55.598426",
+        "end-offset": "PT1.045"
+    },
+    "features": {
+        "user-request-audio": {
+            "mime-type": "audio/wav",
+            "tokens": [
+                {
+                    "value-url": "http://localhost:8080/ab78h50ef.wav"
+                }
+            ]
+        },
+        "user-request-text": {
+            "mime-type": "text/plain",
+            "lang": "en",
+            "encoding": "utf-8",
+            "tokens": [
+                {
+                    "value": " ask test assistant number 2 \nshould I rotate the tires on my car",
+                    "links": [
+                        "$.user-request-audio.tokens[0].value-url"
+                    ],
+                    "confidence": 0.99,
+                    "span": {
+                        "start-offset": "PT8.79",
+                        "end-offset": "PT8.845"
+                    }
+                }
+            ]
+        }
+    }
+}'

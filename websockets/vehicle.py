@@ -9,4 +9,5 @@ vehicle = Database('vehicle.json', default=dict())
 vehicle.data['oil change'] = 'yes, your 2018 Outback is due for an oil change'
 vehicle.data['tire rotation'] = 'yes, your Subaru Outback is due for a tire rotation'
 vehicle.data['state inspection'] = 'no, your 2018 Subaru Outback does not need a state inspection. you will need a state inspection in three months'
+vehicle.data['unknown'] = "I don't know the answer to that question"
 print(vehicle.data.values())

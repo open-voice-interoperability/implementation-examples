@@ -91,7 +91,7 @@ class SecondaryAssistant:
         self.input_transcription = dIn.get_feature('user-request-text').get_token().value
         confidence1 = dIn.get_feature('user-request-text').get_token().confidence
         dIn.get_feature('user-request-text').get_token(1)
-        l1=dIn.get_feature('user-request-text').get_token().linked_values(dIn)
+        #l1=dIn.get_feature('user-request-text').get_token().linked_values(dIn)
 
         #Look at some of the variables
         # print(f'text packet: {f2.packet}')

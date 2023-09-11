@@ -9,7 +9,8 @@ from nlp import *
 scriptpath = "../../lib-interop/python/lib"
 sys.path.append(os.path.abspath(scriptpath))
 import dialog_event as de
-remote_assistants = [{"name":"test_assistant","url":"http://localhost:8766","protocols":["HTTP"]},{"name":"OVON Auto Service","url":"https://secondassistant.pythonanywhere.com","protocols":"[HTTP"}]
+#remote_assistants = [{"name":"testassistant","url":"http://localhost:8766","protocols":["HTTP"]},{"name":"OVON Auto Service","url":"https://secondassistant.pythonanywhere.com","protocols":"[HTTP"}]
+remote_assistants = [{"name":"asteroute","url":"https://asteroute.com/ovontest","protocols":["HTTP"]},{"name":"OVON Auto Service","url":"https://secondassistant.pythonanywhere.com","protocols":"[HTTP"}]
 assistant_name = "primary-assistant" 
 nlp = NLP()
 give_up = ["I'm sorry","I apologize", "I am sorry"]
@@ -45,6 +46,8 @@ class Assistant:
             self.primary_assistant_response = self.notify_user_of_transfer()
             resultOVON = self.send_message_to_secondary_assistant()
             self.output_transcription = self.parse_dialog_event(resultOVON)
+            #add the name of the secondary assistant
+            self.output_transcription = "here's the answer from " + self.current_remote_assistant + ": " + self.output_transcription
             self.output_message = resultOVON
         # log result
         print(self.output_transcription)
@@ -76,7 +79,7 @@ class Assistant:
 # use pythonanywhere server if the user asks for it
     def identify_assistant(self,transcription):
         print(transcription)
-        if "ask test assistant number 2" in transcription.lower():
+        if "ovon auto service" in transcription.lower():
             remote_assistant = remote_assistants[1]
         else:
             remote_assistant  = remote_assistants[0]
@@ -140,7 +143,7 @@ class Assistant:
         text1 = d.get_feature('user-request-text').get_token().value
         confidence1=d.get_feature('user-request-text').get_token().confidence
         t2=d.get_feature('user-request-text').get_token(1)
-        l1=d.get_feature('user-request-text').get_token().linked_values(d)
+        #l1=d.get_feature('user-request-text').get_token().linked_values(d)
 
         #Look at some of the variables
         #print(f'text packet: {f2.packet}')

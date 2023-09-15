@@ -13,6 +13,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
         # Set response headers
         self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
 
         # Read the request body
@@ -41,6 +42,29 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             response_bytes = json.dumps(response_data).encode('utf-8')
             self.wfile.write(response_bytes)
         return
+    def do_OPTIONS(self):
+        print("handling options ")
+        print(self.request)
+    # Set response status code
+        self.send_response(200)
+      # Set response headers
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        try:
+            response_data = {"test":"got options"}
+            print("response data is")
+            print(response_data)
+            # Send the response back to the client
+            response_bytes = json.dumps(response_data).encode('utf-8')
+            self.wfile.write(response_bytes)
+        except json.JSONDecodeError:
+            # If the received data is not valid JSON
+            response_data = {'error': 'Invalid JSON data'}
+            response_bytes = json.dumps(response_data).encode('utf-8')
+            self.wfile.write(response_bytes)
+        return
+
+        
 
 
 # Define the server address and port

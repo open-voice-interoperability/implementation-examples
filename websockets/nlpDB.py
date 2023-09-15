@@ -24,7 +24,6 @@ class NLPDB:
        
     def can_handle(self,text):
         can_handle = False
-        print("checking " + text)
         intent = self.get_intent(text)
         if intent != "unknown":
             can_handle = True

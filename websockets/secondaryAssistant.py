@@ -107,7 +107,7 @@ class SecondaryAssistant:
         print(text)
         d=de.DialogEvent()
         d.id='user-utterance-45'
-        d.speaker_id = self.name
+        d.speaker-id = self.name
         # d.previous_id='user-utterance-44'
         d.add_span(de.Span(start_time=datetime.datetime.now().isoformat(),end_offset_msec=1045))
         #Now add a text feature

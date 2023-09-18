@@ -33,7 +33,7 @@ class SecondaryAssistant:
     def __init__(self):
         self.input_message = ""
         self.output_message = ""
-        self.name = "ovon auto"
+        self.name = "ovon_auto"
         self.input_transcription = ""
         self.output_text = ""
 	

@@ -75,13 +75,13 @@ class SecondaryAssistant:
         text = self.format_text_feature()
         features["text"] = text
         dialog_event = {}
-        dialog_event["speaker_id"] = self.name
+        dialog_event["speaker-id"] = self.name
         span = {}
         span["start-time"] = datetime.datetime.now().isoformat()
         dialog_event["span"] = span
         dialog_event["features"] = features
         parameters = {}
-        parameters["dialog_event"] = dialog_event
+        parameters["dialog-event"] = dialog_event
         #prepare the message envelope
         events = []
         return_event = {"event-type" : "assistant-return"}

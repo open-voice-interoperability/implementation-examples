@@ -11,6 +11,7 @@ import dialog_event as de
 # if you copy Python dialog event library for convenience
 #from dialog_event import *
 nlp = NLPDB()
+greeting = "Hi, this is OVON Auto Service, "
 
 def find_key(data, target):
     if isinstance(data, dict):
@@ -45,7 +46,7 @@ class SecondaryAssistant:
             text_result = self.decide_what_to_say()
             print("text result is ")
             print(text_result)
-            self.output_text = text_result
+            self.output_text = greeting + text_result
             self.output_message = self.convert_to_message()
             print("output message is:")
             print(self.output_message)

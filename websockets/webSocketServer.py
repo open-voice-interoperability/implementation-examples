@@ -76,7 +76,7 @@ async def audio_server(websocket, path):
             await websocket.send(to_send)
             # send OVON-formatted output message back to the client for display
             system_response_message = assistant.get_output_message()
-            output_to_send = "dialog event (from system output): " + system_response_message
+            output_to_send = "dialog event (from system output): " + str(system_response_message)
             await websocket.send(output_to_send)
                                  
     except websockets.exceptions.ConnectionClosed:

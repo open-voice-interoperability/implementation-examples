@@ -5,7 +5,6 @@ import requests
 import json
 from nlp import *
 
-
 scriptpath = "../../lib-interop/python/lib"
 sys.path.append(os.path.abspath(scriptpath))
 import dialog_event as de
@@ -15,10 +14,31 @@ assistant_name = "primary-assistant"
 nlp = NLP()
 give_up = ["I'm sorry","I apologize", "I am sorry"]
 
+
+def find_key(data, target):
+    if isinstance(data, dict):
+        if target in data:
+            return data[target]
+        else:
+            for key, value in data.items():
+                result = find_key(value, target)
+                if result is not None:
+                    return result
+    elif isinstance(data, list):
+        for item in data:
+            result = find_key(item, target)
+            if result is not None:
+                return result
+    return None
+    
+    
 class Assistant:
     def __init__(self):
+        self.name = "primary_assistant"
+        self.user = "test_user"
         self.input_message = ""
         self.output_message = ""
+        self.input_transcription = ""
         self.output_transcription = ""
         self.current_remote_assistant = ""
         self.current_remote_assistant_url = ""
@@ -32,13 +52,18 @@ class Assistant:
     # 3. The input and output OVON messages, which will be displayed in the browser, but are
     #    not actually used by the client 
     def invoke_assistant(self,transcription):
+        print("working on " + transcription)
+        self.input_transcription = transcription
         # convert input to OVON
-        self.input_message = self.convert_to_dialog_event(transcription)
+        #self.input_message = self.convert_to_dialog_event(transcription)
+        self.input_message = self.convert_to_message(direction="input")
+        print("input message is " + str(self.input_message))
         # handle locally?
         if self.handle_locally(transcription):
            print("handling locally with LLM")
            self.transfer = False
            self.output_transcription = self.decide_what_to_say(transcription)
+           self.output_message = self.convert_to_message(direction="output")
         # if not handle locally:
         else:
             # should identify secondary assistant based on OVON message, not transcription
@@ -103,11 +128,53 @@ class Assistant:
 
     def decide_what_to_say(self,text):
         nlp.answer_question(text)
+        print("asking " + text + "getting answer" +nlp.get_current_result())
         return(nlp.get_current_result())
         
     def notify_user_of_transfer(self):
         message_to_user = "I don't know the answer, I will ask " + self.current_remote_assistant
         return(message_to_user)
+        
+    def convert_to_message(self,direction):
+        #prepare the dialog event
+        features = {}
+        text = ""
+        features["text"] = text
+        dialog_event = {}
+        # input from a user
+        if direction == "input":
+            dialog_event["speaker-id"] = self.user
+            text = self.format_text_feature(self.input_transcription)
+        else:
+            dialog_event["speaker-id"] = self.name
+            text = self.format_text_feature(self.output_transcription)
+        features["text"] = text
+        span = {}
+        span["start-time"] = datetime.datetime.now().isoformat()
+        dialog_event["span"] = span
+        dialog_event["features"] = features
+        #prepare the message envelope
+        parameters = {}
+        parameters["dialog-event"] = dialog_event
+        events = []
+        if direction == "output":
+            return_event = {"event-type" : "assistant-return"}
+            events.append(return_event)
+        utterance_event = {"event-type" : "utterance"}
+        utterance_event["parameters"] = parameters
+        events.append(utterance_event)
+        schema = {}
+        schema["url"] = "https://ovon/conversation/pre-alpha-1.0.1"
+        schema["version"] = "1.0"
+        ovon = {}
+        ovon["schema"] = schema
+        conversation = {}
+        conversation["id"] = "WebinarDemo137"
+        ovon["conversation"] = conversation
+        ovon["events"] = events
+        final = {}
+        final["ovon"] = ovon
+        return(final)
     
     def convert_to_dialog_event(self,transcription):
         d=de.DialogEvent()
@@ -122,10 +189,12 @@ class Assistant:
         f1.add_token(value_url='http://localhost:8080/ab78h50ef.wav')
 
         #Now add a text feature
-        f2=de.TextFeature(lang='en',encoding='utf-8')
-        d.add_feature('user-request-text',f2)
-        f2.add_token(value= transcription,confidence=0.99,start_offset_msec=8790,end_offset_msec=8845,links=["$.user-request-audio.tokens[0].value-url"])
-   
+        f2 = self.format_text_feature()
+        #f2=de.TextFeature(lang='en',encoding='utf-8')
+        #d.add_feature('user-request-text',f2)
+        #f2.add_token(value= transcription,confidence=0.99,start_offset_msec=8790,end_offset_msec=8845,links=["$.user-request-audio.tokens[0].value-url"])
+        print(" output event is " +str(f2))
+        d.add_feature('features',f2)
         print(f'dialog packet: {d.packet}')
 
         #Now save the dialog event to YML and JSON
@@ -140,17 +209,30 @@ class Assistant:
         d._packet = json_event
         # Interrogate this object
         # in this example we are just interested in the text
-        text1 = d.get_feature('user-request-text').get_token().value
-        confidence1=d.get_feature('user-request-text').get_token().confidence
-        t2=d.get_feature('user-request-text').get_token(1)
+        #text1 = d.get_feature('user-request-text').get_token().value
+        #confidence1=d.get_feature('user-request-text').get_token().confidence
+        #t2=d.get_feature('user-request-text').get_token(1)
         #l1=d.get_feature('user-request-text').get_token().linked_values(d)
-
         #Look at some of the variables
         #print(f'text packet: {f2.packet}')
         #print(f'text1: {text1} confidence1: {confidence1}')
         #print(f'text2: {t2.value} confidence1: {t2.confidence}')
         #print(f'l1: {l1}')
-        return(text1)
+        transcription = find_key(json_event, 'value')
+        print("transcription is ")
+        print(transcription)
+        return(transcription)
+        
+       # create the "text" feature of a dialog event
+    def format_text_feature(self,text_value):
+        value = {}
+        value["value"] = text_value
+        tokens = []
+        tokens.append(value)
+        text = {}
+        text["mime-type"] = "text/plain"
+        text["tokens"] = tokens
+        return text  
         
     def warn_delay(self, transcription):
         return("Ok, I'll check into your question: " + transcription + ".  just a minute")

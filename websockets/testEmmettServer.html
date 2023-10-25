@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Send POST Request</title>
+</head>
+<body>
+  <button id="sendButton">Send POST Request</button>
+
+  <script>
+    function sendPostRequest() {
+      // ... (Your sendPostRequest function code here)
+      // Data to send in the POST request (with "id" as the first key-value pair)
+ /* const requestData = {
+    id: '12345',
+    key2: 'value2',
+  };
+  */
+  const requestData =
+  {
+  "ovon": {
+    "schema": {
+        "url": "https://ovon/conversation/pre-alpha-1.0.1",
+        "version": "1.0"      
+    },
+
+    "conversation": {
+        "id": "WebinarDemo137"
+    }, 
+
+    "sender": {
+        "from": "https://example.com/message-from",
+        "reply-to": "https://example.com/reply-message-to"
+    },
+
+    "events": [
+        {
+            "event-type": "assistant-engage",
+            "parameters": {
+                "to": {
+                    "url": "https://secondAssistant.pythonanywhere.com"
+                }           
+            }
+        },
+
+        {
+            "event-type": "whisper-utterance",
+            "parameters": {    
+                "dialog-event": {
+                    "speaker-id": "emmett",
+                    "span": { "start-time": "2023-06-14 02:06:07+00:00" },
+                    "features": {
+                        "text": {
+                            "mime-type": "text/plain",
+                            "tokens": [ { "value": "Is my car due for a tire rotation?"  } ]
+                        }
+                    }
+                }
+            }
+        }
+    ]
+  }
+}
+
+
+  // URL of the server
+ //const url = 'https://asteroute.com/ovontest';
+ const url = 'https://secondassistant.pythonanywhere.com';
+
+  // Create headers with the content type set to JSON
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+  });
+  console.log(headers)
+
+  // Create the request object
+  const request = new Request(url, {
+    method: 'POST',
+    headers: headers,
+    body: JSON.stringify(requestData),
+  });
+  console.log(request)
+
+  // Send the request
+  fetch(request)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      return response.json();
+    })
+    .then(data => {
+      // Handle the response data here
+      console.log(data);
+    })
+    .catch(error => {
+      // Handle errors here
+      console.error('Error:', error);
+    });
+}
+
+    // Attach the function to the button click event
+    document.getElementById('sendButton').addEventListener('click', function () {
+      sendPostRequest();
+    });
+  </script>
+</body>
+</html>

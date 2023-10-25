@@ -225,6 +225,9 @@ class DialogEvent(DialogPacket):
         return feature
 
     def get_feature(self,feature_name):
+        print(self)
+        print(self.features)
+        print("getting " + feature_name)
         fpacket=self.features.get(feature_name,None)
         
         if fpacket is not None: 

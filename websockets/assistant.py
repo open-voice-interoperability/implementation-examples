@@ -10,7 +10,7 @@ sys.path.append(os.path.abspath(scriptpath))
 import dialog_event as de
 remote_assistants = [{"name":"testassistant","url":"http://localhost:8766","protocols":["HTTP"]},{"name":"ovon_auto","url":"https://secondassistant.pythonanywhere.com","protocols":"[HTTP"}]
 #remote_assistants = [{"name":"asteroute","url":"https://asteroute.com/ovontest","protocols":["HTTP"]},{"name":"OVON Auto Service","url":"https://secondassistant.pythonanywhere.com","protocols":"[HTTP"}]
-assistant_name = "primary-assistant" 
+assistant_name = "primaryAssistant" 
 nlp = NLP()
 give_up = ["I'm sorry","I apologize", "I am sorry"]
 
@@ -33,8 +33,9 @@ def find_key(data, target):
     
     
 class Assistant:
-    def __init__(self):
-        self.name = "primary_assistant"
+    def __init__(self,server_url):
+        self.server_url = server_url
+        print("server url is " + server_url)
         self.user = "test_user"
         self.input_message = ""
         self.output_message = ""
@@ -43,7 +44,9 @@ class Assistant:
         self.current_remote_assistant = ""
         self.current_remote_assistant_url = ""
         self.primary_assistant_response = ""
+        self.name = assistant_name
         self.transfer = True
+        
 	# the primary assistant has 4 items to send back
     # 1. the transcription of the primary assistant's response, which will be displayed in the 
     #    browser and rendered with TTS
@@ -136,46 +139,49 @@ class Assistant:
         return(message_to_user)
         
     def convert_to_message(self,direction):
+        print("direction is " + direction)
         #prepare the dialog event
-        features = {}
-        text = ""
-        features["text"] = text
-        dialog_event = {}
-        # input from a user
-        if direction == "input":
-            dialog_event["speaker-id"] = self.user
-            text = self.format_text_feature(self.input_transcription)
-        else:
-            dialog_event["speaker-id"] = self.name
-            text = self.format_text_feature(self.output_transcription)
-        features["text"] = text
-        span = {}
-        span["start-time"] = datetime.datetime.now().isoformat()
-        dialog_event["span"] = span
-        dialog_event["features"] = features
-        #prepare the message envelope
-        parameters = {}
-        parameters["dialog-event"] = dialog_event
+        dialog_event = self.assemble_dialog_event(direction)
+        #prepare the utterance event
+        utterance_event = {"eventType" : "utterance"}
+        utterance_parameters = {}
+        utterance_parameters["dialogEvent"] = dialog_event
+        utterance_event["parameters"] = utterance_parameters
+        print("direction is " + direction)
+        #prepare invite event
+        invite_event = self.assemble_invite_event(direction)
+       
+        #assemble event list
         events = []
-        if direction == "output":
-            return_event = {"event-type" : "assistant-return"}
-            events.append(return_event)
-        utterance_event = {"event-type" : "utterance"}
-        utterance_event["parameters"] = parameters
+        events.append(invite_event)
         events.append(utterance_event)
+        #add "bye" event if system is speaking
+        
+        if direction == "output":
+            return_event = {"eventType" : "bye"}
+            events.append(return_event)
+            
+        #prepare the message envelope
         schema = {}
         schema["url"] = "https://ovon/conversation/pre-alpha-1.0.1"
         schema["version"] = "1.0"
+        from_url = self.server_url
+        sender = {}
+        sender["from"] = from_url
         ovon = {}
         ovon["schema"] = schema
         conversation = {}
         conversation["id"] = "WebinarDemo137"
         ovon["conversation"] = conversation
+        ovon["sender"] = sender
+        ovon["responseCode"] = 200
         ovon["events"] = events
+        
         final = {}
         final["ovon"] = ovon
         return(final)
     
+    #not used right now
     def convert_to_dialog_event(self,transcription):
         d=de.DialogEvent()
         d.id='user-utterance-45'
@@ -185,13 +191,13 @@ class Assistant:
 
         #   Add an Audio Feature
         f1=de.AudioWavFileFeature()
-        d.add_feature('user-request-audio',f1)
+        d.add_feature('userRequestAudio',f1)
         f1.add_token(value_url='http://localhost:8080/ab78h50ef.wav')
 
         #Now add a text feature
         f2 = self.format_text_feature()
         #f2=de.TextFeature(lang='en',encoding='utf-8')
-        #d.add_feature('user-request-text',f2)
+        #d.add_feature('userRequestText',f2)
         #f2.add_token(value= transcription,confidence=0.99,start_offset_msec=8790,end_offset_msec=8845,links=["$.user-request-audio.tokens[0].value-url"])
         print(" output event is " +str(f2))
         d.add_feature('features',f2)
@@ -223,14 +229,14 @@ class Assistant:
         print(transcription)
         return(transcription)
         
-       # create the "text" feature of a dialog event
+       #create the "text" feature of a dialog event
     def format_text_feature(self,text_value):
         value = {}
         value["value"] = text_value
         tokens = []
         tokens.append(value)
         text = {}
-        text["mime-type"] = "text/plain"
+        text["mimeType"] = "text/plain"
         text["tokens"] = tokens
         return text  
         
@@ -250,4 +256,32 @@ class Assistant:
     def get_primary_assistant_response(self):
         return(self.primary_assistant_response)
         
+    #utilities for putting together specific events
+    def assemble_dialog_event(self,direction):
+        features = {}
+        text = ""
+        features["text"] = text
+        dialog_event = {}
+        # input from a user
+        if direction == "input":
+            dialog_event["speakerId"] = self.user
+            text = self.format_text_feature(self.input_transcription)
+        else:
+            dialog_event["speakerId"] = self.name
+            text = self.format_text_feature(self.output_transcription)
+        features["text"] = text
+        span = {}
+        span["startTime"] = datetime.datetime.now().isoformat()
+        dialog_event["span"] = span
+        dialog_event["features"] = features
+        return(dialog_event)
+        
+    def assemble_invite_event(self,direction):
+        invite_event = {"eventType" : "invite"}
+        to_url_parameters = {}
+        to_url_parameters["url"] = self.current_remote_assistant_url
+        invite_event_parameters = {}
+        invite_event_parameters["to"] = to_url_parameters
+        invite_event["parameters"] = invite_event_parameters
+        return(invite_event)
         

@@ -4,9 +4,11 @@ from assistant import *
 from audioProcessing import *
 
 transcription = "initial transcription"
-assistant = Assistant()
+
 audio_processing = AudioProcessing()
 serverPort = 8765
+server_url = "ws:localhost:8765"
+assistant = Assistant(server_url)
 
 async def audio_server(websocket, path):
     try:
@@ -43,6 +45,7 @@ async def audio_server(websocket, path):
             await websocket.send(delay_message)
             # Send primary assistant TTS response audio back to the client
             audio_processing.text_to_speech(delay_message)
+            print("server url is " + server_url)
             primary_assistant_audio = audio_processing.get_tts_file_name()
             with open(primary_assistant_audio, "rb") as audio_file:
                 await websocket.send(audio_file.read())

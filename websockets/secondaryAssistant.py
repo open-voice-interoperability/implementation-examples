@@ -76,17 +76,17 @@ class SecondaryAssistant:
         text = self.format_text_feature()
         features["text"] = text
         dialog_event = {}
-        dialog_event["speaker-id"] = self.name
+        dialog_event["speakerId"] = self.name
         span = {}
-        span["start-time"] = datetime.datetime.now().isoformat()
+        span["startTime"] = datetime.datetime.now().isoformat()
         dialog_event["span"] = span
         dialog_event["features"] = features
         parameters = {}
-        parameters["dialog-event"] = dialog_event
+        parameters["dialogEvent"] = dialog_event
         #prepare the message envelope
         events = []
-        return_event = {"event-type" : "assistant-return"}
-        utterance_event = {"event-type" : "utterance"}
+        return_event = {"eventType" : "bye"}
+        utterance_event = {"eventType" : "utterance"}
         utterance_event["parameters"] = parameters
         events.append(return_event)
         events.append(utterance_event)
@@ -152,7 +152,7 @@ class SecondaryAssistant:
         tokens = []
         tokens.append(value)
         text = {}
-        text["mime-type"] = "text/plain"
+        text["mimeType"] = "text/plain"
         text["tokens"] = tokens
         return text
         

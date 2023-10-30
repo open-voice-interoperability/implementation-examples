@@ -8,7 +8,7 @@ curl -k -L 'https://secondAssistant.pythonanywhere.com' -H 'Content-Type: applic
     },
     "features": {
         "user-request-audio": {
-            "mime-type": "audio/wav",
+            "mimeType": "audio/wav",
             "tokens": [
                 {
                     "value-url": "http://localhost:8080/ab78h50ef.wav"
@@ -16,7 +16,7 @@ curl -k -L 'https://secondAssistant.pythonanywhere.com' -H 'Content-Type: applic
             ]
         },
         "user-request-text": {
-            "mime-type": "text/plain",
+            "mimeType": "text/plain",
             "lang": "en",
             "encoding": "utf-8",
             "tokens": [

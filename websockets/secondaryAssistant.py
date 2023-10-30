@@ -37,6 +37,7 @@ class SecondaryAssistant:
         self.name = "ovon_auto"
         self.input_transcription = ""
         self.output_text = ""
+        self.server_url = "https://secondassistant.pythonanywhere.com",
 	
     def invoke_assistant(self,message):
        # self.parse_dialog_event(message)
@@ -71,33 +72,35 @@ class SecondaryAssistant:
         return(nlp.get_current_result())
         
     def convert_to_message(self):
-        #prepare the dialog event
-        features = {}
-        text = self.format_text_feature()
-        features["text"] = text
-        dialog_event = {}
-        dialog_event["speakerId"] = self.name
-        span = {}
-        span["startTime"] = datetime.datetime.now().isoformat()
-        dialog_event["span"] = span
-        dialog_event["features"] = features
-        parameters = {}
-        parameters["dialogEvent"] = dialog_event
+       #prepare the dialog event
+        dialog_event = self.assemble_dialog_event("output")
+        #prepare the utterance event
+        utterance_event = {"eventType" : "utterance"}
+        utterance_parameters = {}
+        utterance_parameters["dialogEvent"] = dialog_event
+        utterance_event["parameters"] = utterance_parameters
+        
         #prepare the message envelope
         events = []
         return_event = {"eventType" : "bye"}
         utterance_event = {"eventType" : "utterance"}
-        utterance_event["parameters"] = parameters
+        utterance_event["parameters"] = utterance_parameters
         events.append(return_event)
         events.append(utterance_event)
+        # prepare the message envelope
         schema = {}
         schema["url"] = "https://ovon/conversation/pre-alpha-1.0.1"
         schema["version"] = "1.0"
-        ovon = {}
-        ovon["schema"] = schema
+        from_url = self.server_url
+        sender = {}
+        sender["from"] = from_url
         conversation = {}
         conversation["id"] = "WebinarDemo137"
+        ovon = {}
         ovon["conversation"] = conversation
+        ovon["schema"] = schema
+        ovon["sender"] = sender
+        ovon["responseCode"] = 200
         ovon["events"] = events
         final = {}
         final["ovon"] = ovon
@@ -169,4 +172,33 @@ class SecondaryAssistant:
         
     def get_transcription(self):
         return(self.input_transcription)
+        
+    #utilities for putting together specific events
+    def assemble_dialog_event(self,direction):
+        features = {}
+        text = ""
+        features["text"] = text
+        dialog_event = {}
+        # input from a user
+        if direction == "input":
+            dialog_event["speakerId"] = self.user
+            text = self.format_text_feature(self.input_transcription)
+        else:
+            dialog_event["speakerId"] = self.name
+            text = self.format_text_feature()
+        features["text"] = text
+        span = {}
+        span["startTime"] = datetime.datetime.now().isoformat()
+        dialog_event["span"] = span
+        dialog_event["features"] = features
+        return(dialog_event)
+        
+    def assemble_invite_event(self,direction):
+        invite_event = {"eventType" : "invite"}
+        to_url_parameters = {}
+        to_url_parameters["url"] = self.current_remote_assistant_url
+        invite_event_parameters = {}
+        invite_event_parameters["to"] = to_url_parameters
+        invite_event["parameters"] = invite_event_parameters
+        return(invite_event)
         

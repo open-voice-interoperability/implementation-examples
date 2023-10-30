@@ -139,7 +139,6 @@ class Assistant:
         return(message_to_user)
         
     def convert_to_message(self,direction):
-        print("direction is " + direction)
         #prepare the dialog event
         dialog_event = self.assemble_dialog_event(direction)
         #prepare the utterance event
@@ -147,7 +146,7 @@ class Assistant:
         utterance_parameters = {}
         utterance_parameters["dialogEvent"] = dialog_event
         utterance_event["parameters"] = utterance_parameters
-        print("direction is " + direction)
+        
         #prepare invite event
         invite_event = self.assemble_invite_event(direction)
        
@@ -176,7 +175,6 @@ class Assistant:
         ovon["sender"] = sender
         ovon["responseCode"] = 200
         ovon["events"] = events
-        
         final = {}
         final["ovon"] = ovon
         return(final)

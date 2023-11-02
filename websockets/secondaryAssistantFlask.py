@@ -1,5 +1,6 @@
 from flask import Flask
 from flask import request
+from flask_cors import CORS
 import json
 from secondaryAssistant import *
 
@@ -14,5 +15,7 @@ def home():
     print(data)
     response_data = secondaryAssistant.invoke_assistant(data)
     return response_data
+
 if __name__ == '__main__':
     app.run(host="0.0.0.0",port=8766, debug=True)
+

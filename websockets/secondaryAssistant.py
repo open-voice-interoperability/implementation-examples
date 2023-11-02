@@ -29,7 +29,6 @@ def find_key(data, target):
                 return result
     return None
       
-
 class SecondaryAssistant:
     def __init__(self):
         self.input_message = ""

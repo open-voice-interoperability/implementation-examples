@@ -37,24 +37,29 @@ class SecondaryAssistant:
         self.name = "ovon_auto"
         self.input_transcription = ""
         self.output_text = ""
-        self.server_url = "https://secondassistant.pythonanywhere.com",
+        self.server_url = "https://secondassistant.pythonanywhere.com"
+        self.cold_open = False
 	
     def invoke_assistant(self,message):
-       # self.parse_dialog_event(message)
+        # self.parse_dialog_event(message)
         self.input_transcription = find_key(message,"value")
-        # handle locally?
-        if self.handle_locally(self.input_transcription):
-            text_result = self.decide_what_to_say()
-            print("text result is ")
-            print(text_result)
-            self.output_text = greeting + text_result
+        if self.input_transcription == None:
+            self.cold_open = True
             self.output_message = self.convert_to_message()
-            print("output message is:")
-            print(self.output_message)
-        # if not handle locally:
         else:
-           #can't help
-            self.output_message = self.convert_to_dialog_event("sorry, " + self.name + " cannot handle the request: " + self.get_transcription())
+            # handle locally?
+            if self.handle_locally(self.input_transcription):
+                text_result = self.decide_what_to_say()
+                print("text result is ")
+                print(text_result)
+                self.output_text = greeting + text_result
+                self.output_message = self.convert_to_message()
+                print("output message is:")
+                print(self.output_message)
+            # if not handle locally:
+            else:
+               #can't help
+                self.output_message = self.convert_to_dialog_event("sorry, " + self.name + " cannot handle the request: " + self.get_transcription())
         return(self.output_message)
 
     # figure out if this assistant can help	
@@ -72,21 +77,21 @@ class SecondaryAssistant:
         return(nlp.get_current_result())
         
     def convert_to_message(self):
-       #prepare the dialog event
-        dialog_event = self.assemble_dialog_event("output")
-        #prepare the utterance event
-        utterance_event = {"eventType" : "utterance"}
-        utterance_parameters = {}
-        utterance_parameters["dialogEvent"] = dialog_event
-        utterance_event["parameters"] = utterance_parameters
-        
-        #prepare the message envelope
+        # prepare the event list
         events = []
+        # right now we have only one response, then say "bye"
         return_event = {"eventType" : "bye"}
-        utterance_event = {"eventType" : "utterance"}
-        utterance_event["parameters"] = utterance_parameters
         events.append(return_event)
-        events.append(utterance_event)
+        # if we have an utterance (not cold open) we have a response to send back
+        if not self.cold_open:
+            #prepare the dialog event
+            dialog_event = self.assemble_dialog_event("output")
+            #prepare the utterance event
+            utterance_event = {"eventType" : "utterance"}
+            utterance_parameters = {}
+            utterance_parameters["dialogEvent"] = dialog_event
+            utterance_event["parameters"] = utterance_parameters
+            events.append(utterance_event)
         # prepare the message envelope
         schema = {}
         schema["url"] = "https://ovon/conversation/pre-alpha-1.0.1"

@@ -70,6 +70,12 @@ This html page uses the following two scripts:
 ## secondaryAssistant.py
 1. processes OVON messages from a primary assistant and returns a response
 1. contains the assistant functions; called from a server
+1. this assistant can answer questions about auto maintenance, based on three intents, "oil change", "tire rotation" and "state inspection"
+1. example utterances:
+    a. do I need to change the oil in my car?
+    a. do I need to rotate my tires?
+    a. is it time for my car's state inspection?
+    a. paraphrases of these utterances should also work
 
 ## nlp.py
 1. this component is called by "assistant.py" to do nlp with one of the "gpt4all" large language models. These are open source models that can be run locally on Windows, Mac and Linux computers, without requiring a GPU. Different models can be swapped in for experimentation after installing "gpt4all". 

@@ -74,8 +74,11 @@ This html page uses the following two scripts:
 1. example utterances:
 
     a. do I need to change the oil in my car?
+    
     b. do I need to rotate my tires?
+    
     c. is it time for my car's state inspection?
+    
     d. paraphrases of these utterances should also work
 
 ## nlp.py

@@ -12,6 +12,7 @@ import dialog_event as de
 #from dialog_event import *
 nlp = NLPDB()
 greeting = "Hi, this is OVON Auto Service, "
+how_can_i_help = greeting + "how can I help you?"
 
 def find_key(data, target):
     if isinstance(data, dict):
@@ -35,12 +36,14 @@ class SecondaryAssistant:
         self.output_message = ""
         self.name = "ovon_auto"
         self.input_transcription = ""
+        self.conversation_id = ""
         self.output_text = ""
         self.server_url = "https://secondassistant.pythonanywhere.com"
         self.cold_open = False
 	
     def invoke_assistant(self,message):
         # self.parse_dialog_event(message)
+        self.conversation_id = find_key(message,"id")
         self.input_transcription = find_key(message,"value")
         if self.input_transcription == None:
             self.cold_open = True
@@ -70,19 +73,24 @@ class SecondaryAssistant:
         return(handle_locally)
 
     def decide_what_to_say(self):
-        intent = nlp.get_current_intent()
-        nlp.answer_question(intent)
-        print("resulting answer is " + nlp.get_current_result())
-        return(nlp.get_current_result())
+        if self.cold_open:
+            return(how_can_i_help)
+        else:
+            intent = nlp.get_current_intent()
+            nlp.answer_question(intent)
+            print("resulting answer is " + nlp.get_current_result())
+            return(nlp.get_current_result())
         
     def convert_to_message(self):
         # prepare the event list
         events = []
-        # right now we have only one response, then say "bye"
-        return_event = {"eventType" : "bye"}
-        events.append(return_event)
+        if self.cold_open:
+            dialog_event = self.assemble_dialog_event("output")
         # if we have an utterance (not cold open) we have a response to send back
         if not self.cold_open:
+            # right now we have only one response, then say "bye"
+            return_event = {"eventType" : "bye"}
+            events.append(return_event)
             #prepare the dialog event
             dialog_event = self.assemble_dialog_event("output")
             #prepare the utterance event
@@ -99,7 +107,7 @@ class SecondaryAssistant:
         sender = {}
         sender["from"] = from_url
         conversation = {}
-        conversation["id"] = "WebinarDemo137"
+        conversation["id"] = self.conversation_id
         ovon = {}
         ovon["conversation"] = conversation
         ovon["schema"] = schema

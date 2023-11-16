@@ -9,7 +9,7 @@ ELMNT_SPEAKER_ID='speaker-id'
 ELMNT_ID='id'
 ELMNT_PREV_ID='previous-id'
 ELMNT_FEATURES='features'
-ELMNT_MIME_TYPE='mime-type'
+ELMNT_MIME_TYPE='mimeType'
 ELMNT_LANG='lang'
 ELMNT_ENCODING='encoding'
 ELMNT_TOKENS='tokens'
@@ -46,7 +46,7 @@ class DialogPacket():
         self._packet=p
 
     @classmethod
-    # return the feature class for the mime-type
+    # return the feature class for the mimeType
     def add_feature_class(cls,mime_type,feature_class):
         cls._feature_class_map['mime_type']=feature_class
 
@@ -55,7 +55,7 @@ class DialogPacket():
         cls.add_feature_class('text/plain',TextFeature)
 
     @classmethod
-    # return the feature class for the mime-type
+    # return the feature class for the mimeType
     def feature_class(cls,mime_type):
         try:
             return cls._feature_class_map['mime_type']
@@ -63,7 +63,7 @@ class DialogPacket():
             return Feature    
 
     @classmethod
-    # return the feature class for the mime-type
+    # return the feature class for the mimeType
     def value_class(cls,mime_type):
         try:
             return cls._value_class_map['mime_type']

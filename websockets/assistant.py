@@ -3,12 +3,13 @@ import sys
 import datetime
 import requests
 import json
+import secrets
 from nlp import *
 
 scriptpath = "../../lib-interop/python/lib"
 sys.path.append(os.path.abspath(scriptpath))
 import dialog_event as de
-remote_assistants = [{"name":"testassistant","url":"http://localhost:8766","protocols":["HTTP"]},{"name":"ovon_auto","url":"https://secondAssistant.pythonanywhere.com","protocols":"[HTTP"}]
+remote_assistants = [{"name":"testassistant","url":"http://localhost:8766","protocols":["HTTP"]},{"name":"ovon_auto","url":"https://secondAssistant.pythonanywhere.com","protocols":"[HTTP"},{"name":"asteroute","url":"https://asteroute.com/ovontest","protocols":["HTTP"]}]
 #remote_assistants = [{"name":"asteroute","url":"https://asteroute.com/ovontest","protocols":["HTTP"]},{"name":"OVON Auto Service","url":"https://secondassistant.pythonanywhere.com","protocols":"[HTTP"}]
 assistant_name = "primaryAssistant" 
 nlp = NLP()
@@ -46,6 +47,7 @@ class Assistant:
         self.primary_assistant_response = ""
         self.name = assistant_name
         self.transfer = True
+        in_dialog_with_secondary_assistant = False
         
 	# the primary assistant has 4 items to send back
     # 1. the transcription of the primary assistant's response, which will be displayed in the 
@@ -61,12 +63,32 @@ class Assistant:
         #self.input_message = self.convert_to_dialog_event(transcription)
         self.input_message = self.convert_to_message(direction="input")
         print("input message is " + str(self.input_message))
+        # first, are we already in a dialog?
+        if in_dialog_with_secondary_assistant:
+            resultOVON = self.send_message_to_secondary_assistant()
+            self.output_transcription = self.parse_dialog_event(resultOVON)
+            #add the name of the secondary assistant
+            self.output_message = resultOVON
+        # did the user ask for a specific assistant?
+        requested_assistant = request_assistant(transcription)
+        print("requested assistant is " + requested_assistant)
+        if not requested_assistant == "":
+            self.current_remote_assistant = requested_assistant
+            for assistant in remote_assistants:
+                if assistant.get("name") == requested_assistant:
+                    self.current_remote_assistant_url = assistant.get("url")
+                    self.primary_assistant_response = self.notify_user_of_transfer()
+            resultOVON = self.send_message_to_secondary_assistant()
+            self.output_transcription = self.parse_dialog_event(resultOVON)
+            #add the name of the secondary assistant
+            self.output_transcription = "here's the answer from " + self.current_remote_assistant + ": " + self.output_transcription
+            self.output_message = resultOVON
         # handle locally?
-        if self.handle_locally(transcription):
-           print("handling locally with LLM")
-           self.transfer = False
-           self.output_transcription = self.decide_what_to_say(transcription)
-           self.output_message = self.convert_to_message(direction="output")
+        elif self.handle_locally(transcription):
+            print("handling locally with LLM")
+            self.transfer = False
+            self.output_transcription = self.decide_what_to_say(transcription)
+            self.output_message = self.convert_to_message(direction="output")
         # if not handle locally:
         else:
             # should identify secondary assistant based on OVON message, not transcription
@@ -92,14 +114,6 @@ class Assistant:
             print("result from LLM is " + local_result)
             self.output_transcription = local_result
         # if the result contains an apology for not being able to handle the request, we need to find another assistant. this needs some work to make the LLM give up and not answer
-        '''
-        for apology in give_up:
-            print(apology)
-            print(local_result)
-            if apology in local_result:
-                handle_locally = False
-                break
-        '''
         print(local_processing)
         return(local_processing)
     
@@ -170,7 +184,7 @@ class Assistant:
         ovon = {}
         ovon["schema"] = schema
         conversation = {}
-        conversation["id"] = "WebinarDemo137"
+        conversation["id"] = generate_conversation_id()
         ovon["conversation"] = conversation
         ovon["sender"] = sender
         ovon["responseCode"] = 200
@@ -283,3 +297,22 @@ class Assistant:
         invite_event["parameters"] = invite_event_parameters
         return(invite_event)
         
+def request_assistant(transcription):
+    assistant_name = ""
+    for request in assistant_requests:
+        print("request for assistant is " + request)
+        print(transcription)
+        if request in transcription:
+            assistant_name = transcription.replace(request,"")
+            print("found " + assistant_name)
+            break
+    return(assistant_name)
+
+assistant_requests = ["can I talk to ","i need to talk to ", "can i get some help from "]
+
+def generate_conversation_id():
+    # Generate a random URL-safe string
+    random_urlsafe = secrets.token_urlsafe(12)
+    print(random_urlsafe)
+    return(random_urlsafe)
+    

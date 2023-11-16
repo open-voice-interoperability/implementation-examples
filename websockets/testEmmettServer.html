@@ -36,7 +36,7 @@
 
     "events": [
         {
-            "event-type": "assistant-engage",
+            "eventType": "assistant-engage",
             "parameters": {
                 "to": {
                     "url": "https://secondAssistant.pythonanywhere.com"
@@ -45,14 +45,14 @@
         },
 
         {
-            "event-type": "whisper-utterance",
+            "eventType": "whisper-utterance",
             "parameters": {    
-                "dialog-event": {
+                "dialogEvent": {
                     "speaker-id": "emmett",
                     "span": { "start-time": "2023-06-14 02:06:07+00:00" },
                     "features": {
                         "text": {
-                            "mime-type": "text/plain",
+                            "mimeType": "text/plain",
                             "tokens": [ { "value": "Is my car due for a tire rotation?"  } ]
                         }
                     }

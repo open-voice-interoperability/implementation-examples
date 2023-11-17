@@ -1,0 +1,57 @@
+ {"ovon":{"conversation":{"id":"I-SqaK2_Kim4c2z7"},"sender":{"from":"Smart Library APIs"},"responseCode":200,"events":[{"eventType":"utterance","parameters":{"dialogEvent":{"speakerId":"assistant","span":{"startTime":"2023-11-16T19:25:44.486Z"},"features":{"json":{"mimeType":"application/json","tokens":[{"value":"\"Absolutely! Our library staff is available to assist you with your research needs. You can contact them through various channels, such as email, phone, or in-person visits. You can find their contact information on our library website or by visiting the library in person. Our staff is knowledgeable and experienced in a wide range of subjects and can provide guidance on finding resources, conducting research, and citing sources. Don't hesitate to reach out to them for assistance!\""}]}}}}}]}}
+ 
+ Received text: dialog event (from system output): {"ovon":{"conversation":{"id":"I-SqaK2_Kim4c2z7"},"sender":{"from":"Smart Library APIs"},"responseCode":200,"events":[{"eventType":"utterance","parameters":{"dialogEvent":{"speakerId":"assistant","span":{"startTime":"2023-11-16T19:25:44.486Z"},"features":{"json":{"mimeType":"application/json","tokens":[{"value":"\"Absolutely! Our library staff is available to assist you with your research needs. You can contact them through various channels, such as email, phone, or in-person visits. You can find their contact information on our library website or by visiting the library in person. Our staff is knowledgeable and experienced in a wide range of subjects and can provide guidance on finding resources, conducting research, and citing sources. Don't hesitate to reach out to them for assistance!\""}]}}}}}]}}
+sendAudioToServer.html:1 Uncaught SyntaxError: Expected ',' or '}' after property value in JSON at position 752 (line 1 column 753)
+    at JSON.parse (<anonymous>)
+    at processMessage (captureAudio.js:157:30)
+    at socket.onmessage (captureAudio.js:92:24)
+    
+    
+
+{
+    "ovon": {
+        "schema": {
+            "url": "https://ovon/conversation/pre-alpha-1.0.1",
+            "version": "1.0"
+        },
+        "conversation": {
+            "id": "I-SqaK2_Kim4c2z7"
+        },
+        "sender": {
+            "from": "ws:localhost:8765"
+        },
+        "responseCode": 200,
+        "events": [
+            {
+                "eventType": "invite",
+                "parameters": {
+                    "to": {
+                        "url": "https://ovon.xcally.com/smartlibrary"
+                    }
+                }
+            },
+            {
+                "eventType": "utterance",
+                "parameters": {
+                    "dialogEvent": {
+                        "speakerId": "test_user",
+                        "span": {
+                            "startTime": "2023-11-16T14:25:43.395164"
+                        },
+                        "features": {
+                            "text": {
+                                "mimeType": "text/plain",
+                                "tokens": [
+                                    {
+                                        "value": "can I talk to library"
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        ]
+    }
+}
+

@@ -9,7 +9,7 @@ from nlp import *
 scriptpath = "../../lib-interop/python/lib"
 sys.path.append(os.path.abspath(scriptpath))
 import dialog_event as de
-remote_assistants = [{"name":"testassistant","url":"http://localhost:8766","protocols":["HTTP"]},{"name":"ovon_auto","url":"https://secondAssistant.pythonanywhere.com","protocols":"[HTTP"},{"name":"asteroute","url":"https://asteroute.com/ovontest","protocols":["HTTP"]}]
+remote_assistants = [{"name":"testassistant","url":"http://localhost:8766","protocols":["HTTP"]},{"name":"ovon_auto","url":"https://secondAssistant.pythonanywhere.com","protocols":"[HTTP"},{"name":"asteroute","url":"https://asteroute.com/ovontest","protocols":["HTTP"]},{"name":"library","url":"https://ovon.xcally.com/smartlibrary","protocols":["HTTP"]}]
 #remote_assistants = [{"name":"asteroute","url":"https://asteroute.com/ovontest","protocols":["HTTP"]},{"name":"OVON Auto Service","url":"https://secondassistant.pythonanywhere.com","protocols":"[HTTP"}]
 assistant_name = "primaryAssistant" 
 nlp = NLP()
@@ -47,7 +47,7 @@ class Assistant:
         self.primary_assistant_response = ""
         self.name = assistant_name
         self.transfer = True
-        in_dialog_with_secondary_assistant = False
+        self.in_dialog_with_secondary_assistant = False
         
 	# the primary assistant has 4 items to send back
     # 1. the transcription of the primary assistant's response, which will be displayed in the 
@@ -64,7 +64,7 @@ class Assistant:
         self.input_message = self.convert_to_message(direction="input")
         print("input message is " + str(self.input_message))
         # first, are we already in a dialog?
-        if in_dialog_with_secondary_assistant:
+        if self.in_dialog_with_secondary_assistant:
             resultOVON = self.send_message_to_secondary_assistant()
             self.output_transcription = self.parse_dialog_event(resultOVON)
             #add the name of the secondary assistant

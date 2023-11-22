@@ -1,0 +1,18 @@
+# Code owners for this repository
+# Each line is a file pattern followed by one or more owners.
+
+# These owners will be the default owners for everything in
+# the repo. Unless a later match takes precedence,
+# @global-owner1 and @global-owner2 will be requested for
+# review when someone opens a pull request.
+*       @dadahl
+
+
+# these users own any file in the designated directory
+# anywhere in the repository.
+
+js-examples/ @ajayme53
+go-examples/ @ajayme53
+aws-interop-sample/ @simonkingaby
+ovonlf/ @diegogosmar
+websockets/ @dadahl

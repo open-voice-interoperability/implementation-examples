@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0 
+
 import os
 import sys
 import datetime
@@ -9,8 +11,8 @@ from nlp import *
 scriptpath = "../../lib-interop/python/lib"
 sys.path.append(os.path.abspath(scriptpath))
 import dialog_event as de
-remote_assistants = [{"name":"testassistant","url":"http://localhost:8766","protocols":["HTTP"]},{"name":"ovon_auto","url":"https://secondAssistant.pythonanywhere.com","protocols":"[HTTP"},{"name":"asteroute","url":"https://asteroute.com/ovontest","protocols":["HTTP"]},{"name":"library","url":"https://ovon.xcally.com/smartlibrary","protocols":["HTTP"]}]
-#remote_assistants = [{"name":"asteroute","url":"https://asteroute.com/ovontest","protocols":["HTTP"]},{"name":"OVON Auto Service","url":"https://secondassistant.pythonanywhere.com","protocols":"[HTTP"}]
+import assistantMgr as am
+
 assistant_name = "primaryAssistant" 
 nlp = NLP()
 give_up = ["I'm sorry","I apologize", "I am sorry"]
@@ -40,6 +42,7 @@ class Assistant:
         self.user = "test_user"
         self.input_message = ""
         self.output_message = ""
+        self.raw_transcription = ""
         self.input_transcription = ""
         self.output_transcription = ""
         self.current_remote_assistant = ""
@@ -47,6 +50,7 @@ class Assistant:
         self.primary_assistant_response = ""
         self.name = assistant_name
         self.transfer = True
+        self.conversations = {}
         self.in_dialog_with_secondary_assistant = False
         
 	# the primary assistant has 4 items to send back
@@ -56,50 +60,73 @@ class Assistant:
     #    browser and rendered with TTS
     # 3. The input and output OVON messages, which will be displayed in the browser, but are
     #    not actually used by the client 
+    # Cases
+    # 1. We have a message with a known conversation id that indicates an input that continues an ongoing conversation. 
+    # In that case we need to revive the earlier dialog and resume.
+    # 2. The user asked for a specific assistant by name, so there is no need to figure out what assistant to use.
+    # We send the input to the requested assistant.
+    #    a. the input is a bare invite, so the secondary assistant just asks the user what kind of help they need
+    #    b. the input also contains a request, e.g. "I need to talk to OVON Auto about an oil change"
+    # 3. The user asked a question without specifying the assistant. Then there are two cases
+    #    a. try to handle the question locally
+    #    b. if we can't handle locally, we have to figure out what assistant to use and send it the request
+
     def invoke_assistant(self,transcription):
-        print("working on " + transcription)
+        self.raw_transcription = transcription
         self.input_transcription = transcription
+        # in "deconstruct" we take apart the utterance into "assistant name" and "user_request". We also look for a carrier phrase
+        # that gets discarded
+        deconstructed_utterance = deconstruct(self.input_transcription)
+        # replace the current transcription with the actual user_request
+        self.input_transcription = deconstructed_utterance.get("user_request")
         # convert input to OVON
         #self.input_message = self.convert_to_dialog_event(transcription)
         self.input_message = self.convert_to_message(direction="input")
         print("input message is " + str(self.input_message))
-        # first, are we already in a dialog?
+        print(deconstructed_utterance)
+        # Case 1 are we already in a dialog?
+        # this is the only case involving a remote assistant where we don't need an invite
         if self.in_dialog_with_secondary_assistant:
             resultOVON = self.send_message_to_secondary_assistant()
             self.output_transcription = self.parse_dialog_event(resultOVON)
-            #add the name of the secondary assistant
             self.output_message = resultOVON
-        # did the user ask for a specific assistant?
-        requested_assistant = request_assistant(transcription)
-        print("requested assistant is " + requested_assistant)
-        if not requested_assistant == "":
+        # Case 2 did the user ask for a specific assistant?
+        
+        elif deconstructed_utterance.get("assistant_name") is not None:
+            requested_assistant_info = am.get_requested_assistant_info(self.raw_transcription)
+            requested_assistant = requested_assistant_info.get("name")
+            print("requested assistant is " + requested_assistant)
             self.current_remote_assistant = requested_assistant
-            for assistant in remote_assistants:
-                if assistant.get("name") == requested_assistant:
-                    self.current_remote_assistant_url = assistant.get("url")
-                    self.primary_assistant_response = self.notify_user_of_transfer()
+            self.current_remote_assistant_url = requested_assistant_info.get("url")
+            self.primary_assistant_response = self.notify_user_of_transfer()
+            invite_event = self.assemble_invite_event("output")
+            self.append_event(invite_event)
             resultOVON = self.send_message_to_secondary_assistant()
             self.output_transcription = self.parse_dialog_event(resultOVON)
+            # if the result does not contain "bye" event, we're still talking with secondary assistant
+            # if !has_bye_event():
+            # self.in_dialog_with_secondary_assistant = True
             #add the name of the secondary assistant
-            self.output_transcription = "here's the answer from " + self.current_remote_assistant + ": " + self.output_transcription
+            self.output_transcription = "here's the response from " + self.current_remote_assistant + ": " + self.output_transcription
             self.output_message = resultOVON
-        # handle locally?
-        elif self.handle_locally(transcription):
-            print("handling locally with LLM")
+        # Case 3, is this something this assistant can handle locally?
+        elif self.handle_locally(self.input_transcription):
+            print("handling locally")
             self.transfer = False
-            self.output_transcription = self.decide_what_to_say(transcription)
-            self.output_message = self.convert_to_message(direction="output")
+            self.output_transcription = self.decide_what_to_say(self.input_transcription)
+            self.output_message = self.convert_to_message(direction = "output")
         # if not handle locally:
+        # figure out what assistant to use and get response
         else:
             # should identify secondary assistant based on OVON message, not transcription
-            self.identify_assistant(transcription)
+            self.identify_assistant(self.input_transcription)
             self.primary_assistant_response = self.notify_user_of_transfer()
             resultOVON = self.send_message_to_secondary_assistant()
             self.output_transcription = self.parse_dialog_event(resultOVON)
             #add the name of the secondary assistant
             self.output_transcription = "here's the answer from " + self.current_remote_assistant + ": " + self.output_transcription
             self.output_message = resultOVON
-        # log result
+        # should add code here to log result
         print(self.output_transcription)
         return(self.primary_assistant_response)
 
@@ -121,10 +148,7 @@ class Assistant:
 # use pythonanywhere server if the user asks for it
     def identify_assistant(self,transcription):
         print(transcription)
-        if "ovon auto service" in transcription.lower():
-            remote_assistant = remote_assistants[1]
-        else:
-            remote_assistant  = remote_assistants[0]
+        remote_assistant = am.find_name_with_keywords(transcription.lower())
         self.current_remote_assistant = remote_assistant.get("name")
         print(self.current_remote_assistant)
         self.current_remote_assistant_url = remote_assistant.get("url")
@@ -138,7 +162,6 @@ class Assistant:
         # Send an HTTP POST request to the remote server
         response = requests.post(url, json = payload)
         # Print the HTTP response status code
-        print('Response status code:', response.status_code)
         # Print the response content
         print('Response content:', response.text)
         return(response.text)
@@ -153,31 +176,29 @@ class Assistant:
         return(message_to_user)
         
     def convert_to_message(self,direction):
-        #prepare the dialog event
-        dialog_event = self.assemble_dialog_event(direction)
-        #prepare the utterance event
-        utterance_event = {"eventType" : "utterance"}
-        utterance_parameters = {}
-        utterance_parameters["dialogEvent"] = dialog_event
-        utterance_event["parameters"] = utterance_parameters
-        
-        #prepare invite event
-        invite_event = self.assemble_invite_event(direction)
-       
-        #assemble event list
+        #prepare the dialog event if the user has a request other than to talk to an assistant
         events = []
-        events.append(invite_event)
-        events.append(utterance_event)
-        #add "bye" event if system is speaking
+        if self.input_transcription != "":
+            dialog_event = self.assemble_dialog_event(direction)
+            #prepare the utterance event
+            utterance_event = {"eventType" : "utterance"}
+            utterance_parameters = {}
+            utterance_parameters["dialogEvent"] = dialog_event
+            utterance_event["parameters"] = utterance_parameters
+            events.append(utterance_event)
         
+        # prepare invite event
+        # only relevant for output from assistant (user doesn't send "invite")
         if direction == "output":
-            return_event = {"eventType" : "bye"}
-            events.append(return_event)
+            invite_event = self.assemble_invite_event(direction)
+            #add invite to  event list
             
-        #prepare the message envelope
+            
+            events.append(invite_event)            
+        #prepare the conversation envelope
         schema = {}
-        schema["url"] = "https://ovon/conversation/pre-alpha-1.0.1"
-        schema["version"] = "1.0"
+        schema["url"] = "https://github.com/open-voice-interoperability/lib-interop/schemas/conversation-envelope/0.9.0"
+        schema["version"] = "0.9.0"
         from_url = self.server_url
         sender = {}
         sender["from"] = from_url
@@ -192,34 +213,7 @@ class Assistant:
         final = {}
         final["ovon"] = ovon
         return(final)
-    
-    #not used right now
-    def convert_to_dialog_event(self,transcription):
-        d=de.DialogEvent()
-        d.id='user-utterance-45'
-        d.speaker_id="user1234"
-        d.previous_id='user-utterance-44'
-        d.add_span(de.Span(start_time=datetime.datetime.now().isoformat(),end_offset_msec=1045))
-
-        #   Add an Audio Feature
-        f1=de.AudioWavFileFeature()
-        d.add_feature('userRequestAudio',f1)
-        f1.add_token(value_url='http://localhost:8080/ab78h50ef.wav')
-
-        #Now add a text feature
-        f2 = self.format_text_feature()
-        #f2=de.TextFeature(lang='en',encoding='utf-8')
-        #d.add_feature('userRequestText',f2)
-        #f2.add_token(value= transcription,confidence=0.99,start_offset_msec=8790,end_offset_msec=8845,links=["$.user-request-audio.tokens[0].value-url"])
-        print(" output event is " +str(f2))
-        d.add_feature('features',f2)
-        print(f'dialog packet: {d.packet}')
-
-        #Now save the dialog event to YML and JSON
-        #with open("../sample-json/utterance0.json", "w") as file: d.dump_json(file)
-        #with open("../sample-yaml/utterance0.yml", "w")  as file: d.dump_yml(file)
-        return(d.packet)
-    
+   
     def parse_dialog_event(self,string_event):
         d = de.DialogEvent()
         print("received event is: " + string_event)
@@ -251,6 +245,16 @@ class Assistant:
         text["mimeType"] = "text/plain"
         text["tokens"] = tokens
         return text  
+    
+    def append_event(self,event):
+        events = find_key(self.input_message,"events")
+        print("input message before")
+        print(self.input_message)
+        events.append(event)
+        print(events)
+       # self.input_message["events"] = events
+        print("input message")
+        print(self.input_message)
         
     def warn_delay(self, transcription):
         return("Ok, I'll check into your question: " + transcription + ".  just a minute")
@@ -299,20 +303,57 @@ class Assistant:
         
 def request_assistant(transcription):
     assistant_name = ""
-    for request in assistant_requests:
+    lower_transcription = transcription.lower()
+    for request in am.request_for_assistant_set:
         print("request for assistant is " + request)
-        print(transcription)
-        if request in transcription:
-            assistant_name = transcription.replace(request,"")
-            print("found " + assistant_name)
+        lower_request = request.lower()
+        print(lower_transcription)
+        if lower_request in lower_transcription:
+            lower_transcription.replace(lower_request,"")
+            assistants_list = am.synonyms_dict.keys()
+            for name in assistants_list:
+                if name in lower_transcription:
+                    print("found " + name)
+                    assistant_name = name
+                    break
             break
     return(assistant_name)
 
-assistant_requests = ["can I talk to ","i need to talk to ", "can i get some help from "]
-
+def specific_assistant_request(transcription):
+    specific_assistant = False
+    requested_assistant_info = am.get_requested_assistant_info(transcription)
+    if len(requested_assistant_info) == 0:
+        specific_assistant = False
+    else:
+        requested_assistant = next(iter(requested_assistant_info.keys()))
+        if requested_assistant != "":
+            specific_assistant = True
+    return specific_assistant
+    
 def generate_conversation_id():
     # Generate a random URL-safe string
     random_urlsafe = secrets.token_urlsafe(12)
-    print(random_urlsafe)
     return(random_urlsafe)
+
+# take apart utterance in case there is a reference to an assistant and carrier phrase
+# so if the user says "i need to ask ovon auto if my car needs and oil change", that will
+# become "if my car needs an oil change" with "ovon_auto" as the assistant
+def deconstruct(transcription):
+    deconstructed_utterance = {}
+    assistant_name = ""
+    user_request = transcription
+    user_request = user_request.lower()
+    if specific_assistant_request(user_request):
+        assistant_name = request_assistant(transcription)
+        user_request = user_request.replace(assistant_name, "")
+        deconstructed_utterance["assistant_name"] = assistant_name
+    print(am.request_for_assistant_set)
+    for carrier in am.request_for_assistant_set:
+        if carrier in user_request:
+            user_request = user_request.replace(carrier,"")
+            break
+    user_request = user_request.strip()
+    deconstructed_utterance["user_request"] = user_request
+    return(deconstructed_utterance)
+
     

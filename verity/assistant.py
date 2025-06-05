@@ -43,6 +43,8 @@ def get_tag_uri():
 client_url = "unknown"  
 client_uri = "unknown"
 assistant_uri = get_tag_uri()
+manifest["identification"]["speakerUri"] = assistant_uri
+manifest["identification"]["serviceUrl"] = assistant_url
 
 conversation_state = {}
 

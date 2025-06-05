@@ -11,7 +11,7 @@ app = Flask(__name__)
 #
 authority = socket.getfqdn()
 hostname = socket.gethostname()
-ip_address = socket.gethostbyname('localhost')  # fixed to avoid gethostbyname(hostname) issues
+ip_address = socket.gethostbyname('localhost')  # avoids hostname resolution issues
 client_url = f"http://{ip_address}"
 
 def get_current_date_tag_format():
@@ -60,9 +60,17 @@ PAGE_HTML = """
       font-style: italic;
       color: gray;
     }
+    #logo {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 200px;
+    }
   </style>
 </head>
 <body>
+  <img id="logo" src="/static/voiceinteroperability_logo.png" alt="Open Voice Interoperability" />
+
   <h1>Open Floor Web Client</h1>
 
   <label for="utterance">Enter Text:</label>

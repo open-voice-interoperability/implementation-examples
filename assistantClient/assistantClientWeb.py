@@ -1,20 +1,17 @@
-# web_client.py
+# assistantClientWeb.py
 from flask import Flask, render_template_string, request, jsonify
 import requests
 import socket
-import json
-from datetime import datetime, date
+from datetime import date
 
 app = Flask(__name__)
 
 #
 # ─── CONFIGURATION ───────────────────────────────────────────────────────────
 #
-# (1) Build your “speakerUri” tag and your local client_url, exactly as in assistantClient.py
-#
 authority = socket.getfqdn()
 hostname = socket.gethostname()
-ip_address = socket.gethostbyname(hostname)
+ip_address = socket.gethostbyname('localhost')  # fixed to avoid gethostbyname(hostname) issues
 client_url = f"http://{ip_address}"
 
 def get_current_date_tag_format():
@@ -26,11 +23,6 @@ def get_tag_uri():
 
 #
 # ─── HTML TEMPLATE ────────────────────────────────────────────────────────────
-#
-# We embed a tiny bit of JavaScript so that clicking “Send Utterance” will:
-#   1) grab the two inputs (text + assistant-URL)
-#   2) call our Flask endpoint /send_event via fetch()
-#   3) dump the JSON response onto the page
 #
 PAGE_HTML = """
 <!doctype html>
@@ -63,6 +55,11 @@ PAGE_HTML = """
       max-height: 400px;
       overflow-y: auto;
     }
+    #status-message {
+      margin-top: 16px;
+      font-style: italic;
+      color: gray;
+    }
   </style>
 </head>
 <body>
@@ -72,9 +69,11 @@ PAGE_HTML = """
   <input type="text" id="utterance" placeholder="Type your utterance here…" />
 
   <label for="assistant-url">Assistant URL:</label>
-  <input type="text" id="assistant-url" placeholder="http://localhost:5000/openfloor" />
+  <input type="text" id="assistant-url" placeholder="http://localhost:5000/openfloor" value="http://localhost:5000/openfloor" />
 
   <button id="send-btn">Send Utterance</button>
+
+  <div id="status-message"></div>
 
   <div id="response-json">
     <!-- JSON response will appear here -->
@@ -84,6 +83,12 @@ PAGE_HTML = """
     document.getElementById('send-btn').addEventListener('click', async () => {
       const textInput = document.getElementById('utterance').value.trim();
       const assistantUrl = document.getElementById('assistant-url').value.trim();
+      const statusDiv = document.getElementById('status-message');
+      const responseDiv = document.getElementById('response-json');
+      const sendBtn = document.getElementById('send-btn');
+
+      statusDiv.textContent = "";
+      responseDiv.textContent = "";
 
       if (!assistantUrl) {
         alert("Please enter a valid Assistant URL.");
@@ -94,7 +99,11 @@ PAGE_HTML = """
         return;
       }
 
-      // Build the envelope exactly as your desktop client would:
+      // Show waiting status
+      statusDiv.textContent = "⏳ Please wait…";
+      sendBtn.disabled = true;
+      sendBtn.textContent = "Sending…";
+
       const timestamp = new Date().toISOString();
       const convo_id = "convoID_" + timestamp;
 
@@ -136,7 +145,6 @@ PAGE_HTML = """
       };
 
       try {
-        // Call our Flask route (/send_event)
         const resp = await fetch('/send_event', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -145,15 +153,24 @@ PAGE_HTML = """
             envelope: envelope
           })
         });
+
         if (!resp.ok) {
           const txt = await resp.text();
           throw new Error("Server returned " + resp.status + ": " + txt);
         }
+
         const data = await resp.json();
-        document.getElementById('response-json').textContent =
-          JSON.stringify(data, null, 2);
+        responseDiv.textContent = JSON.stringify(data, null, 2);
+        statusDiv.textContent = "✅ Response received.";
       } catch (err) {
         alert("Error sending request: " + err.message);
+        statusDiv.textContent = "❌ Error occurred.";
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = "Send Utterance";
+        setTimeout(() => {
+          statusDiv.textContent = "";
+        }, 5000);
       }
     });
   </script>
@@ -166,10 +183,6 @@ PAGE_HTML = """
 #
 @app.route("/")
 def index():
-    """
-    Serves the single‐page HTML. We inject the client_url and tag_uri so that the JS can build
-    the proper “openFloor” envelope just as the desktop client did.
-    """
     return render_template_string(
         PAGE_HTML,
         client_url=client_url,
@@ -179,15 +192,6 @@ def index():
 
 @app.route("/send_event", methods=["POST"])
 def send_event():
-    """
-    Receives a JSON payload of the form:
-        {
-          "assistant_url": "<the URL the user typed in>",
-          "envelope": { ... }   # full openFloor envelope built in JS
-        }
-    We then forward that envelope to the assistant URL (using Python's requests),
-    grab its JSON response, and re‐send it back to the browser.
-    """
     body = request.get_json()
     assistant_url = body.get("assistant_url")
     envelope = body.get("envelope")
@@ -200,15 +204,11 @@ def send_event():
         r.raise_for_status()
         return jsonify(r.json())
     except requests.RequestException as e:
-        # Return error as JSON so the page can display it
         return jsonify({"error": str(e)}), 502
-
 
 #
 # ─── LAUNCH FLASK ON PORT 5555 ─────────────────────────────────────────────────
 #
 if __name__ == "__main__":
-    # By default, Flask binds to 127.0.0.1:5000. We override port=5555.
-    # You can also add host="0.0.0.0" if you want to allow other machines on your LAN.
     app.run(port=5555)
 

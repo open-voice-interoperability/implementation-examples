@@ -69,7 +69,7 @@ PAGE_HTML = """
   <input type="text" id="utterance" placeholder="Type your utterance here…" />
 
   <label for="assistant-url">Assistant URL:</label>
-  <input type="text" id="assistant-url" placeholder="http://localhost:5000/openfloor" value="http://localhost:5000/openfloor" />
+  <input type="text" id="assistant-url" placeholder="http://secondAssistant.pythonanywhere.com/verity" value="http://secondAssistant.pythonanywhere.com/verity" />
 
   <button id="send-btn">Send Utterance</button>
 

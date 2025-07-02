@@ -10,17 +10,17 @@
     "assistantTitle": "FactChecker",
     "manifest":{
         "identification": {
-            "speakerUri": "",
+            "speakerUri": "http://localhost:8767/verity",
             "conversationalName": "Verity",
             "department": "Fact checking",
             "organization": "BeaconForge",
-            "serviceUrl": "",
+            "serviceUrl": "http://localhost:8767/verity",
             "role": "detect and mitigate hallucinations",
             "synopsis": "can detect if statements are correct or not"
         },
         "capabilities": {
             "keyphrases": [
-              
+    
             ],
             "languages": [
                 "en-us"

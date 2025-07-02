@@ -1,0 +1,223 @@
+2025-06-10 14:26:06,235 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-10 14:26:06,237 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-10 14:26:06,237 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-10 14:26:06,239 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-10 14:26:09,204 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-10 14:26:09,205 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-10 14:31:48,882 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-10 14:31:48,883 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-10 14:31:55,554 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-10 14:31:55,555 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-10 14:32:03,207 - INFO - 127.0.0.1 - - [10/Jun/2025 14:32:03] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-10 14:32:13,707 - INFO - 127.0.0.1 - - [10/Jun/2025 14:32:13] "POST /verity/ HTTP/1.1" 200 -
+2025-06-10 14:45:15,792 - INFO - 127.0.0.1 - - [10/Jun/2025 14:45:15] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-10 14:45:25,937 - INFO - 127.0.0.1 - - [10/Jun/2025 14:45:25] "POST /verity/ HTTP/1.1" 200 -
+2025-06-10 16:04:31,738 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-10 16:04:31,747 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-10 16:04:35,083 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-10 16:04:35,084 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-10 16:04:37,760 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-10 16:04:37,761 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-10 16:05:20,554 - INFO - 127.0.0.1 - - [10/Jun/2025 16:05:20] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-10 16:05:34,416 - INFO - 127.0.0.1 - - [10/Jun/2025 16:05:34] "POST /verity/ HTTP/1.1" 200 -
+2025-06-10 16:17:11,163 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-10 16:17:11,164 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-10 16:17:20,843 - INFO - 127.0.0.1 - - [10/Jun/2025 16:17:20] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-10 16:17:27,959 - INFO - 127.0.0.1 - - [10/Jun/2025 16:17:27] "POST /verity/ HTTP/1.1" 200 -
+2025-06-10 16:35:55,605 - INFO - 127.0.0.1 - - [10/Jun/2025 16:35:55] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-10 16:36:08,796 - INFO - 127.0.0.1 - - [10/Jun/2025 16:36:08] "POST /verity/ HTTP/1.1" 200 -
+2025-06-11 14:13:32,567 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-11 14:13:32,676 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 14:13:32,676 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 14:14:50,466 - INFO - 127.0.0.1 - - [11/Jun/2025 14:14:50] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-11 14:14:56,704 - INFO - 127.0.0.1 - - [11/Jun/2025 14:14:56] "POST /verity/ HTTP/1.1" 200 -
+2025-06-11 14:17:40,505 - INFO - 127.0.0.1 - - [11/Jun/2025 14:17:40] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-11 14:17:46,174 - INFO - 127.0.0.1 - - [11/Jun/2025 14:17:46] "POST /verity/ HTTP/1.1" 200 -
+2025-06-11 14:52:44,147 - INFO - 127.0.0.1 - - [11/Jun/2025 14:52:44] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-11 14:52:54,301 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-11 14:53:06,405 - INFO - Reviewer generated a response.
+2025-06-11 14:53:06,405 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0.1, 'explanation': 'The majority of people have five fingers on each hand. However, there are rare cases of individuals born with six fingers, a condition known as polydactyly.'}.
+2025-06-11 14:53:06,414 - INFO - 127.0.0.1 - - [11/Jun/2025 14:53:06] "POST /verity/ HTTP/1.1" 200 -
+2025-06-11 16:03:22,015 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-11 16:03:22,017 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 16:12:16,111 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-11 16:12:16,113 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 16:17:37,702 - INFO - 127.0.0.1 - - [11/Jun/2025 16:17:37] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-11 16:17:55,934 - INFO - 127.0.0.1 - - [11/Jun/2025 16:17:55] "POST /verity/ HTTP/1.1" 200 -
+2025-06-11 16:18:21,658 - INFO - 127.0.0.1 - - [11/Jun/2025 16:18:21] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-11 16:18:32,540 - INFO - 127.0.0.1 - - [11/Jun/2025 16:18:32] "POST /verity/ HTTP/1.1" 200 -
+2025-06-11 16:18:53,232 - INFO - 127.0.0.1 - - [11/Jun/2025 16:18:53] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-11 16:19:06,621 - INFO - 127.0.0.1 - - [11/Jun/2025 16:19:06] "POST /verity/ HTTP/1.1" 200 -
+2025-06-11 16:20:05,641 - INFO - 127.0.0.1 - - [11/Jun/2025 16:20:05] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-11 16:26:02,774 - INFO - 127.0.0.1 - - [11/Jun/2025 16:26:02] "POST /verity/ HTTP/1.1" 200 -
+2025-06-11 16:28:56,648 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-11 16:28:56,650 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 16:30:09,501 - INFO - 127.0.0.1 - - [11/Jun/2025 16:30:09] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-11 16:30:18,736 - INFO - 127.0.0.1 - - [11/Jun/2025 16:30:18] "POST /verity/ HTTP/1.1" 200 -
+2025-06-11 16:46:11,619 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-11 16:46:11,619 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 16:46:42,485 - INFO - 127.0.0.1 - - [11/Jun/2025 16:46:42] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-11 16:46:55,363 - INFO - 127.0.0.1 - - [11/Jun/2025 16:46:55] "POST /verity/ HTTP/1.1" 200 -
+2025-06-11 17:16:19,795 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-11 17:16:19,795 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 17:17:51,887 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-11 17:17:51,890 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 17:18:27,397 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-11 17:18:27,398 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 17:18:30,126 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-11 17:18:30,127 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 17:19:33,354 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-11 17:19:33,355 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 17:20:53,062 - INFO - 127.0.0.1 - - [11/Jun/2025 17:20:53] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-11 17:21:15,546 - INFO - 127.0.0.1 - - [11/Jun/2025 17:21:15] "POST /verity/ HTTP/1.1" 200 -
+2025-06-11 17:25:09,942 - INFO - 127.0.0.1 - - [11/Jun/2025 17:25:09] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-11 17:25:14,680 - INFO - 127.0.0.1 - - [11/Jun/2025 17:25:14] "POST /verity/ HTTP/1.1" 200 -
+2025-06-11 17:26:07,687 - INFO - 127.0.0.1 - - [11/Jun/2025 17:26:07] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-11 17:26:13,254 - INFO - 127.0.0.1 - - [11/Jun/2025 17:26:13] "POST /verity/ HTTP/1.1" 200 -
+2025-06-11 17:29:52,786 - INFO - 127.0.0.1 - - [11/Jun/2025 17:29:52] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-11 17:31:29,274 - INFO - 127.0.0.1 - - [11/Jun/2025 17:31:29] "POST /verity/ HTTP/1.1" 200 -
+2025-06-11 17:32:45,790 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-11 17:32:45,790 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 17:33:11,761 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-11 17:33:11,763 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 17:34:27,698 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-11 17:34:27,700 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 17:36:26,156 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-11 17:36:26,164 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-11 17:42:32,831 - INFO - 127.0.0.1 - - [11/Jun/2025 17:42:32] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-11 17:43:57,778 - INFO - 127.0.0.1 - - [11/Jun/2025 17:43:57] "POST /verity/ HTTP/1.1" 200 -
+2025-06-12 10:18:14,659 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-12 10:18:14,675 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-12 10:19:25,861 - INFO - 127.0.0.1 - - [12/Jun/2025 10:19:25] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-06-12 10:22:57,052 - INFO - 127.0.0.1 - - [12/Jun/2025 10:22:57] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-06-12 10:26:48,986 - INFO - 127.0.0.1 - - [12/Jun/2025 10:26:48] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-06-12 10:27:57,653 - INFO - 127.0.0.1 - - [12/Jun/2025 10:27:57] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-06-12 10:28:41,705 - INFO - 127.0.0.1 - - [12/Jun/2025 10:28:41] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-06-12 10:29:26,660 - INFO - 127.0.0.1 - - [12/Jun/2025 10:29:26] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-06-12 10:33:03,940 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-12 10:33:03,941 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-12 10:34:07,865 - INFO - 127.0.0.1 - - [12/Jun/2025 10:34:07] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-12 10:39:35,559 - INFO - 127.0.0.1 - - [12/Jun/2025 10:39:35] "POST /verity/ HTTP/1.1" 200 -
+2025-06-12 10:58:59,365 - INFO - 127.0.0.1 - - [12/Jun/2025 10:58:59] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-12 10:59:17,989 - INFO - 127.0.0.1 - - [12/Jun/2025 10:59:17] "POST /verity/ HTTP/1.1" 200 -
+2025-06-12 11:08:13,995 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-12 11:08:13,995 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-12 11:12:55,001 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-12 11:12:55,002 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-12 11:16:15,455 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-12 11:16:15,471 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-12 11:16:45,658 - INFO - 127.0.0.1 - - [12/Jun/2025 11:16:45] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-12 11:16:47,690 - INFO - 127.0.0.1 - - [12/Jun/2025 11:16:47] "POST /verity/ HTTP/1.1" 200 -
+2025-06-12 11:17:26,022 - INFO - 127.0.0.1 - - [12/Jun/2025 11:17:26] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-12 11:17:28,053 - INFO - 127.0.0.1 - - [12/Jun/2025 11:17:28] "POST /verity/ HTTP/1.1" 200 -
+2025-06-12 11:18:03,861 - INFO - 127.0.0.1 - - [12/Jun/2025 11:18:03] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-12 11:18:09,129 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-12 11:18:09,145 - INFO - Reviewer generated a response.
+2025-06-12 11:18:09,145 - INFO - generated {'applicable': 'no', 'decision': 'NA', 'factual_likelihood': 'NA', 'explanation': 'The utterance "the moon" is not a complete sentence or statement, so factuality does not apply.'}.
+2025-06-12 11:18:09,145 - INFO - 127.0.0.1 - - [12/Jun/2025 11:18:09] "POST /verity/ HTTP/1.1" 200 -
+2025-06-12 11:26:48,285 - INFO - 127.0.0.1 - - [12/Jun/2025 11:26:48] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-06-12 20:06:26,197 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-12 20:06:26,198 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-12 20:07:38,320 - INFO - 127.0.0.1 - - [12/Jun/2025 20:07:38] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-06-12 20:09:05,517 - INFO - 127.0.0.1 - - [12/Jun/2025 20:09:05] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-06-12 20:10:41,453 - INFO - 127.0.0.1 - - [12/Jun/2025 20:10:41] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-06-12 20:12:10,294 - INFO - 127.0.0.1 - - [12/Jun/2025 20:12:10] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-06-12 20:12:45,708 - INFO - 127.0.0.1 - - [12/Jun/2025 20:12:45] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-06-27 16:19:47,725 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-06-27 16:19:47,781 - INFO - [33mPress CTRL+C to quit[0m
+2025-06-27 16:19:52,738 - INFO - 127.0.0.1 - - [27/Jun/2025 16:19:52] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-27 16:20:09,080 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-27 16:20:09,104 - INFO - Reviewer generated a response.
+2025-06-27 16:20:09,104 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The statement is not factual. Scientific consensus and empirical evidence confirm that the Earth is an oblate spheroid, not flat.'}.
+2025-06-27 16:20:09,104 - INFO - 127.0.0.1 - - [27/Jun/2025 16:20:09] "POST /verity/ HTTP/1.1" 200 -
+2025-06-27 16:20:56,810 - INFO - 127.0.0.1 - - [27/Jun/2025 16:20:56] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-27 16:21:16,031 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-27 16:21:16,031 - INFO - Reviewer generated a response.
+2025-06-27 16:21:16,031 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The statement is not factual. Scientific consensus and empirical evidence support that the Earth is an oblate spheroid, not flat.'}.
+2025-06-27 16:21:29,035 - INFO - 127.0.0.1 - - [27/Jun/2025 16:21:29] "POST /verity/ HTTP/1.1" 200 -
+2025-06-27 16:22:16,590 - INFO - 127.0.0.1 - - [27/Jun/2025 16:22:16] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-27 16:22:33,803 - INFO - 127.0.0.1 - - [27/Jun/2025 16:22:33] "POST /verity/ HTTP/1.1" 200 -
+2025-06-27 16:22:54,545 - INFO - 127.0.0.1 - - [27/Jun/2025 16:22:54] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-27 16:23:06,504 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-27 16:23:06,520 - INFO - Reviewer generated a response.
+2025-06-27 16:23:06,520 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The statement is not factual. Scientific consensus and empirical evidence support that the Earth is an oblate spheroid, not flat.'}.
+2025-06-27 16:23:10,073 - INFO - 127.0.0.1 - - [27/Jun/2025 16:23:10] "POST /verity/ HTTP/1.1" 200 -
+2025-06-27 16:32:56,401 - INFO - 127.0.0.1 - - [27/Jun/2025 16:32:56] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-27 16:33:11,577 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-27 16:33:21,084 - INFO - Reviewer generated a response.
+2025-06-27 16:33:21,089 - INFO - generated {'applicable': 'no', 'decision': 'NA', 'factual_likelihood': 'NA', 'explanation': 'The input utterance is missing, so there is no content to evaluate for factuality.'}.
+2025-06-27 16:33:22,692 - INFO - 127.0.0.1 - - [27/Jun/2025 16:33:22] "POST /verity/ HTTP/1.1" 200 -
+2025-06-27 16:33:48,379 - INFO - 127.0.0.1 - - [27/Jun/2025 16:33:48] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-27 16:33:58,062 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-27 16:33:58,062 - INFO - Reviewer generated a response.
+2025-06-27 16:33:58,062 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The statement is not factual. Scientific consensus and empirical evidence confirm that the Earth is an oblate spheroid, not flat.'}.
+2025-06-27 16:33:59,868 - INFO - 127.0.0.1 - - [27/Jun/2025 16:33:59] "POST /verity/ HTTP/1.1" 200 -
+2025-06-27 16:36:55,715 - INFO - 127.0.0.1 - - [27/Jun/2025 16:36:55] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-27 16:37:08,654 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-27 16:37:08,670 - INFO - Reviewer generated a response.
+2025-06-27 16:37:08,670 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The statement is not factual. Scientific consensus and empirical evidence support that the Earth is an oblate spheroid, not flat.'}.
+2025-06-27 16:37:13,961 - INFO - 127.0.0.1 - - [27/Jun/2025 16:37:13] "POST /verity/ HTTP/1.1" 200 -
+2025-06-27 16:39:06,502 - INFO - 127.0.0.1 - - [27/Jun/2025 16:39:06] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-27 17:22:17,163 - INFO - 127.0.0.1 - - [27/Jun/2025 17:22:17] "POST /verity/ HTTP/1.1" 200 -
+2025-06-27 17:25:56,309 - INFO - 127.0.0.1 - - [27/Jun/2025 17:25:56] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-27 17:26:11,765 - INFO - 127.0.0.1 - - [27/Jun/2025 17:26:11] "POST /verity/ HTTP/1.1" 200 -
+2025-06-30 16:07:47,748 - INFO - 127.0.0.1 - - [30/Jun/2025 16:07:47] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-30 16:07:57,813 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-30 16:07:57,819 - INFO - Reviewer generated a response.
+2025-06-30 16:07:57,820 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is not factual because there is no scientific evidence to support the existence of a kingdom ruled by sentient corals in Atlantis, which itself is a mythical city.'}.
+2025-06-30 16:08:00,872 - INFO - 127.0.0.1 - - [30/Jun/2025 16:08:00] "POST /verity/ HTTP/1.1" 200 -
+2025-06-30 16:10:04,198 - INFO - 127.0.0.1 - - [30/Jun/2025 16:10:04] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-30 16:10:19,782 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-30 16:10:19,790 - INFO - Reviewer generated a response.
+2025-06-30 16:10:19,791 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance refers to the "legendary kingdom of Uloria" and its supposed telepathic communication methods, which are fictional and not based on any known historical or scientific facts.'}.
+2025-06-30 16:10:21,308 - INFO - 127.0.0.1 - - [30/Jun/2025 16:10:21] "POST /verity/ HTTP/1.1" 200 -
+2025-06-30 16:11:16,958 - INFO - 127.0.0.1 - - [30/Jun/2025 16:11:16] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-06-30 16:11:27,034 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-30 16:11:27,036 - INFO - Reviewer generated a response.
+2025-06-30 16:11:27,037 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance refers to the "legendary kingdom of Uloria" and "telepathic messages", which are fictional and speculative concepts, not grounded in factual information.'}.
+2025-06-30 16:11:28,261 - INFO - 127.0.0.1 - - [30/Jun/2025 16:11:28] "POST /verity/ HTTP/1.1" 200 -
+2025-07-02 10:10:28,109 - INFO - 127.0.0.1 - - [02/Jul/2025 10:10:28] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-02 10:10:41,132 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-02 10:10:41,199 - INFO - Reviewer generated a response.
+2025-07-02 10:10:41,199 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The statement is not factual because the Earth is larger than the Moon. The diameter of the Earth is about 3.96 times the diameter of the Moon.'}.
+2025-07-02 10:10:45,453 - INFO - 127.0.0.1 - - [02/Jul/2025 10:10:45] "POST /verity/ HTTP/1.1" 200 -
+2025-07-02 10:13:24,325 - INFO - 127.0.0.1 - - [02/Jul/2025 10:13:24] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-02 10:13:34,787 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-02 10:13:49,700 - INFO - Reviewer generated a response.
+2025-07-02 10:13:49,709 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is not factual because it is not grammatically correct or coherent in any known language, making it impossible to determine its truth value.'}.
+2025-07-02 10:13:51,948 - INFO - 127.0.0.1 - - [02/Jul/2025 10:13:51] "POST /verity/ HTTP/1.1" 200 -
+2025-07-02 10:18:14,945 - INFO - 127.0.0.1 - - [02/Jul/2025 10:18:14] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-02 10:18:28,088 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-02 10:18:30,923 - INFO - Reviewer generated a response.
+2025-07-02 10:18:30,926 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The utterance is in Portuguese. This is a factual statement as it can be objectively verified.'}.
+2025-07-02 10:18:32,127 - INFO - 127.0.0.1 - - [02/Jul/2025 10:18:32] "POST /verity/ HTTP/1.1" 200 -

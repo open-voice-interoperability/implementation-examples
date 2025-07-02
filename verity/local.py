@@ -9,6 +9,7 @@ from flask import request
 from flask_cors import CORS
 import json
 import assistant
+import datetime
 
 
 app = Flask(__name__)
@@ -17,10 +18,14 @@ port = 8767
 
 @app.route('/verity/', methods=['POST'])
 def home():
+    print("=== /verity/ called ===")
+    print("Time:", datetime.datetime.now())
+    print("Request from:", request.remote_addr)
     inputOPENFLOOR = json.loads( request.data )
 
     host = request.host.split(":")[0]
     sender_from = f"http://{host}"
+    print("Calling generate_response")
     openfloor_response = assistant.generate_response(inputOPENFLOOR, sender_from)
 
     return openfloor_response

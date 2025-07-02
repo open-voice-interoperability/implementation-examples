@@ -14,37 +14,16 @@ with open("./assistant_config.json", "r") as file:
     agent_config = json.load(file)
 
 manifest = agent_config.get("manifest")
-today_str = ""
-authority = socket.getfqdn()
-hostname = socket.gethostname()
-ip_address = socket.gethostbyname(hostname)
-assistant_url = f"http://{ip_address}"
+
+assistant_url = manifest["identification"]["serviceUrl"]
 assistant_name = manifest["identification"]["conversationalName"]
-def get_current_date_tag_format():
-    """
-    Returns today’s date as a string in YYYY-MM-DD format,
-    suitable for use in a tag-URI (e.g., 2025-05-23).
-    """
-    return date.today().isoformat()
-
-today_str = get_current_date_tag_format()
-
-def get_tag_uri():
-    """
-    Constructs a tag URI using the system's FQDN as the authority.
-    Format: tag:<authority>,<YYYY-MM-DD>:<specific>
-    """
-    today_str = get_current_date_tag_format()
-    return f"tag:{authority},{today_str}:{assistant_name}"
+assistant_uri = manifest["identification"]["speakerUri"]
 
 # information about the client and assistant
 # client information will be obtained from the event
 # client_url and client_uri will be set when the event is received
 client_url = "unknown"  
 client_uri = "unknown"
-assistant_uri = get_tag_uri()
-manifest["identification"]["speakerUri"] = assistant_uri
-manifest["identification"]["serviceUrl"] = assistant_url
 
 conversation_state = {}
 
@@ -71,11 +50,12 @@ def construct_to():
 def generate_response(inputOPENFLOOR, sender_from):
     global conversation_history
     global client_url, client_uri, assistant_uri, assistant_url, messages, conversation_state 
-    client_url= sender_from
+    
     response_text = "I'm not sure how to respond."
     detected_intents = []
     include_manifest_request = False
     print("inputOPENFLOOR", inputOPENFLOOR)
+    client_url = inputOPENFLOOR["openFloor"]["sender"].get("serviceUrl", "unknown")
     client_uri = inputOPENFLOOR["openFloor"]["sender"].get("speakerUri", "unknown")
 
     for event in inputOPENFLOOR["openFloor"]["events"]:

@@ -17,8 +17,11 @@ today_str = ""
 authority = socket.getfqdn()
 hostname = socket.gethostname()
 ip_address = socket.gethostbyname(hostname)
-client_url = f"http://{ip_address}"
 client_name = "AssistantClientConvener"
+client_url = f"http://{ip_address}"
+client_uri = f"openFloor://{ip_address}/" + client_name
+
+assistantConversationalName = ""
 
 set_appearance_mode("light")
 set_default_color_theme("blue")
@@ -42,24 +45,6 @@ url_combobox.pack(pady=5, padx=20)
 display_text = CTkLabel(root, text="", wraplength=400)
 display_text.pack(pady=(5, 10))
 
-# Functions for constructing uris
-
-def get_current_date_tag_format():
-    """
-    Returns today’s date as a string in YYYY-MM-DD format,
-    suitable for use in a tag-URI (e.g., 2025-05-23).
-    """
-    return date.today().isoformat()
-
-today_str = get_current_date_tag_format()
-
-def get_tag_uri():
-    """
-    Constructs a tag URI using the system's FQDN as the authority.
-    Format: tag:<authority>,<YYYY-MM-DD>:<specific>
-    """
-    today_str = get_current_date_tag_format()
-    return f"tag:{authority},{today_str}:{client_name}"
 
 # construct the url to send the event to
 
@@ -82,9 +67,8 @@ def invite():
 # The main function to send events
 
 def send_event(event_type):
-    global client_url
+    global client_url,client_uri,assistant_url, assistant_uri, assistantConversationalName, previous_urls, last_event
     user_input = entry.get()
-    global assistant_url 
     assistant_url = url_combobox.get()
     if assistant_url not in previous_urls:
         previous_urls.append(assistant_url)
@@ -101,7 +85,7 @@ def send_event(event_type):
             "conversation": {"id": convo_id, "startTime": timestamp},
             "schema": {"version": "1.0.0", "url": "https://github.com/open-voice-interoperability/openfloor-docs/blob/main/schemas/conversation-envelope/1.0.0/conversation-envelope-schema.json"},
             "sender":{
-                "speakerUri" : get_tag_uri(),
+                "speakerUri" : client_uri,
                 "serviceUrl": client_url
             },
             "events": [{
@@ -109,7 +93,7 @@ def send_event(event_type):
                 "eventType": event_type,
                 "parameters": {} if event_type != "utterance" else {
                     "dialogEvent": {
-                        "speakerUri": get_tag_uri(),
+                        "speakerUri": client_uri,
                         "features": {"text": {"mimeType": "text/plain", "tokens": [{"value": user_input}]}}
                     }
                 }
@@ -117,39 +101,47 @@ def send_event(event_type):
         }
     }
 
-    global last_event, client_uri, assistant_name
+   
     last_event = envelope
     
     try:
         response = requests.post(assistant_url, json=envelope)
+        print(response)
         response_data = response.json()
-
-        if event_type == "utterance":
-            open_floor = response_data.get("openFloor", {})
-            events = open_floor.get("events", [])
-            utterance_event = next((event for event in events if event.get("eventType") == "utterance"), None)
-            extracted_value = "No utterance event found"
-            if utterance_event:
-                parameters = utterance_event.get("parameters", {})
+        incoming_events = response_data.get("openFloor", {}).get("events", [])
+        for event in incoming_events:
+            if event.get("eventType") == "publishManifests":
+                manifests = event.get("parameters", {}).get("servicingManifests", [])
+                if manifests:
+                    manifest = manifests[0]
+                    assistantConversationalName = manifest.get("identification", {}).get("conversationalName", "")
+                    assistant_uri = manifest.get("identification", {}).get("uri", "")
+                    assistant_url = manifest.get("identification", {}).get("serviceUrl", "")
+                else:
+                    CTkMessagebox(title="Error", message="No servicing manifests found in the response.", icon="cancel")
+            elif event.get("eventType") == "utterance":
+                parameters = event.get("parameters", {})
                 dialog_event = parameters.get("dialogEvent", {})
                 features = dialog_event.get("features", {})
                 text_features = features.get("text", {})
                 tokens = text_features.get("tokens", [])
                 #if tokens:
-                   # extracted_value = tokens[0].get("value", "No value found")
+                    # extracted_value = tokens[0].get("value", "No value found")
                     #html_content = f"<p>{convert_text_to_html(extracted_value)}</p>"
-            #display_response_html(convert_text_to_html(extracted_value))
-            display_response_json(response_data)
+                    #display_response_html(convert_text_to_html(extracted_value))
+                display_response_json(response_data)
 
-        else:
-            display_response_json(response_data)
-
-    except requests.RequestException as e:
+    except:
         CTkMessagebox(title="Error", message=str(e), icon="cancel")
+
+def getAssistantWindowTitle():
+    title = "Assistant Response from " + assistantConversationalName + "  at " + assistant_url
+    return title
 
 def display_response_json(response_data):
     response_window = CTkToplevel(root)
-    response_window.title("Assistant Response")
+    title = getAssistantWindowTitle()
+    response_window.title(title)
     response_window.geometry("600x400")
     response_text = CTkTextbox(response_window, wrap="word", width=600, height=400)
     response_text.insert("0.0", json.dumps(response_data, indent=2))

@@ -24,7 +24,8 @@ def home():
     inputOPENFLOOR = json.loads( request.data )
 
     host = request.host.split(":")[0]
-    sender_from = f"http://{host}"
+    #sender_from = f"http://{host}"
+    sender_from = request.url 
     print("Calling generate_response")
     openfloor_response = assistant.generate_response(inputOPENFLOOR, sender_from)
 

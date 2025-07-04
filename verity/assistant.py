@@ -50,12 +50,12 @@ def construct_to():
 def generate_response(inputOPENFLOOR, sender_from):
     global conversation_history
     global client_url, client_uri, assistant_uri, assistant_url, messages, conversation_state 
+    client_url = sender_from
     
     response_text = "I'm not sure how to respond."
     detected_intents = []
     include_manifest_request = False
     print("inputOPENFLOOR", inputOPENFLOOR)
-    client_url = inputOPENFLOOR["openFloor"]["sender"].get("serviceUrl", "unknown")
     client_uri = inputOPENFLOOR["openFloor"]["sender"].get("speakerUri", "unknown")
 
     for event in inputOPENFLOOR["openFloor"]["events"]:

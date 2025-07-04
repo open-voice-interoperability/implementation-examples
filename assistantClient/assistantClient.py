@@ -116,7 +116,7 @@ def send_event(event_type):
                     manifest = manifests[0]
                     assistantConversationalName = manifest.get("identification", {}).get("conversationalName", "")
                     assistant_uri = manifest.get("identification", {}).get("uri", "")
-                    assistant_url = manifest.get("identification", {}).get("serviceUrl", "")
+                    #assistant_url = manifest.get("identification", {}).get("serviceUrl", "")
                 else:
                     CTkMessagebox(title="Error", message="No servicing manifests found in the response.", icon="cancel")
             elif event.get("eventType") == "utterance":
@@ -132,6 +132,7 @@ def send_event(event_type):
                 display_response_json(response_data)
 
     except:
+        e = Exception("Error sending event to the assistant.")
         CTkMessagebox(title="Error", message=str(e), icon="cancel")
 
 def getAssistantWindowTitle():

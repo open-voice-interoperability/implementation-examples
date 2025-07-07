@@ -4,10 +4,10 @@ from datetime import datetime, date
 
 import os
 import logging
+logging.basicConfig(level=logging.DEBUG)
 import ast
 import socket
 from  agentic_hallucination import interactive_process
-
 
 # information about the assistant
 with open("./assistant_config.json", "r") as file:
@@ -39,10 +39,11 @@ hallucination_threshold = .5  # Set the threshold for flagging a hallucination
 def construct_to():
     global client_url, client_uri, private
     to = {
-            "serviceUrl": client_url,
-            "speakerUri": client_uri,
-            "private": private
-        }
+        "speakerUri": client_uri,
+        "private": private
+    }
+
+    logging.debug(f"client_uri is {client_uri!r}")
     return to
 
 

@@ -156,12 +156,12 @@
       ]
     },
     {
-      "name": "travel",
+      "name": "sentinel",
       "examples": [
-        "travel",
-        "visit",
-        "vacation",
-        "trip"
+        "sentinel",
+        "stay in the background",
+        "don't say anything unless there is a hallucination",
+        "speak up if there is a hallucination"
       ]
     }
   

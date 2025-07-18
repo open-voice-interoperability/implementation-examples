@@ -18,7 +18,8 @@
             "role": "detect and mitigate hallucinations",
             "synopsis": "can detect if statements are correct or not"
         },
-        "capabilities": {
+        "capabilities": [
+            {
             "keyphrases": [
     
             ],
@@ -28,12 +29,14 @@
             "descriptions":[ 
                 "check if something is correct",
                 "knows how to check for hallucinations",
-                "can fix hallucinations"
+                "can fix hallucinations",
+                "can act as a sentinel in conversations"
             ],
             "supportedLayers": [
                 "text",
                 "voice"
             ]
         }
-    }
+        ]
+        }
 }

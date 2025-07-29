@@ -35,7 +35,8 @@
             "supportedLayers": [
                 "text",
                 "voice"
-            ]
+            ],
+            "supportedOptionalEvents":[]
         }
         ]
         }

@@ -82,7 +82,11 @@ def get_manifests():
     send_events(["getManifests"])
 
 def invite():
-    send_events(["invite"])
+    events_to_send = ["invite"]
+    user_input = entry.get().strip()
+    if user_input:
+        events_to_send.append("utterance")
+    send_events(events_to_send)
 
 def invite_sentinel():
     send_events(["inviteSentinel","utterance"])
@@ -97,6 +101,7 @@ def send_events(event_types):
     if assistant_url not in previous_urls:
         previous_urls.append(assistant_url)
         url_combobox.configure(values=previous_urls)
+
 
     timestamp = datetime.utcnow().isoformat()
     convo_id = f"convoID_{timestamp}"
@@ -119,6 +124,10 @@ def send_events(event_types):
             private = True
             invite_sentinel = True          
             user_input = "act as a sentinel in this conversation"
+        elif event_type == "invite":
+            private = True
+            invite_sentinel = False
+
         else:
             private = False
         event = construct_event(event_type, user_input, convo_id, timestamp)

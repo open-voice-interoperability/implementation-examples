@@ -30,10 +30,10 @@ if not client:
 # 1. LLM Configuration
 ###############################################################################
 model_configs = {
-    "Reviewer": {
+    "Checker": {
         "model": "gpt-4",
         "temperature": 0.0,
-        "max_tokens": 200,
+        "max_tokens": 150,
     }
 }
 
@@ -70,8 +70,8 @@ class LLMIntegrationAgent:
 
 reviewer_agent = LLMIntegrationAgent(
     name="Reviewer",
-    model_config=model_configs["Reviewer"],
-    system_message="Review the input utterance and determine if it can be factual or if factuality doesn't apply. Factuality doesn't apply to utterances that are unknowable, subjective, opinions, questions, commands or assertions about the future. If factuality applyies, describe any reasons that the utterance is not factual. Include explicit disclaimers wherever content is speculative or fictional to ensure users are aware of its nature. Include as a Python dict: "
+    model_config=model_configs["Checker"],
+    system_message="Review the input utterance and determine if it can be factual or if factuality doesn't apply. Factuality doesn't apply to utterances that are unknowable, subjective, opinions, questions, commands or assertions about the future. If factuality applies, describe any reasons that the utterance is not factual. Include explicit disclaimers wherever content is speculative or fictional to ensure users are aware of its nature. Include as a Python dict: "
                    "'applicable' (yes if factuality applies and no if it doesn't)'decision' (whether the utterance is factual or not factual),'factual_likelihood' (how likely the utterance is to be factual on a scale of 0 to 1, where 0 is certainly not factual and 1 is certainly factual),'explanation' (description of the decision), max 75 words)."
 )
 
@@ -87,7 +87,7 @@ def interactive_process(utterance):
     try:
             review_response = reviewer_agent.generate_reply(utterance)
             if review_response is None:
-                logging.error(f"Reviewer response is None for prompt: {utterance}")
+                logging.error(f"Response is None for prompt: {utterance}")
                 return None, None     
             final_response = review_response
 

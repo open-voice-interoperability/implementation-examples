@@ -1,25 +1,17 @@
-from tkinterweb import HtmlFrame
 from customtkinter import CTk, CTkLabel, CTkEntry, CTkButton, CTkTextbox, CTkToplevel, CTkComboBox,CTkCheckBox,set_appearance_mode, set_default_color_theme
 import tkinter.messagebox as messagebox
 from CTkMessagebox import CTkMessagebox
-import openfloor
-
 from tkhtmlview import HTMLLabel
 
 import json
 import requests
-from datetime import datetime, date
+from datetime import datetime,date
 import re
 import socket
-
-from pathlib import Path
-import webbrowser
+import openfloor
 
 
-from openfloor import events,envelope,dialog_event,manifest,agent,DialogEvent,Conversation
-from openfloor import OpenFloorEvents, OpenFloorAgent, BotAgent
-from openfloor import Manifest, Event, UtteranceEvent, InviteEvent, PublishManifestsEvent
-from openfloor import Envelope, Manifest, Event, UtteranceEvent, InviteEvent,Sender, To, Parameters
+from openfloor import dialog_event,events,envelope,json_serializable,manifest
 
 client_uri = ""
 client_url = ""  
@@ -63,7 +55,8 @@ url_combobox.pack(pady=5, padx=20)
 display_text = CTkLabel(root, text="", wraplength=400)
 display_text.pack(pady=(5, 10))
 
-destination_url = url_combobox.get().strip()
+assistant_url = url_combobox.get().strip()
+user_input = entry.get().strip()
 
 
 def construct_event(event_type, user_input, convo_id, timestamp):
@@ -71,12 +64,12 @@ def construct_event(event_type, user_input, convo_id, timestamp):
     if event_type == "utterance":
         event = openfloor.events.UtteranceEvent(
             eventType="utterance",
-            to=To(
+            to=openfloor.events.To(
                 serviceUrl=url_combobox.get().strip(),
                 private=private
             ),
-            parameters=Parameters(
-                dialogEvent=openfloor.dialog_event.DialogEvent(
+            parameters=openfloor.events.Parameters(
+                dialogEvent=dialog_event.DialogEvent(
                     speakerUri=client_uri,
                     features={
                         "text": {
@@ -88,22 +81,22 @@ def construct_event(event_type, user_input, convo_id, timestamp):
             )
         )
     elif event_type == "invite":
-        event = InviteEvent(
+        event = openfloor.events.InviteEvent(
             eventType="invite",
-            to=To(
+            to=openfloor.envelope.To(
                 serviceUrl=url_combobox.get().strip(),
                 private=private
             ),
-            parameters=Parameters()
+            parameters=openfloor.events.Parameters()
         )
     elif event_type == "getManifests":
         event = openfloor.events.GetManifestsEvent(
             eventType="getManifests",
-            to=To(
+             to=openfloor.envelope.To(
                 serviceUrl=url_combobox.get().strip(),
                 private=private
             ),
-            parameters=Parameters()
+            parameters=openfloor.events.Parameters()
         )
     return event
 
@@ -126,7 +119,7 @@ def invite_sentinel():
 # The main function to send events
 
 def send_events(event_types):
-    global client_url,client_uri,assistant_url, assistant_uri, assistantConversationalName, previous_urls, last_event,private
+    global client_url,client_uri,assistant_url, user_input,assistant_uri, assistantConversationalName, previous_urls, last_event,private
     user_input = entry.get().strip()
     assistant_url = url_combobox.get()
     
@@ -134,12 +127,12 @@ def send_events(event_types):
         previous_urls.append(assistant_url)
         url_combobox.configure(values=previous_urls)
     #construct a conversation envelope
-    conversation = Conversation()
-    sender = Sender(
+    conversation = openfloor.envelope.Conversation()
+    sender = openfloor.envelope.Sender(
         speakerUri=client_uri,
         serviceUrl=client_url
     )
-    envelope = Envelope(
+    envelope = openfloor.Envelope(
         conversation=conversation,
         sender=sender
     )
@@ -154,19 +147,19 @@ def send_events(event_types):
             invite_sentinel = True          
             user_input = "act as a sentinel in this conversation"
         elif event_type == "invite":
-            inviteEvent = openfloor.events.InviteEvent(to=To(serviceUrl=url_combobox.get().strip()))
+            inviteEvent = openfloor.events.InviteEvent()
             private = True
             invite_sentinel = False
             envelope.events.append(inviteEvent)
         elif event_type == "getManifests":
-            getManifestsEvent = openfloor.events.GetManifestsEvent(to=To(serviceUrl=url_combobox.get().strip()))
+            getManifestsEvent = openfloor.events.GetManifestsEvent()
             envelope.events.append(getManifestsEvent)
         elif event_type == "utterance":
             if not user_input:
                 messagebox.showwarning("Warning", "Please enter some text before sending an utterance.")
                 return
             # Build a DialogEvent directly and attach it to an UtteranceEvent
-            dialog = DialogEvent(
+            dialog = openfloor.dialog_event.DialogEvent(
                 speakerUri=client_uri,
                 features={
                     "text": {
@@ -175,8 +168,8 @@ def send_events(event_types):
                     }
                 }
             )
-            envelope.events.append(UtteranceEvent(dialogEvent=dialog,
-                                                  to=To(serviceUrl=url_combobox.get().strip(), private=private)))
+            envelope.events.append(openfloor.events.UtteranceEvent(dialogEvent=dialog,
+                                                  to=openfloor.envelope.To(speakerUri=assistant_uri, serviceUrl=assistant_url, private=private)))
         
     last_event = envelope
     envelope_to_send = envelope.to_json(as_payload=True)
@@ -207,26 +200,16 @@ def send_events(event_types):
                 dialog_event = parameters.get("dialogEvent", {})
                 features = dialog_event.get("features", {})
                 text_features = features.get("text", {})
-                
-                # Check the MIME type to determine how to display the content
-                mime_type = text_features.get("mimeType", "")
                 tokens = text_features.get("tokens", [])
-                
-                if tokens:
-                    extracted_value = tokens[0].get("value", "No value found")
-                    
-                    # If MIME type is text/plain, only display JSON response
-                    if mime_type == "text/plain":
-                        # For plain text, don't convert to HTML or display in browser
-                        pass  # Just continue to display_response_json at the end
-                    else:
-                        # For other MIME types (or no MIME type), process as HTML
-                        html_content = f"{convert_text_to_html(extracted_value)}"
-                        display_response_html(html_content)
+                #if tokens:
+                    # extracted_value = tokens[0].get("value", "No value found")
+                    #html_content = f"<p>{convert_text_to_html(extracted_value)}</p>"
+                    #display_response_html(convert_text_to_html(extracted_value))
         display_response_json(response_data)
 
-    except Exception as e:
-        CTkMessagebox(title="Error", message=f"Error sending event: {str(e)}", icon="cancel")
+    except:
+        e = Exception("Error sending event to the assistant.")
+        CTkMessagebox(title="Error", message=str(e), icon="cancel")
 
 
 # user interface functions
@@ -245,11 +228,11 @@ def display_response_json(response_data):
     response_text.pack(padx=10, pady=10)
 
 def display_response_html(html_content):
-    file_path = Path.cwd() / "cards.html"
-    file_path.write_text(html_content, encoding="utf-8")
-
-    webbrowser.open(file_path.as_uri())
-    
+    html_window = CTkToplevel(root)
+    html_window.title("Assistant Response (HTML)")
+    html_window.geometry("600x400")
+    html_label = HTMLLabel(html_window, html=html_content, width=600, height=400, background="white")
+    html_label.pack(fill="both", expand=True, padx=10, pady=10)
 
 def show_outgoing_event():
     global last_event
@@ -265,36 +248,15 @@ def show_outgoing_event():
         messagebox.showinfo("Info", "No outgoing event to show")
 
 
-def escape_blanks_in_url(url):
-    """
-    Escape blanks (spaces) in URLs by replacing them with %20
-    Uses regex to find and replace spaces in URLs
-    """
-    # Only escape if it's a standalone URL, not already in HTML
-    blank_pattern = r'\s+'
-    escaped_url = re.sub(blank_pattern, '%20', url)
-    return escaped_url
-
 def convert_text_to_html(text):
-    """Convert text to HTML with URL detection and blank escaping"""
-    # Check if the text already contains HTML tags (like img tags)
-    if '<' in text and '>' in text:
-        # If it's already HTML, don't process it further to avoid breaking image links
-        return text
-    
-    # Only process plain text for URL detection
     # Improved URL detection to prevent trailing punctuation issues
     url_pattern = r'(?<!\w)(https?://[^\s<>"\'()]+[^\s<>"\'().,])(?!\w)'
 
     def url_replacer(match):
         url = match.group(0)
-        # Escape any blanks in the URL before creating the link
-        escaped_url = escape_blanks_in_url(url)
-        return f'<a href="{escaped_url}" target="_blank">{url}</a>'
-    
+        return f'<a href="{url}" target="_blank">{url}</a>'
     text_with_links = re.sub(url_pattern, url_replacer, text)
-    #return text_with_links.replace("\n", "<br>")
-    return text_with_links
+    return text_with_links.replace("\n", "<br>")
 
 # Buttons
 get_manifests_button = CTkButton(

@@ -221,3 +221,112 @@
 2025-07-02 10:18:30,923 - INFO - Reviewer generated a response.
 2025-07-02 10:18:30,926 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The utterance is in Portuguese. This is a factual statement as it can be objectively verified.'}.
 2025-07-02 10:18:32,127 - INFO - 127.0.0.1 - - [02/Jul/2025 10:18:32] "POST /verity/ HTTP/1.1" 200 -
+2025-07-03 11:00:54,299 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-07-03 11:00:54,317 - INFO - [33mPress CTRL+C to quit[0m
+2025-07-03 11:01:56,653 - INFO - 127.0.0.1 - - [03/Jul/2025 11:01:56] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-03 11:02:14,296 - INFO - 127.0.0.1 - - [03/Jul/2025 11:02:14] "POST /verity/ HTTP/1.1" 200 -
+2025-07-03 11:29:53,738 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-07-03 11:29:53,738 - INFO - [33mPress CTRL+C to quit[0m
+2025-07-03 11:34:57,822 - INFO - 127.0.0.1 - - [03/Jul/2025 11:34:57] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 11:37:49,648 - INFO - 127.0.0.1 - - [03/Jul/2025 11:37:49] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 11:38:04,441 - INFO - 127.0.0.1 - - [03/Jul/2025 11:38:04] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 11:39:04,172 - INFO - 127.0.0.1 - - [03/Jul/2025 11:39:04] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 13:08:11,446 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-07-03 13:08:11,446 - INFO - [33mPress CTRL+C to quit[0m
+2025-07-03 13:08:42,015 - INFO - 127.0.0.1 - - [03/Jul/2025 13:08:42] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 13:09:07,123 - INFO - 127.0.0.1 - - [03/Jul/2025 13:09:07] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 13:09:33,853 - INFO - 127.0.0.1 - - [03/Jul/2025 13:09:33] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 13:09:53,465 - INFO - 127.0.0.1 - - [03/Jul/2025 13:09:53] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 13:10:34,218 - INFO - 127.0.0.1 - - [03/Jul/2025 13:10:34] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 13:13:40,338 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-07-03 13:13:40,339 - INFO - [33mPress CTRL+C to quit[0m
+2025-07-03 13:14:07,312 - INFO - 127.0.0.1 - - [03/Jul/2025 13:14:07] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 13:14:34,202 - INFO - 127.0.0.1 - - [03/Jul/2025 13:14:34] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 13:15:10,029 - INFO - 127.0.0.1 - - [03/Jul/2025 13:15:10] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 13:22:41,785 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-07-03 13:22:41,787 - INFO - [33mPress CTRL+C to quit[0m
+2025-07-03 13:24:35,800 - INFO - 127.0.0.1 - - [03/Jul/2025 13:24:35] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 13:25:35,921 - INFO - 127.0.0.1 - - [03/Jul/2025 13:25:35] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-03 13:25:45,657 - INFO - 127.0.0.1 - - [03/Jul/2025 13:25:45] "POST /verity/ HTTP/1.1" 200 -
+2025-07-03 16:30:06,714 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-07-03 16:30:06,716 - INFO - [33mPress CTRL+C to quit[0m
+2025-07-03 16:30:14,441 - INFO - 127.0.0.1 - - [03/Jul/2025 16:30:14] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 16:30:58,059 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-07-03 16:30:58,060 - INFO - [33mPress CTRL+C to quit[0m
+2025-07-03 16:31:18,467 - INFO - 127.0.0.1 - - [03/Jul/2025 16:31:18] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 16:31:28,614 - INFO - 127.0.0.1 - - [03/Jul/2025 16:31:28] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 16:31:56,046 - INFO - 127.0.0.1 - - [03/Jul/2025 16:31:56] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 16:38:18,402 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-07-03 16:38:18,403 - INFO - [33mPress CTRL+C to quit[0m
+2025-07-03 16:39:36,895 - INFO - 127.0.0.1 - - [03/Jul/2025 16:39:36] "[33mPOST / HTTP/1.1[0m" 404 -
+2025-07-03 16:40:05,878 - INFO - 127.0.0.1 - - [03/Jul/2025 16:40:05] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-03 16:45:07,325 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-07-03 16:45:07,326 - INFO - [33mPress CTRL+C to quit[0m
+2025-07-03 16:45:28,388 - INFO - 127.0.0.1 - - [03/Jul/2025 16:45:28] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-03 16:46:08,606 - INFO - 127.0.0.1 - - [03/Jul/2025 16:46:08] "POST /verity/ HTTP/1.1" 200 -
+2025-07-03 17:04:50,005 - INFO - 127.0.0.1 - - [03/Jul/2025 17:04:50] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-03 17:06:07,503 - INFO - 127.0.0.1 - - [03/Jul/2025 17:06:07] "POST /verity/ HTTP/1.1" 200 -
+2025-07-03 17:45:37,139 - INFO - 127.0.0.1 - - [03/Jul/2025 17:45:37] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-03 17:45:45,629 - INFO - 127.0.0.1 - - [03/Jul/2025 17:45:45] "POST /verity/ HTTP/1.1" 200 -
+2025-07-03 17:50:42,016 - INFO - 127.0.0.1 - - [03/Jul/2025 17:50:42] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-03 17:50:52,834 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-03 17:50:53,086 - INFO - Reviewer generated a response.
+2025-07-03 17:50:53,087 - INFO - generated {'applicable': 'no', 'decision': '', 'factual_likelihood': '', 'explanation': 'This is a command, not a statement of fact. Factuality does not apply.'}.
+2025-07-03 17:50:55,495 - INFO - 127.0.0.1 - - [03/Jul/2025 17:50:55] "POST /verity/ HTTP/1.1" 200 -
+2025-07-03 17:51:25,308 - INFO - 127.0.0.1 - - [03/Jul/2025 17:51:25] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-03 17:51:33,504 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-03 17:51:33,507 - INFO - Reviewer generated a response.
+2025-07-03 17:51:33,508 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is a command, not a statement of fact. Additionally, millimeters and gallons are incompatible units of measurement, one is a unit of length and the other is a unit of volume.'}.
+2025-07-03 17:51:36,323 - INFO - 127.0.0.1 - - [03/Jul/2025 17:51:36] "POST /verity/ HTTP/1.1" 200 -
+2025-07-04 10:39:25,774 - INFO - 127.0.0.1 - - [04/Jul/2025 10:39:25] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-04 10:39:34,729 - INFO - 127.0.0.1 - - [04/Jul/2025 10:39:34] "POST /verity/ HTTP/1.1" 200 -
+2025-07-04 10:48:16,418 - INFO - 127.0.0.1 - - [04/Jul/2025 10:48:16] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-04 10:48:24,458 - INFO - 127.0.0.1 - - [04/Jul/2025 10:48:24] "POST /verity/ HTTP/1.1" 200 -
+2025-07-04 10:53:39,713 - INFO - 127.0.0.1 - - [04/Jul/2025 10:53:39] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-04 10:54:03,249 - INFO - 127.0.0.1 - - [04/Jul/2025 10:54:03] "POST /verity/ HTTP/1.1" 200 -
+2025-07-04 11:01:14,490 - INFO - 127.0.0.1 - - [04/Jul/2025 11:01:14] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-04 11:01:36,497 - INFO - 127.0.0.1 - - [04/Jul/2025 11:01:36] "POST /verity/ HTTP/1.1" 200 -
+2025-07-04 11:01:57,444 - INFO - 127.0.0.1 - - [04/Jul/2025 11:01:57] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-04 11:02:17,073 - INFO - 127.0.0.1 - - [04/Jul/2025 11:02:17] "POST /verity/ HTTP/1.1" 200 -
+2025-07-04 11:05:52,692 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-07-04 11:05:52,693 - INFO - [33mPress CTRL+C to quit[0m
+2025-07-04 11:06:43,888 - INFO - 127.0.0.1 - - [04/Jul/2025 11:06:43] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-04 11:07:04,913 - INFO - 127.0.0.1 - - [04/Jul/2025 11:07:04] "POST /verity/ HTTP/1.1" 200 -
+2025-07-04 11:08:41,260 - INFO - 127.0.0.1 - - [04/Jul/2025 11:08:41] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-04 11:09:18,967 - INFO - 127.0.0.1 - - [04/Jul/2025 11:09:18] "POST /verity/ HTTP/1.1" 200 -
+2025-07-04 11:25:45,669 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://localhost:8767
+2025-07-04 11:25:45,670 - INFO - [33mPress CTRL+C to quit[0m
+2025-07-04 11:27:01,884 - INFO - 127.0.0.1 - - [04/Jul/2025 11:27:01] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-04 11:27:13,469 - INFO - 127.0.0.1 - - [04/Jul/2025 11:27:13] "POST /verity/ HTTP/1.1" 200 -
+2025-07-04 11:29:54,468 - INFO - 127.0.0.1 - - [04/Jul/2025 11:29:54] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-04 11:30:02,016 - INFO - 127.0.0.1 - - [04/Jul/2025 11:30:02] "POST /verity/ HTTP/1.1" 200 -
+2025-07-04 11:31:22,003 - INFO - 127.0.0.1 - - [04/Jul/2025 11:31:22] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-04 11:31:31,578 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-04 11:31:31,600 - INFO - Reviewer generated a response.
+2025-07-04 11:31:31,601 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The statement is subjective and dependent on the location and time of the speaker. It cannot be universally verified or falsified.'}.
+2025-07-04 11:31:36,246 - INFO - 127.0.0.1 - - [04/Jul/2025 11:31:36] "POST /verity/ HTTP/1.1" 200 -
+2025-07-04 13:24:30,081 - INFO - 127.0.0.1 - - [04/Jul/2025 13:24:30] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-04 13:24:54,219 - INFO - 127.0.0.1 - - [04/Jul/2025 13:24:54] "POST /verity/ HTTP/1.1" 200 -
+2025-07-04 13:26:23,324 - INFO - 127.0.0.1 - - [04/Jul/2025 13:26:23] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-04 13:26:49,922 - INFO - 127.0.0.1 - - [04/Jul/2025 13:26:49] "POST /verity/ HTTP/1.1" 200 -
+2025-07-05 11:27:15,430 - INFO - 127.0.0.1 - - [05/Jul/2025 11:27:15] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-05 11:27:25,440 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-05 11:27:25,466 - INFO - Reviewer generated a response.
+2025-07-05 11:27:25,467 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The Eiffel Tower is not located in Berlin. It is in Paris, France.'}.
+2025-07-05 11:27:28,351 - INFO - 127.0.0.1 - - [05/Jul/2025 11:27:28] "POST /verity/ HTTP/1.1" 200 -
+2025-07-05 11:36:46,196 - INFO - 127.0.0.1 - - [05/Jul/2025 11:36:46] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2025-07-05 11:36:54,905 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-05 11:36:54,912 - INFO - Reviewer generated a response.
+2025-07-05 11:36:54,913 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The Eiffel Tower is not located in Berlin. It is in Paris, France.'}.
+2025-07-05 11:36:56,482 - INFO - 127.0.0.1 - - [05/Jul/2025 11:36:56] "POST /verity/ HTTP/1.1" 200 -

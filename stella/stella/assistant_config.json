@@ -1,0 +1,42 @@
+{
+    "AIVendor": "OpenAI",
+    "urlAI": "https://api.openai.com/v1/chat/completions",
+    "model": "gpt-4o",
+    "temperature": "0.0",
+    "personalPrompt": "If you think the conversation is moving outside of your specific expertise, you will say so and suggest that the user look for another assistant to address that topic. ",
+    "openingGreeting": "Hi ",
+    "functionPrompt": "You will identify NASA APIs that can provide information that answers the user's questions about space.",
+    "assistantName": "Stella",
+    "assistantTitle": "Space Expert",
+    "manifest":{
+        "identification": {
+            "conversationalName": "Stella",
+            "serviceName": "space assistant",
+            "organization": "BeaconForge",
+            "serviceEndpoint": "http://localhost:8767",
+            "role": "help with space facts",
+            "synopsis": "knows about space"
+        },
+        "capabilities": {
+            "keyphrases": [
+                "space",
+                "NASA",
+                "astronomy",
+                "stars",
+                "planets"
+            ],
+            "languages": [
+                "en-us"
+            ],
+            "descriptions":[
+                "Can ask NASA APIs about space facts",
+                "knows about astronomy"
+            ],
+            "supportedLayers": [
+                "text",
+                "voice",
+                "html"
+            ]
+        }
+    }
+}

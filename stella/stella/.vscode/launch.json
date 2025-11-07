@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+
+    {
+      "name": "Python: Run Stella server (file)",
+      "python": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/local.py",
+      "cwd": "${workspaceFolder}",
+      "subProcess": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+  
+  ]
+}

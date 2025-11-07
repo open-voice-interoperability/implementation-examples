@@ -1,0 +1,14 @@
+setup.py
+openfloor/__init__.py
+openfloor/agent.py
+openfloor/dialog_event.py
+openfloor/envelope.py
+openfloor/events.py
+openfloor/from .py
+openfloor/json_serializable.py
+openfloor/manifest.py
+stella2.egg-info/PKG-INFO
+stella2.egg-info/SOURCES.txt
+stella2.egg-info/dependency_links.txt
+stella2.egg-info/requires.txt
+stella2.egg-info/top_level.txt

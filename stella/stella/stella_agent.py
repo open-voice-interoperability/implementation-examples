@@ -281,6 +281,9 @@ class StellaAgent(BotAgent):
         except Exception as e:
             return f"Error generating response: {str(e)}"
 
+   # These are the minimal incoming event handlers required for a BotAgent
+   # Other events that are not expected to be handled by an ordinary bot are left unimplemented
+   # These are publishManifests, requestFloor and yieldFloor
     def bot_on_invite(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
         # Accept the invitation, then send a greeting utterance
         super().bot_on_invite(event, in_envelope, out_envelope)
@@ -374,6 +377,46 @@ class StellaAgent(BotAgent):
         out_envelope.events.append(
             PublishManifestsEvent(parameters=Parameters({"servicingManifests": [self._manifest], "discoveryManifests": []}))
         )
+
+    def bot_on_grant_floor(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
+        """Handle grant_floor event.
+        
+        This event is triggered when the agent is granted the floor to speak.
+        Override this method to implement custom floor granting behavior.
+        """
+        # TODO: Implement grant_floor event handling logic
+        # For now, this is just a stub that can be expanded based on requirements
+        pass
+
+    def bot_on_decline_invite(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
+        """Handle decline_invite event.
+        
+        This event is triggered when an invitation to join a conversation is declined.
+        Override this method to implement custom invitation decline handling.
+        """
+        # TODO: Implement decline_invite event handling logic
+        # For now, this is just a stub that can be expanded based on requirements
+        pass
+
+    def bot_on_uninvite(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
+        """Handle uninvite event.
+        
+        This event is triggered when an agent is uninvited/removed from a conversation.
+        Override this method to implement custom uninvite handling.
+        """
+        # TODO: Implement uninvite event handling logic
+        # For now, this is just a stub that can be expanded based on requirements
+        pass
+
+    def bot_on_revoke_floor(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
+        """Handle revoke_floor event.
+        
+        This event is triggered when the agent's floor permissions are revoked.
+        Override this method to implement custom floor revocation handling.
+        """
+        # TODO: Implement revoke_floor event handling logic
+        # For now, this is just a stub that can be expanded based on requirements
+        pass
 
     # Convenience helpers -------------------------------------------------
     def events_for_envelope(self, in_envelope: Envelope) -> List[EnvelopeEvent]:

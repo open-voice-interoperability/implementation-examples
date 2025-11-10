@@ -28,6 +28,10 @@ agent = StellaAgent(manifest)
 
 @app.route('/', methods=['POST'])
 def home():
+    print("Headers:", dict(request.headers))
+    payload_text = request.get_data(as_text=True)
+    #print("Payload text:", payload_text[:200])
+    
     # Accept raw JSON payloads containing an OpenFloor 'openFloor' wrapper
     payload_text = request.get_data(as_text=True)
 

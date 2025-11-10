@@ -110,6 +110,7 @@ class StellaAgent(BotAgent):
     OpenFloor spec for a simple bot: invite, utterance and getManifests.
     """
 
+
     def __init__(self, manifest: Manifest):
         super().__init__(manifest)
         # Load assistant config (if present) and intent concepts
@@ -283,7 +284,13 @@ class StellaAgent(BotAgent):
 
    # These are the minimal incoming event handlers required for a BotAgent
    # Other events that are not expected to be handled by an ordinary bot are left unimplemented
-   # These are publishManifests, requestFloor and yieldFloor
+   # These are publishManifests, requestFloor and yieldFloor, declineIInvite
+   # variables that track conversation state
+    isInConversation: bool = False
+    hasSomethingToSay: bool = False
+    utteranceInQueue: str = ""
+    hasFloor: bool = False
+    
     def bot_on_invite(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
         # Accept the invitation, then send a greeting utterance
         super().bot_on_invite(event, in_envelope, out_envelope)

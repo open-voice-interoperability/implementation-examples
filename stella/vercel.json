@@ -2,14 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "implementation-examples/stella/stella/server.py",
+      "src": "server.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "implementation-examples/stella/stella/server.py"
+      "dest": "server.py"
     }
   ]
 }

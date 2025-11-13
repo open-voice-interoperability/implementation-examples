@@ -17,11 +17,11 @@ from typing import Dict, Any
 import re
 
 # Instantiate OpenAI client
-# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-client = OpenAI()
 
+# Set the API key from environment variable
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-if not client:
+if not openai.api_key:
     raise ValueError("Please set the OPENAI_API_KEY environment variable.")
 
 
@@ -284,7 +284,7 @@ class StellaAgent(BotAgent):
 
    # These are the minimal incoming event handlers required for a BotAgent
    # Other events that are not expected to be handled by an ordinary bot are left unimplemented
-   # These are publishManifests, requestFloor and yieldFloor, declineIInvite
+   # These are events that could be handled by a floor or convener, such as publishManifests, requestFloor and yieldFloor, declineIInvite, or acceptInvite
    # variables that track conversation state
     isInConversation: bool = False
     hasSomethingToSay: bool = False
@@ -388,8 +388,12 @@ class StellaAgent(BotAgent):
     def bot_on_grant_floor(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
         """Handle grant_floor event.
         
-        This event is triggered when the agent is granted the floor to speak.
+        This event is triggered when an agent is granted the floor to speak.
         Override this method to implement custom floor granting behavior.
+        Two cases, this agent is granted the floor or another agent is granted the floor.
+        If this agent is granted the floor, and it has something to say, it should send an utterance event.
+        If this agent is granted the floor, and it has nothing to say, it should send an empty event.
+        If another agent is granted the floor, this agent should send an empty event.
         """
         # TODO: Implement grant_floor event handling logic
         # For now, this is just a stub that can be expanded based on requirements
@@ -400,6 +404,7 @@ class StellaAgent(BotAgent):
         
         This event is triggered when an invitation to join a conversation is declined.
         Override this method to implement custom invitation decline handling.
+        This event would come from another agent on the floor and does not require any response from the agent -- it would be handled by the floor or convener.
         """
         # TODO: Implement decline_invite event handling logic
         # For now, this is just a stub that can be expanded based on requirements

@@ -47,3 +47,5 @@ assistantClient/testbrowser.py
 stella/.devcontainer/devcontainer.json
 stella/.vscode/tasks.json
 stella/stella/.vscode/tasks.json
+
+.vercel

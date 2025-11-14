@@ -384,6 +384,7 @@ class StellaAgent(BotAgent):
         out_envelope.events.append(
             PublishManifestsEvent(parameters=Parameters({"servicingManifests": [self._manifest], "discoveryManifests": []}))
         )
+        print("envelope after appending manifest event" + str(out_envelope))
 
     def bot_on_grant_floor(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
         """Handle grant_floor event.

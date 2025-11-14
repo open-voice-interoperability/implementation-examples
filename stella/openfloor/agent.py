@@ -113,6 +113,7 @@ class OpenFloorAgent(OpenFloorEvents):
                 addressed = False
 
             result.append((event, {"addressed_to_me": addressed}))
+            print(f"Event {event.eventType} addressed to me: {addressed}",flush=True)
                 
         return result
 
@@ -197,6 +198,7 @@ class BotAgent(OpenFloorAgent):
 
     def bot_on_envelope(self, in_envelope: Envelope, out_envelope: Envelope) -> Envelope:
         print("Entering bot_on_envelope")
+        print("incoming events " + str(in_envelope.events))
         #clear the current context
         self._current_context = []
         

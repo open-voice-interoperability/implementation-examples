@@ -32,8 +32,11 @@ agent = StellaAgent(manifest)
 @app.route("/", methods=["POST"])
 def handle_post():
     payload_text = request.get_data(as_text=True)
-
-    # Convert to Envelope
+    # Dynamically update the manifest serviceUrl
+    host = request.headers.get("Host")
+    if host:
+        agent._manifest.identification.serviceUrl = f"https://{host}"
+    # Convert incoming JSON to Envelope
     try:
         in_envelope = Envelope.from_json(payload_text, as_payload=True)
     except Exception:
@@ -46,14 +49,13 @@ def handle_post():
     out_envelope = agent.process_envelope(in_envelope)
     payload_str = out_envelope.to_json(as_payload=True)
 
-    # Optional: log basic info
     print(f"Incoming payload length: {len(payload_text)}")
     print(f"Outgoing payload length: {len(payload_str)}")
 
-    # Return JSON response
     resp = Response(payload_str, mimetype="application/json")
     resp.headers["X-Outgoing-Length"] = str(len(payload_str))
     return resp
+
 
 # ----------------------------
 # Run server

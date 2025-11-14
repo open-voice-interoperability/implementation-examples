@@ -181,16 +181,18 @@ def send_events(event_types):
     last_event = envelope
     envelope_to_send = envelope.to_json(as_payload=True)
     
+    # Convert JSON string to Python object
     try:
-      
-        # envelope_to_send is a JSON string; convert to an object so requests sends a proper JSON payload
-        try:
-            payload_obj = json.loads(envelope_to_send)
-        except Exception:
-            payload_obj = envelope_to_send
-        response = requests.post(assistant_url, json=payload_obj, headers={"Content-Type": "application/json"})
-        print(response)
+        payload_obj = json.loads(envelope_to_send)
+        print("Payload to send:", json.dumps(payload_obj, indent=2))  # debug
+        # Send POST request
+        response = requests.post(
+            assistant_url,
+            json=payload_obj
+            )
+        print("HTTP status:", response.status_code)
         response_data = response.json()
+        print("Response JSON:", json.dumps(response_data, indent=2))
         incoming_events = response_data.get("openFloor", {}).get("events", [])
         for event in incoming_events:
             if event.get("eventType") == "publishManifests":
@@ -207,14 +209,12 @@ def send_events(event_types):
                 dialog_event = parameters.get("dialogEvent", {})
                 features = dialog_event.get("features", {})
                 text_features = features.get("text", {})
-                
+                        
                 # Check the MIME type to determine how to display the content
                 mime_type = text_features.get("mimeType", "")
-                tokens = text_features.get("tokens", [])
-                
+                tokens = text_features.get("tokens", [])  
                 if tokens:
                     extracted_value = tokens[0].get("value", "No value found")
-                    
                     # If MIME type is text/plain, only display JSON response
                     if mime_type == "text/plain":
                         # For plain text, don't convert to HTML or display in browser
@@ -223,10 +223,10 @@ def send_events(event_types):
                         # For other MIME types (or no MIME type), process as HTML
                         html_content = f"{convert_text_to_html(extracted_value)}"
                         display_response_html(html_content)
-        display_response_json(response_data)
+            display_response_json(response_data)
 
     except Exception as e:
-        CTkMessagebox(title="Error", message=f"Error sending event: {str(e)}", icon="cancel")
+        CTkMessagebox(title="Error", message=f"Error processing incoming event: {str(e)}", icon="cancel")
 
 
 # user interface functions

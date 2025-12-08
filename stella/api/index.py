@@ -28,6 +28,13 @@ agent = StellaAgent(manifest)
 @app.route("/api/", methods=["POST"])
 def handle_request():
     payload_text = request.get_data(as_text=True)
+    
+    # Dynamically update the manifest serviceUrl
+    host = request.headers.get("Host")
+    print(f"DEBUG server.py: Host header={host}", flush=True)
+    if host:
+        agent._manifest.identification.serviceUrl = f"https://{host}"
+        print(f"DEBUG server.py: Updated serviceUrl to {agent._manifest.identification.serviceUrl}", flush=True)
 
     # Parse incoming envelope
     try:

@@ -477,7 +477,25 @@ def send_events(event_types):
             json=payload_obj
             )
         print("HTTP status:", response.status_code)
-        response_data = response.json()
+        print("Response headers:", dict(response.headers))
+        print("Response text (first 500 chars):", response.text[:500])
+        
+        # Check if response is actually JSON
+        if response.status_code != 200:
+            CTkMessagebox(title="Error", 
+                         message=f"Server returned status {response.status_code}\n\nResponse: {response.text[:200]}", 
+                         icon="cancel")
+            return
+            
+        try:
+            response_data = response.json()
+        except json.JSONDecodeError as e:
+            CTkMessagebox(title="Error", 
+                         message=f"Server did not return valid JSON.\n\nStatus: {response.status_code}\n\nResponse: {response.text[:200]}", 
+                         icon="cancel")
+            print(f"Full response text: {response.text}")
+            return
+            
         print("Response JSON:", json.dumps(response_data, indent=2))
         incoming_events = response_data.get("openFloor", {}).get("events", [])
         for event in incoming_events:
@@ -534,7 +552,10 @@ def send_events(event_types):
             display_response_json(response_data)
 
     except Exception as e:
-        CTkMessagebox(title="Error", message=f"Error processing incoming event: {str(e)}", icon="cancel")
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error processing incoming event: {error_details}")
+        CTkMessagebox(title="Error", message=f"Error processing incoming event: {str(e)}\n\nCheck console for details.", icon="cancel")
 
 
 # user interface functions

@@ -4,8 +4,7 @@
 KNOWN_AGENTS = [
     "http://localhost:8767/",
     "http://secondAssistant.pythonanywhere.com/verity/",
-    "openvoice-stella.vercel.app",
-    "http://openvoice-stella.vercel.app",
+    "https://openvoice-stella.vercel.app/",
     "https://bladeszasza-ofpbadword.hf.space/ofp",
     "https://yahandhjjf.us-east-1.awsapprunner.com/"] 
 

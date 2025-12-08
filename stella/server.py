@@ -34,8 +34,10 @@ def handle_post():
     payload_text = request.get_data(as_text=True)
     # Dynamically update the manifest serviceUrl
     host = request.headers.get("Host")
+    print(f"DEBUG server.py: Host header={host}", flush=True)
     if host:
         agent._manifest.identification.serviceUrl = f"https://{host}"
+        print(f"DEBUG server.py: Updated serviceUrl to {agent._manifest.identification.serviceUrl}", flush=True)
     # Convert incoming JSON to Envelope
     try:
         in_envelope = Envelope.from_json(payload_text, as_payload=True)

@@ -1,5 +1,5 @@
 from tkinterweb import HtmlFrame
-from customtkinter import CTk, CTkLabel, CTkEntry, CTkButton, CTkTextbox, CTkToplevel, CTkComboBox,CTkCheckBox,set_appearance_mode, set_default_color_theme
+from customtkinter import CTk, CTkLabel, CTkEntry, CTkButton, CTkTextbox, CTkToplevel, CTkComboBox,CTkCheckBox,CTkScrollableFrame,CTkFrame,set_appearance_mode, set_default_color_theme
 import tkinter.messagebox as messagebox
 from CTkMessagebox import CTkMessagebox
 import openfloor
@@ -18,8 +18,11 @@ import webbrowser
 
 from openfloor import events,envelope,dialog_event,manifest,agent,DialogEvent,Conversation
 from openfloor import OpenFloorEvents, OpenFloorAgent, BotAgent
-from openfloor import Manifest, Event, UtteranceEvent, InviteEvent, PublishManifestsEvent
-from openfloor import Envelope, Manifest, Event, UtteranceEvent, InviteEvent,Sender, To, Parameters
+from openfloor import Manifest, Event, UtteranceEvent, InviteEvent, UninviteEvent, RevokeFloorEvent, GrantFloorEvent, PublishManifestsEvent
+from openfloor import Envelope, Sender, To, Parameters
+
+import floor
+from known_agents import KNOWN_AGENTS
 
 client_uri = ""
 client_url = ""  
@@ -35,6 +38,10 @@ client_url = f"http://{ip_address}"
 client_uri = f"openFloor://{ip_address}/" + client_name
 
 assistantConversationalName = ""
+floor_manager = None
+invited_agents = []  # List to keep track of invited agents
+agent_textboxes = []  # List to keep track of individual agent textboxes
+revoked_agents = []  # List to keep track of agents whose floor has been revoked
 
 set_appearance_mode("light")
 set_default_color_theme("blue")
@@ -45,6 +52,7 @@ last_event = None
 
 root = CTk()
 root.title("Open Floor Client Assistant")
+root.geometry("600x720")  # 50% bigger than default size
 
 CTkLabel(root, text="Enter Text:").pack(pady=(5, 0))
 entry = CTkEntry(root, width=400)
@@ -63,7 +71,267 @@ url_combobox.pack(pady=5, padx=20)
 display_text = CTkLabel(root, text="", wraplength=400)
 display_text.pack(pady=(5, 10))
 
-destination_url = url_combobox.get().strip()
+CTkLabel(root, text="Invited Agents:").pack(pady=(10, 0))
+
+# Frame to contain individual agent textboxes
+agents_frame = CTkScrollableFrame(root, height=200)
+agents_frame.pack(pady=5, padx=20, fill="both", expand=False)
+
+# Label to show when no agents are invited
+no_agents_label = CTkLabel(agents_frame, text="No agents invited yet")
+no_agents_label.pack(pady=10)
+
+def add_invited_agent(agent_info):
+    """Add an agent to the invited agents list."""
+    if agent_info not in invited_agents:
+        invited_agents.append(agent_info)
+    update_agent_textboxes()
+
+def update_agent_status(old_info, new_info):
+    """Update an existing agent's status in the list."""
+    if old_info in invited_agents:
+        index = invited_agents.index(old_info)
+        invited_agents[index] = new_info
+    else:
+        invited_agents.append(new_info)
+    update_agent_textboxes()
+
+def create_agent_textbox(agent_info):
+    """Create a frame with uninvite button and textbox for a specific agent."""
+    # Create a frame to hold both button and textbox
+    agent_frame = CTkFrame(agents_frame)
+    agent_frame.pack(pady=2, padx=5, fill="x")
+    
+    # Extract URL from agent_info (format: "Invited: URL" or "Connected: Name (URL)")
+    agent_url = extract_url_from_agent_info(agent_info)
+    
+    # Determine button text and command based on revoked status
+    if agent_url in revoked_agents:
+        floor_btn_text = "Grant Floor"
+        floor_btn_command = lambda: grant_floor_to_agent(agent_info, agent_url)
+    else:
+        floor_btn_text = "Revoke Floor"
+        floor_btn_command = lambda: revoke_floor_from_agent(agent_info, agent_url)
+    
+    # Create revoke/grant floor button
+    floor_btn = CTkButton(agent_frame, text=floor_btn_text, width=90, height=25,
+                         command=floor_btn_command)
+    floor_btn.pack(side="left", padx=5, pady=5)
+    
+    # Create uninvite button
+    uninvite_btn = CTkButton(agent_frame, text="Uninvite", width=80, height=25,
+                            command=lambda: uninvite_agent(agent_info, agent_url))
+    uninvite_btn.pack(side="left", padx=(0,5), pady=5)
+    
+    # Create textbox for agent info
+    textbox = CTkEntry(agent_frame, placeholder_text=agent_info)
+    textbox.insert(0, agent_info)
+    
+    # Apply strikethrough if floor has been revoked
+    if agent_url in revoked_agents:
+        # Create a struck-through version of the text
+        struck_text = ''.join([char + '\u0336' for char in agent_info])
+        textbox.delete(0, 'end')
+        textbox.insert(0, struck_text)
+    
+    textbox.configure(state="disabled")
+    textbox.pack(side="left", fill="x", expand=True, padx=(0,5), pady=5)
+    
+    agent_textboxes.append((agent_frame, textbox, uninvite_btn, floor_btn))
+    return agent_frame
+
+def extract_url_from_agent_info(agent_info):
+    """Extract URL from agent info string."""
+    if agent_info.startswith("Invited: "):
+        return agent_info[9:]  # Remove "Invited: " prefix
+    return agent_info
+
+def update_agent_textbox(textbox, new_info):
+    """Update an existing agent textbox with new information."""
+    textbox.configure(state="normal")
+    textbox.delete(0, "end")
+    textbox.insert(0, new_info)
+    textbox.configure(state="disabled")
+
+def grant_floor_to_agent(agent_info, agent_url):
+    """Send grant floor message to agent."""
+    try:
+        # Create grant floor envelope
+        conversation = Conversation()
+        sender = Sender(
+            speakerUri=client_uri,
+            serviceUrl=client_url
+        )
+        envelope = Envelope(
+            conversation=conversation,
+            sender=sender
+        )
+        
+        # Create grant floor event
+        grant_event = GrantFloorEvent(to=To(serviceUrl=agent_url))
+        envelope.events.append(grant_event)
+        
+        # Send grant floor message
+        envelope_to_send = envelope.to_json(as_payload=True)
+        payload_obj = json.loads(envelope_to_send)
+        
+        response = requests.post(
+            agent_url,
+            json=payload_obj,
+            headers={"Content-Type": "application/json"}
+        )
+        
+        print(f"Grant floor sent to {agent_url}, status: {response.status_code}")
+        
+        # Store outgoing event for display
+        global last_event
+        last_event = envelope
+        
+        # Update floor manager if active
+        if floor_manager is not None:
+            try:
+                floor_manager.grant_floor(agent_url)
+            except Exception as e:
+                print(f"Could not grant floor in floor manager: {e}")
+        
+        # Remove from revoked agents list
+        if agent_url in revoked_agents:
+            revoked_agents.remove(agent_url)
+        
+        # Update the display to remove strikethrough and change button
+        update_agent_textboxes()
+        
+    except Exception as e:
+        CTkMessagebox(title="Error", message=f"Failed to grant floor to agent: {str(e)}", icon="cancel")
+        print(f"Error granting floor to agent: {e}")
+
+def revoke_floor_from_agent(agent_info, agent_url):
+    """Send revoke floor message to agent."""
+    try:
+        # Create revoke floor envelope
+        conversation = Conversation()
+        sender = Sender(
+            speakerUri=client_uri,
+            serviceUrl=client_url
+        )
+        envelope = Envelope(
+            conversation=conversation,
+            sender=sender
+        )
+        
+        # Create revoke floor event
+        revoke_event = RevokeFloorEvent(to=To(serviceUrl=agent_url))
+        envelope.events.append(revoke_event)
+        
+        # Send revoke floor message
+        envelope_to_send = envelope.to_json(as_payload=True)
+        payload_obj = json.loads(envelope_to_send)
+        
+        response = requests.post(
+            agent_url,
+            json=payload_obj,
+            headers={"Content-Type": "application/json"}
+        )
+        
+        print(f"Revoke floor sent to {agent_url}, status: {response.status_code}")
+        
+        # Store outgoing event for display
+        global last_event
+        last_event = envelope
+        
+        # Update floor manager if active
+        if floor_manager is not None:
+            try:
+                floor_manager.revoke_floor(agent_url)
+            except Exception as e:
+                print(f"Could not revoke floor in floor manager: {e}")
+        
+        # Track that this agent's floor has been revoked
+        if agent_url not in revoked_agents:
+            revoked_agents.append(agent_url)
+        
+        # Update the display to show strikethrough
+        update_agent_textboxes()
+        
+    except Exception as e:
+        CTkMessagebox(title="Error", message=f"Failed to revoke floor from agent: {str(e)}", icon="cancel")
+        print(f"Error revoking floor from agent: {e}")
+
+def uninvite_agent(agent_info, agent_url):
+    """Send uninvite message to agent and remove from list."""
+    try:
+        # Create uninvite envelope
+        conversation = Conversation()
+        sender = Sender(
+            speakerUri=client_uri,
+            serviceUrl=client_url
+        )
+        envelope = Envelope(
+            conversation=conversation,
+            sender=sender
+        )
+        
+        # Create uninvite event
+        uninvite_event = UninviteEvent(to=To(serviceUrl=agent_url))
+        envelope.events.append(uninvite_event)
+        
+        # Send uninvite message
+        envelope_to_send = envelope.to_json(as_payload=True)
+        payload_obj = json.loads(envelope_to_send)
+        
+        response = requests.post(
+            agent_url,
+            json=payload_obj,
+            headers={"Content-Type": "application/json"}
+        )
+        
+        print(f"Uninvite sent to {agent_url}, status: {response.status_code}")
+        
+        # Store outgoing event for display
+        global last_event
+        last_event = envelope
+        
+        # Remove from invited agents list
+        if agent_info in invited_agents:
+            invited_agents.remove(agent_info)
+        
+        # Remove from revoked agents list if present
+        if agent_url in revoked_agents:
+            revoked_agents.remove(agent_url)
+            
+        # Remove from floor manager if active
+        if floor_manager is not None:
+            # Try to find and remove agent from floor manager
+            # Note: This is a simple approach, might need refinement
+            try:
+                floor_manager.remove_conversant(agent_url)
+            except Exception as e:
+                print(f"Could not remove agent from floor manager: {e}")
+        
+        # Update display
+        update_agent_textboxes()
+        
+    except Exception as e:
+        CTkMessagebox(title="Error", message=f"Failed to uninvite agent: {str(e)}", icon="cancel")
+        print(f"Error uninviting agent: {e}")
+
+def update_agent_textboxes():
+    """Update all agent textboxes to match the invited agents list."""
+    # Clear all existing textboxes
+    for item in agent_textboxes:
+        if len(item) >= 3:  # Handle both old and new tuple formats
+            agent_frame = item[0]
+            agent_frame.destroy()
+    agent_textboxes.clear()
+    
+    # Show or hide the no agents label
+    if invited_agents:
+        no_agents_label.pack_forget()
+        # Create new textboxes for each agent
+        for agent_info in invited_agents:
+            create_agent_textbox(agent_info)
+    else:
+        no_agents_label.pack(pady=10)
 
 
 def construct_event(event_type, user_input, convo_id, timestamp):
@@ -158,6 +426,24 @@ def send_events(event_types):
             private = True
             invite_sentinel = False
             envelope.events.append(inviteEvent)
+            
+            # Add to invited agents list
+            invited_url = url_combobox.get().strip()
+            add_invited_agent(f"Invited: {invited_url}")
+            
+            # If floor manager is active, add "joining floor" utterance
+            if floor_manager is not None:
+                floor_join_dialog = DialogEvent(
+                    speakerUri=client_uri,
+                    features={
+                        "text": {
+                            "mimeType": "text/plain",
+                            "tokens": [{"value": "joining floor"}]
+                        }
+                    }
+                )
+                envelope.events.append(UtteranceEvent(dialogEvent=floor_join_dialog,
+                                                      to=To(serviceUrl=url_combobox.get().strip(), private=True)))
         elif event_type == "getManifests":
             getManifestsEvent = openfloor.events.GetManifestsEvent(to=To(serviceUrl=url_combobox.get().strip()))
             envelope.events.append(getManifestsEvent)
@@ -201,6 +487,19 @@ def send_events(event_types):
                     manifest = manifests[0]
                     assistantConversationalName = manifest.get("identification", {}).get("conversationalName", "")
                     assistant_uri = manifest.get("identification", {}).get("uri", "")
+                    manifest_service_url = manifest.get("identification", {}).get("serviceUrl", assistant_url)
+                    
+                    # Add agent to floor manager if active
+                    if floor_manager is not None and assistant_uri:
+                        try:
+                            floor_manager.add_conversant(
+                                speaker_uri=assistant_uri,
+                                service_url=manifest_service_url,
+                                conversational_name=assistantConversationalName
+                            )
+                            print(f"Added {assistantConversationalName or assistant_uri} to floor manager")
+                        except Exception as e:
+                            print(f"Failed to add agent to floor manager: {e}")
                     #assistant_url = manifest.get("identification", {}).get("serviceUrl", "")
                 else:
                     CTkMessagebox(title="Error", message="No servicing manifests found in the response.", icon="cancel")
@@ -209,6 +508,15 @@ def send_events(event_types):
                 dialog_event = parameters.get("dialogEvent", {})
                 features = dialog_event.get("features", {})
                 text_features = features.get("text", {})
+                html_features = features.get("html", {})
+                
+                # Check if there's an HTML feature and display it in browser
+                if html_features:
+                    html_tokens = html_features.get("tokens", [])
+                    if html_tokens:
+                        html_value = html_tokens[0].get("value", "")
+                        if html_value:
+                            display_response_html(html_value)
                         
                 # Check the MIME type to determine how to display the content
                 mime_type = text_features.get("mimeType", "")
@@ -296,6 +604,65 @@ def convert_text_to_html(text):
     #return text_with_links.replace("\n", "<br>")
     return text_with_links
 
+def start_floor_manager():
+    """Start a new floor manager for the current conversation."""
+    global floor_manager
+    try:
+        # Create floor manager with current client as convener
+        floor_manager = floor.create_floor_manager(convener_uri=client_uri)
+        
+        # Add the client as a conversant
+        floor_manager.add_conversant(
+            speaker_uri=client_uri,
+            service_url=client_url,
+            conversational_name=client_name,
+            roles={floor.FloorRole.CONVENER}
+        )
+        
+        # Show floor manager window
+        show_floor_manager_window()
+        
+        CTkMessagebox(title="Floor Manager", 
+                     message="Floor manager started successfully!", 
+                     icon="info")
+    except Exception as e:
+        CTkMessagebox(title="Error", 
+                     message=f"Failed to start floor manager: {str(e)}", 
+                     icon="cancel")
+
+def show_floor_manager_window():
+    """Show the floor manager status window."""
+    global floor_manager
+    if not floor_manager:
+        CTkMessagebox(title="Error", 
+                     message="No floor manager is running", 
+                     icon="cancel")
+        return
+        
+    floor_window = CTkToplevel(root)
+    floor_window.title("Floor Manager Status")
+    floor_window.geometry("500x400")
+    
+    # Get floor status
+    status = floor_manager.get_floor_status()
+    
+    # Create text widget to display status
+    status_text = CTkTextbox(floor_window, wrap="word", width=480, height=350)
+    status_text.insert("0.0", json.dumps(status, indent=2))
+    status_text.configure(state="disabled")
+    status_text.pack(padx=10, pady=10)
+    
+    # Add refresh button
+    def refresh_status():
+        status = floor_manager.get_floor_status()
+        status_text.configure(state="normal")
+        status_text.delete("0.0", "end")
+        status_text.insert("0.0", json.dumps(status, indent=2))
+        status_text.configure(state="disabled")
+    
+    refresh_button = CTkButton(floor_window, text="Refresh", command=refresh_status)
+    refresh_button.pack(pady=5)
+
 # Buttons
 get_manifests_button = CTkButton(
     root, text="Get Manifests", command=get_manifests)
@@ -315,5 +682,9 @@ send_utterance_button.pack(pady=5)
 show_event_button = CTkButton(
     root, text="Show Outgoing Event", command=show_outgoing_event)
 show_event_button.pack(pady=(10, 5))
+
+start_floor_button = CTkButton(
+    root, text="Start Floor Manager", command=start_floor_manager)
+start_floor_button.pack(pady=5)
 
 root.mainloop()

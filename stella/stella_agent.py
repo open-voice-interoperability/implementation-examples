@@ -2,11 +2,12 @@ import json
 import os
 from typing import Optional, List
 
+import openfloor
 from openfloor.manifest import Manifest, Identification, Capability, SupportedLayers
 from openfloor.agent import BotAgent
 from openfloor.envelope import Envelope, Conversation, Sender, Schema, Event as EnvelopeEvent, Parameters
 from openfloor.events import UtteranceEvent, InviteEvent, PublishManifestsEvent
-from openfloor.dialog_event import DialogEvent, TextFeature, Token, Span
+from openfloor.dialog_event import DialogEvent, TextFeature, Feature, Token, Span
 import generate_nasa_gallery as generate_gallery
 from generate_nasa_gallery import generate_gallery_html_from_json_obj
 import json
@@ -15,6 +16,7 @@ from openai import OpenAI
 import nasa_api
 from typing import Dict, Any
 import re
+import event_handlers
 
 # Instantiate OpenAI client
 
@@ -290,101 +292,21 @@ class StellaAgent(BotAgent):
     hasSomethingToSay: bool = False
     utteranceInQueue: str = ""
     hasFloor: bool = False
+    grantedFloor: bool = False
     
     def bot_on_invite(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
-        # Accept the invitation, then send a greeting utterance
+        # Call parent class behavior first
         super().bot_on_invite(event, in_envelope, out_envelope)
-        name = self._manifest.identification.conversationalName or self._manifest.identification.speakerUri
-        greeting = f"Hi, I'm {name}. How can I help with space facts today?"
-
-        dialog = DialogEvent(
-            speakerUri=self._manifest.identification.speakerUri,
-            features={"text": TextFeature(values=[greeting])}
-        )
-        out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
+        # Delegate to event_handlers module
+        event_handlers.bot_on_invite(self, event, in_envelope, out_envelope)
 
     def bot_on_utterance(self, event: UtteranceEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
-        # Extract the user text robustly
-        try:
-            # event.parameters may be a Parameters dict or contain dialogEvent directly
-            dialog = None
-            hasParameters = hasattr(event, "parameters")  
-            isparametersDict = isinstance(event.parameters,dict)
-            if hasattr(event, "parameters"):
-                dialog = event.parameters.get("dialogEvent")
-            if dialog is None:
-                dialog = getattr(event, "dialogEvent", None)
-        except Exception:
-            dialog = getattr(event, "dialogEvent", None)
-
-        user_text = None
-        if dialog is not None:
-            # dialog may be a DialogEvent instance or a dict-like
-            if hasattr(dialog, "features"):
-                feat = dialog.features.get("text")
-                if feat is not None:
-                    # Feature may be a TextFeature instance or a plain dict
-                    if isinstance(feat, dict):
-                        # dict may contain 'values' or 'tokens'
-                        vals = feat.get("values")
-                        if vals and isinstance(vals, list) and len(vals) > 0:
-                            user_text = vals[0]
-                        else:
-                            tokens = feat.get("tokens") or []
-                            if tokens and isinstance(tokens, list) and len(tokens) > 0:
-                                # token may be dict or Token instance
-                                t0 = tokens[0]
-                                if isinstance(t0, dict):
-                                    user_text = t0.get("value")
-                                else:
-                                    user_text = getattr(t0, "value", None)
-                    else:
-                        # TextFeature or Feature instance: check values then tokens
-                        vals = getattr(feat, "values", None)
-                        if vals:
-                            # vals might be a list
-                            try:
-                                user_text = vals[0]
-                            except Exception:
-                                user_text = None
-                        else:
-                            tokens = getattr(feat, "tokens", None)
-                            if tokens and len(tokens) > 0:
-                                user_text = getattr(tokens[0], "value", None)
-            elif isinstance(dialog, dict):
-                try:
-                    # dialog dict path
-                    user_text = dialog["features"]["text"]["tokens"][0]["value"]
-                except Exception:
-                    user_text = None
-
-        if user_text is None:
-            user_text = ""
-
-
-        # Maintain conversation state keyed by conversation id
-        conv_id = in_envelope.conversation.id if in_envelope and in_envelope.conversation else None
-        if conv_id is not None and conv_id not in self._conversation_state:
-            self._conversation_state[conv_id] = {}
-
-        reply_text = self.generate_openai_response(user_text, conv_id)
-
-        # Append the assistant's utterance to the outgoing envelope
-        dialog_out = DialogEvent(
-            speakerUri=self._manifest.identification.speakerUri,
-            features={"text": TextFeature(values=[reply_text])}
-        )
-        if reply_text and is_html_string(reply_text):
-            # change the mimeType to text/html if the reply looks like HTML
-            dialog_out.features["text"].mimeType = "text/html"
-        out_envelope.events.append(UtteranceEvent(dialogEvent=dialog_out))
+        # Delegate to event_handlers module
+        event_handlers.bot_on_utterance(self, event, in_envelope, out_envelope)
 
     def bot_on_get_manifests(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
-        # Respond with the manifest we were constructed with
-        out_envelope.events.append(
-            PublishManifestsEvent(parameters=Parameters({"servicingManifests": [self._manifest], "discoveryManifests": []}))
-        )
-        print("envelope after appending manifest event" + str(out_envelope))
+        # Delegate to event_handlers module
+        event_handlers.bot_on_get_manifests(self, event, in_envelope, out_envelope)
 
     def bot_on_grant_floor(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
         """Handle grant_floor event.
@@ -396,9 +318,8 @@ class StellaAgent(BotAgent):
         If this agent is granted the floor, and it has nothing to say, it should send an empty event.
         If another agent is granted the floor, this agent should send an empty event.
         """
-        # TODO: Implement grant_floor event handling logic
-        # For now, this is just a stub that can be expanded based on requirements
-        pass
+        # Delegate to event_handlers module
+        event_handlers.bot_on_grant_floor(self, event, in_envelope, out_envelope)
 
     def bot_on_decline_invite(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
         """Handle decline_invite event.
@@ -407,9 +328,8 @@ class StellaAgent(BotAgent):
         Override this method to implement custom invitation decline handling.
         This event would come from another agent on the floor and does not require any response from the agent -- it would be handled by the floor or convener.
         """
-        # TODO: Implement decline_invite event handling logic
-        # For now, this is just a stub that can be expanded based on requirements
-        pass
+        # Delegate to event_handlers module
+        event_handlers.bot_on_decline_invite(self, event, in_envelope, out_envelope)
 
     def bot_on_uninvite(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
         """Handle uninvite event.
@@ -417,19 +337,16 @@ class StellaAgent(BotAgent):
         This event is triggered when an agent is uninvited/removed from a conversation.
         Override this method to implement custom uninvite handling.
         """
-        # TODO: Implement uninvite event handling logic
-        # For now, this is just a stub that can be expanded based on requirements
-        pass
+        # Delegate to event_handlers module
+        event_handlers.bot_on_uninvite(self, event, in_envelope, out_envelope)
 
     def bot_on_revoke_floor(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
         """Handle revoke_floor event.
         
         This event is triggered when the agent's floor permissions are revoked.
-        Override this method to implement custom floor revocation handling.
         """
-        # TODO: Implement revoke_floor event handling logic
-        # For now, this is just a stub that can be expanded based on requirements
-        pass
+        # Delegate to event_handlers module
+        event_handlers.bot_on_revoke_floor(self, event, in_envelope, out_envelope)
 
     # Convenience helpers -------------------------------------------------
     def events_for_envelope(self, in_envelope: Envelope) -> List[EnvelopeEvent]:

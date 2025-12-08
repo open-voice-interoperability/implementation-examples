@@ -6,10 +6,11 @@ Supports local testing (flask run) and deployment on Vercel.
 from flask import Flask, request, Response
 from flask_cors import CORS
 import json
-import re
-import tempfile
-import uuid
+import sys
 import os
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # Your agent imports
 from stella_agent import load_manifest_from_config, StellaAgent
@@ -23,6 +24,8 @@ manifest = load_manifest_from_config()
 agent = StellaAgent(manifest)
 
 @app.route("/", methods=["POST"])
+@app.route("/api", methods=["POST"])
+@app.route("/api/", methods=["POST"])
 def handle_request():
     payload_text = request.get_data(as_text=True)
 
@@ -39,19 +42,11 @@ def handle_request():
     out_envelope = agent.process_envelope(in_envelope)
     payload_str = out_envelope.to_json(as_payload=True)
 
-    # Optional: save raw payload for debugging
-    try:
-        tmp_dir = tempfile.gettempdir()
-        dump_name = f"stella_outgoing_raw_{uuid.uuid4().hex}.json"
-        dump_path = os.path.join(tmp_dir, dump_name)
-        with open(dump_path, "w", encoding="utf-8") as f:
-            f.write(payload_str)
-        print(f"Wrote raw outgoing payload to: {dump_path}")
-    except Exception:
-        pass
-
     return Response(payload_str, mimetype="application/json")
 
+
+# Vercel handler - expose the app for serverless
+handler = app
 
 # -----------------------
 # Local test entrypoint

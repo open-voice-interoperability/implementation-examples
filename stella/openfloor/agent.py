@@ -94,9 +94,13 @@ class OpenFloorAgent(OpenFloorEvents):
                     # Match serviceUrl by equality or by hostname heuristics (localhost helpful for dev)
                     target_service = getattr(to, 'serviceUrl', None)
                     manifest_service = self._manifest.identification.serviceUrl
-                    if target_service and manifest_service and target_service == manifest_service:
-                        addressed = True
-                    elif target_service:
+                    # Normalize URLs by removing trailing slashes for comparison
+                    if target_service and manifest_service:
+                        target_normalized = target_service.rstrip('/')
+                        manifest_normalized = manifest_service.rstrip('/')
+                        if target_normalized == manifest_normalized:
+                            addressed = True
+                    if target_service and not addressed:
                         try:
                             parsed_target = urlparse(target_service)
                             parsed_manifest = urlparse(manifest_service or "")

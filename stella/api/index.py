@@ -45,8 +45,8 @@ def handle_request():
     return Response(payload_str, mimetype="application/json")
 
 
-# Vercel handler - expose the app for serverless
-handler = app
+# Vercel WSGI handler - this is the correct way to expose Flask for Vercel
+app = app
 
 # -----------------------
 # Local test entrypoint

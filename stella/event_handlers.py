@@ -16,6 +16,7 @@ def bot_on_invite(agent, event, in_envelope: Envelope, out_envelope: Envelope) -
     
     Check for "joining floor" in the invite or accompanying events,
     then accept the invitation and send a greeting utterance.
+    Send "acceptInvite" or "declineInvite" accordingly.
     """
     # Check for "joining floor" in the invite or accompanying events
     agent.joinedFloor = False

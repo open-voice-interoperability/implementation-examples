@@ -1,5 +1,5 @@
 from tkinterweb import HtmlFrame
-from customtkinter import CTk, CTkLabel, CTkEntry, CTkButton, CTkTextbox, CTkToplevel, CTkComboBox,CTkCheckBox,CTkScrollableFrame,CTkFrame,set_appearance_mode, set_default_color_theme
+from customtkinter import CTkButton, CTkCheckBox
 import tkinter.messagebox as messagebox
 from CTkMessagebox import CTkMessagebox
 import openfloor
@@ -9,25 +9,22 @@ from tkhtmlview import HTMLLabel
 import json
 import requests
 from datetime import datetime, date
-import re
 import socket
-
-from pathlib import Path
-import webbrowser
-
 
 from openfloor import events,envelope,dialog_event,manifest,agent,DialogEvent,Conversation
 from openfloor import OpenFloorEvents, OpenFloorAgent, BotAgent
 from openfloor import Manifest, Event, UtteranceEvent, InviteEvent, UninviteEvent, RevokeFloorEvent, GrantFloorEvent, PublishManifestsEvent
-from openfloor import Envelope, Sender, To, Parameters
+from openfloor import Envelope, Sender, To, Parameters, Conversant
+from openfloor.manifest import Identification
 
 import floor
 from known_agents import KNOWN_AGENTS
+import ui_components
+import event_handlers
 
 client_uri = ""
 client_url = ""  
 private = False
-invite_sentinel = False
 # construct a uri for the client
 today_str = ""
 authority = socket.getfqdn()
@@ -42,44 +39,41 @@ floor_manager = None
 invited_agents = []  # List to keep track of invited agents
 agent_textboxes = []  # List to keep track of individual agent textboxes
 revoked_agents = []  # List to keep track of agents whose floor has been revoked
+agent_checkboxes = {}  # Dictionary to track checkboxes: {agent_url: checkbox_widget}
 
-set_appearance_mode("light")
-set_default_color_theme("blue")
+# Global conversation to track conversants across the session
+global_conversation = Conversation()
+
+# Track full conversation history for context events
+conversation_history_for_context = []  # List of (speaker_name, speaker_uri, text) tuples
+
+# Track utterance IDs we've already added to conversation history to avoid duplicates
+processed_utterance_ids = set()
+
+# Setup UI appearance
+ui_components.setup_appearance()
 
 previous_urls = []
-# Initialize the last_event variable globally
-last_event = None
+# Initialize the outgoing_events variable globally to track all sent events
+outgoing_events = []
+last_event = None  # Keep for backward compatibility
 
-root = CTk()
-root.title("Open Floor Client Assistant")
-root.geometry("600x720")  # 50% bigger than default size
+# Create main window and UI elements
+root = ui_components.create_main_window()
+widgets = ui_components.create_ui_elements(root, KNOWN_AGENTS)
 
-CTkLabel(root, text="Enter Text:").pack(pady=(5, 0))
-entry = CTkEntry(root, width=400)
-entry.pack(pady=5, padx=20)
-
-CTkLabel(root, text = "Assistant URL:").pack(pady=(10, 0))
-url_combobox = CTkComboBox(root, width=400, values=[], state="normal")
-# Add the values to the combo box
-url_combobox.configure(values=[
-    "http://localhost:8767/"
-])
-url_combobox.set("http://localhost:8767/") 
-url_combobox.pack(pady=5, padx=20)
-
-
-display_text = CTkLabel(root, text="", wraplength=400)
-display_text.pack(pady=(5, 10))
-
-CTkLabel(root, text="Invited Agents:").pack(pady=(10, 0))
-
-# Frame to contain individual agent textboxes
-agents_frame = CTkScrollableFrame(root, height=200)
-agents_frame.pack(pady=5, padx=20, fill="both", expand=False)
-
-# Label to show when no agents are invited
-no_agents_label = CTkLabel(agents_frame, text="No agents invited yet")
-no_agents_label.pack(pady=10)
+# Extract widget references for easier access
+entry = widgets['entry']
+url_combobox = widgets['url_combobox']
+send_to_all_checkbox = widgets['send_to_all_checkbox']
+conversation_text = widgets['conversation_text']
+get_manifests_button = widgets['get_manifests_button']
+invite_button = widgets['invite_button']
+send_utterance_button = widgets['send_utterance_button']
+agents_frame = widgets['agents_frame']
+no_agents_label = widgets['no_agents_label']
+show_event_button = widgets['show_event_button']
+start_floor_button = widgets['start_floor_button']
 
 def add_invited_agent(agent_info):
     """Add an agent to the invited agents list."""
@@ -98,66 +92,96 @@ def update_agent_status(old_info, new_info):
 
 def create_agent_textbox(agent_info):
     """Create a frame with uninvite button and textbox for a specific agent."""
-    # Create a frame to hold both button and textbox
-    agent_frame = CTkFrame(agents_frame)
-    agent_frame.pack(pady=2, padx=5, fill="x")
-    
-    # Extract URL from agent_info (format: "Invited: URL" or "Connected: Name (URL)")
     agent_url = extract_url_from_agent_info(agent_info)
     
-    # Determine button text and command based on revoked status
-    if agent_url in revoked_agents:
-        floor_btn_text = "Grant Floor"
-        floor_btn_command = lambda: grant_floor_to_agent(agent_info, agent_url)
-    else:
-        floor_btn_text = "Revoke Floor"
-        floor_btn_command = lambda: revoke_floor_from_agent(agent_info, agent_url)
+    is_revoked = agent_url in revoked_agents
     
-    # Create revoke/grant floor button
-    floor_btn = CTkButton(agent_frame, text=floor_btn_text, width=90, height=25,
-                         command=floor_btn_command)
-    floor_btn.pack(side="left", padx=5, pady=5)
+    # Create UI elements using ui_components
+    agent_frame, textbox, uninvite_btn, floor_btn, agent_checkbox = ui_components.create_agent_textbox_ui(
+        agents_frame=agents_frame,
+        agent_info=agent_info,
+        agent_url=agent_url,
+        is_revoked=is_revoked,
+        grant_floor_callback=lambda: grant_floor_to_agent(agent_info, agent_url),
+        revoke_floor_callback=lambda: revoke_floor_from_agent(agent_info, agent_url),
+        uninvite_callback=lambda: uninvite_agent(agent_info, agent_url)
+    )
     
-    # Create uninvite button
-    uninvite_btn = CTkButton(agent_frame, text="Uninvite", width=80, height=25,
-                            command=lambda: uninvite_agent(agent_info, agent_url))
-    uninvite_btn.pack(side="left", padx=(0,5), pady=5)
+    # Store checkbox reference
+    agent_checkboxes[agent_url] = agent_checkbox
     
-    # Create textbox for agent info
-    textbox = CTkEntry(agent_frame, placeholder_text=agent_info)
-    textbox.insert(0, agent_info)
-    
-    # Apply strikethrough if floor has been revoked
-    if agent_url in revoked_agents:
-        # Create a struck-through version of the text
-        struck_text = ''.join([char + '\u0336' for char in agent_info])
-        textbox.delete(0, 'end')
-        textbox.insert(0, struck_text)
-    
-    textbox.configure(state="disabled")
-    textbox.pack(side="left", fill="x", expand=True, padx=(0,5), pady=5)
-    
-    agent_textboxes.append((agent_frame, textbox, uninvite_btn, floor_btn))
+    agent_textboxes.append((agent_frame, textbox, uninvite_btn, floor_btn, agent_checkbox))
     return agent_frame
 
 def extract_url_from_agent_info(agent_info):
     """Extract URL from agent info string."""
-    if agent_info.startswith("Invited: "):
-        return agent_info[9:]  # Remove "Invited: " prefix
+    # Agent info is now just the URL directly
     return agent_info
+
+def add_conversant_to_global(agent_url):
+    """Add a conversant to the global conversation."""
+    global global_conversation
+    # Check if already exists
+    for conversant in global_conversation.conversants:
+        if conversant.identification.serviceUrl == agent_url:
+            return  # Already exists
+    
+    # Add new conversant
+    conversant = Conversant(
+        identification=Identification(
+            speakerUri=f"agent:{agent_url}",
+            serviceUrl=agent_url,
+            conversationalName=agent_url
+        )
+    )
+    global_conversation.conversants.append(conversant)
+
+def remove_conversant_from_global(agent_url):
+    """Remove a conversant from the global conversation."""
+    global global_conversation
+    global_conversation.conversants = [
+        c for c in global_conversation.conversants 
+        if c.identification.serviceUrl != agent_url
+    ]
+
+def update_conversation_history(speaker, text, speaker_uri=None, utterance_id=None):
+    """Update the conversation history text area with a new utterance."""
+    global conversation_history_for_context, processed_utterance_ids
+    
+    # Skip if we've already processed this utterance
+    if utterance_id and utterance_id in processed_utterance_ids:
+        return
+    
+    # Add to context history
+    conversation_history_for_context.append((speaker, speaker_uri or speaker, text))
+    
+    # Mark as processed
+    if utterance_id:
+        processed_utterance_ids.add(utterance_id)
+    
+    # Get the utterance number (1-indexed based on how many we've added)
+    utterance_number = len(conversation_history_for_context)
+    
+    conversation_text.configure(state='normal')
+    current_text = conversation_text.get("1.0", "end-1c")
+    if current_text:
+        conversation_text.insert("end", "\n\n")  # Double newline for more spacing
+    # Use uppercase and special formatting to make speaker names stand out, with number
+    conversation_text.insert("end", f"{utterance_number}. [{speaker.upper()}] {text}")
+    conversation_text.configure(state='disabled')
+    # Auto-scroll to bottom
+    conversation_text.see("end")
 
 def update_agent_textbox(textbox, new_info):
     """Update an existing agent textbox with new information."""
-    textbox.configure(state="normal")
-    textbox.delete(0, "end")
-    textbox.insert(0, new_info)
-    textbox.configure(state="disabled")
+    ui_components.update_agent_textbox_ui(textbox, new_info)
 
 def grant_floor_to_agent(agent_info, agent_url):
     """Send grant floor message to agent."""
     try:
-        # Create grant floor envelope
-        conversation = Conversation()
+        # Create grant floor envelope using global conversation
+        global global_conversation
+        conversation = Conversation(id=global_conversation.id, conversants=list(global_conversation.conversants))
         sender = Sender(
             speakerUri=client_uri,
             serviceUrl=client_url
@@ -184,8 +208,9 @@ def grant_floor_to_agent(agent_info, agent_url):
         print(f"Grant floor sent to {agent_url}, status: {response.status_code}")
         
         # Store outgoing event for display
-        global last_event
+        global last_event, outgoing_events
         last_event = envelope
+        outgoing_events.append(envelope)
         
         # Update floor manager if active
         if floor_manager is not None:
@@ -208,8 +233,9 @@ def grant_floor_to_agent(agent_info, agent_url):
 def revoke_floor_from_agent(agent_info, agent_url):
     """Send revoke floor message to agent."""
     try:
-        # Create revoke floor envelope
-        conversation = Conversation()
+        # Create revoke floor envelope using global conversation
+        global global_conversation
+        conversation = Conversation(id=global_conversation.id, conversants=list(global_conversation.conversants))
         sender = Sender(
             speakerUri=client_uri,
             serviceUrl=client_url
@@ -236,8 +262,9 @@ def revoke_floor_from_agent(agent_info, agent_url):
         print(f"Revoke floor sent to {agent_url}, status: {response.status_code}")
         
         # Store outgoing event for display
-        global last_event
+        global last_event, outgoing_events
         last_event = envelope
+        outgoing_events.append(envelope)
         
         # Update floor manager if active
         if floor_manager is not None:
@@ -260,8 +287,9 @@ def revoke_floor_from_agent(agent_info, agent_url):
 def uninvite_agent(agent_info, agent_url):
     """Send uninvite message to agent and remove from list."""
     try:
-        # Create uninvite envelope
-        conversation = Conversation()
+        # Create uninvite envelope using global conversation
+        global global_conversation
+        conversation = Conversation(id=global_conversation.id, conversants=list(global_conversation.conversants))
         sender = Sender(
             speakerUri=client_uri,
             serviceUrl=client_url
@@ -288,8 +316,12 @@ def uninvite_agent(agent_info, agent_url):
         print(f"Uninvite sent to {agent_url}, status: {response.status_code}")
         
         # Store outgoing event for display
-        global last_event
+        global last_event, outgoing_events
         last_event = envelope
+        outgoing_events.append(envelope)
+        
+        # Remove from global conversation
+        remove_conversant_from_global(agent_url)
         
         # Remove from invited agents list
         if agent_info in invited_agents:
@@ -335,7 +367,7 @@ def update_agent_textboxes():
 
 
 def construct_event(event_type, user_input, convo_id, timestamp):
-    global client_uri, client_url, private, invite_sentinel
+    global client_uri, client_url, private
     if event_type == "utterance":
         event = openfloor.events.UtteranceEvent(
             eventType="utterance",
@@ -382,330 +414,356 @@ def get_manifests():
     send_events(["getManifests"])
 
 def invite():
+    # Check if the agent in the URL combobox is already invited
+    assistant_url = url_combobox.get()
+    if assistant_url:
+        # Check if this URL is already in the invited agents list
+        for agent_info in invited_agents:
+            if extract_url_from_agent_info(agent_info) == assistant_url:
+                # Agent already invited, do nothing
+                return
+    
     events_to_send = ["invite"]
     user_input = entry.get().strip()
     if user_input:
         events_to_send.append("utterance")
     send_events(events_to_send)
 
-def invite_sentinel():
-    send_events(["inviteSentinel","utterance"])
-
 # The main function to send events
 
 def send_events(event_types):
-    global client_url,client_uri,assistant_url, assistant_uri, assistantConversationalName, previous_urls, last_event,private
+    global client_url,client_uri,assistant_url, assistant_uri, assistantConversationalName, previous_urls, last_event, outgoing_events, private, global_conversation
     user_input = entry.get().strip()
     assistant_url = url_combobox.get()
     
-    if assistant_url not in previous_urls:
+    # Check if we should send to all invited agents
+    send_to_all = send_to_all_checkbox.get()
+    
+    # Determine target URLs
+    if send_to_all and invited_agents:
+        # Extract URLs from invited agents list
+        target_urls = [extract_url_from_agent_info(agent) for agent in invited_agents]
+        # Also include the URL in the combobox if it's not already in the list
+        if assistant_url and assistant_url not in target_urls:
+            target_urls.insert(0, assistant_url)
+    else:
+        # When send_to_all is unchecked, check individual agent checkboxes
+        target_urls = []
+        for agent_url, checkbox in agent_checkboxes.items():
+            if checkbox.get():  # If checkbox is checked
+                target_urls.append(agent_url)
+        # Also include the URL in the combobox if not already in target_urls
+        if assistant_url and assistant_url not in target_urls:
+            target_urls.insert(0, assistant_url)
+    
+    # For invite events, determine which URLs are new (not already invited)
+    new_invite_urls = []
+    if "invite" in event_types:
+        already_invited_urls = [extract_url_from_agent_info(agent) for agent in invited_agents]
+        new_invite_urls = [url for url in target_urls if url not in already_invited_urls]
+        # If all target URLs are already invited, don't send anything
+        if not new_invite_urls and "invite" in event_types and len(event_types) == 1:
+            return
+    
+    if not target_urls:
+        messagebox.showwarning("Warning", "No target URL specified.")
+        return
+    
+    # Update previous_urls while keeping KNOWN_AGENTS
+    if assistant_url and assistant_url not in previous_urls:
         previous_urls.append(assistant_url)
-        url_combobox.configure(values=previous_urls)
-    #construct a conversation envelope
-    conversation = Conversation()
-    sender = Sender(
-        speakerUri=client_uri,
-        serviceUrl=client_url
-    )
-    envelope = Envelope(
-        conversation=conversation,
-        sender=sender
-    )
+    # Merge KNOWN_AGENTS with previous_urls, preserving order and removing duplicates
+    all_urls = KNOWN_AGENTS.copy()
+    for url in previous_urls:
+        if url not in all_urls:
+            all_urls.append(url)
+    url_combobox.configure(values=all_urls)
+    
+    # When sending to all, use broadcast (no 'to' field) and send same envelope to all URLs
+    # Each agent will process it as a broadcast message
+    is_broadcast = send_to_all and len(target_urls) > 1
+    
+    # Messages sent via individual checkboxes should be private
+    use_private = not send_to_all
+    
+    # Create the envelope once (broadcast or addressed)
+    if is_broadcast:
+        # Create a single envelope with no 'to' field (broadcast)
+        # Use global conversation with current conversants
+        conversation = Conversation(id=global_conversation.id, conversants=list(global_conversation.conversants))
+        
+        # Add any new conversants from target_urls to global conversation
+        for agent_url in target_urls:
+            add_conversant_to_global(agent_url)
+        
+        sender = Sender(
+            speakerUri=client_uri,
+            serviceUrl=client_url
+        )
+        envelope = Envelope(
+            conversation=conversation,
+            sender=sender
+        )
 
-   
-    for event_type in event_types:
-        if assistant_url and (event_type != "utterance" or user_input):
-            display_text.configure(text = user_input)
-        if event_type == "inviteSentinel":
-            event_type = "invite"
-            private = True
-            invite_sentinel = True          
-            user_input = "act as a sentinel in this conversation"
-        elif event_type == "invite":
-            inviteEvent = openfloor.events.InviteEvent(to=To(serviceUrl=url_combobox.get().strip()))
-            private = True
-            invite_sentinel = False
-            envelope.events.append(inviteEvent)
-            
-            # Add to invited agents list
-            invited_url = url_combobox.get().strip()
-            add_invited_agent(f"Invited: {invited_url}")
-            
-            # If floor manager is active, add "joining floor" utterance
-            if floor_manager is not None:
-                floor_join_dialog = DialogEvent(
+        for event_type in event_types:
+            if event_type == "invite":
+                # Invite without 'to' field = broadcast invite
+                inviteEvent = openfloor.events.InviteEvent()
+                private = True
+                envelope.events.append(inviteEvent)
+                
+                # Add only new target URLs to invited agents list (not already invited)
+                for target_url in new_invite_urls:
+                    add_invited_agent(target_url)
+                
+                # If floor manager is active, add "joining floor" utterance
+                if floor_manager is not None:
+                    floor_join_dialog = DialogEvent(
+                        speakerUri=client_uri,
+                        features={
+                            "text": {
+                                "mimeType": "text/plain",
+                                "tokens": [{"value": "joining floor"}]
+                            }
+                        }
+                    )
+                    envelope.events.append(UtteranceEvent(dialogEvent=floor_join_dialog))
+            elif event_type == "getManifests":
+                # GetManifests without 'to' field = broadcast
+                getManifestsEvent = openfloor.events.GetManifestsEvent()
+                envelope.events.append(getManifestsEvent)
+            elif event_type == "utterance":
+                if not user_input:
+                    messagebox.showwarning("Warning", "Please enter some text before sending an utterance.")
+                    return
+                # Build a DialogEvent directly and attach it to an UtteranceEvent without 'to' field
+                dialog = DialogEvent(
                     speakerUri=client_uri,
                     features={
                         "text": {
                             "mimeType": "text/plain",
-                            "tokens": [{"value": "joining floor"}]
+                            "tokens": [{"value": user_input}]
                         }
                     }
                 )
-                envelope.events.append(UtteranceEvent(dialogEvent=floor_join_dialog,
-                                                      to=To(serviceUrl=url_combobox.get().strip(), private=True)))
-        elif event_type == "getManifests":
-            getManifestsEvent = openfloor.events.GetManifestsEvent(to=To(serviceUrl=url_combobox.get().strip()))
-            envelope.events.append(getManifestsEvent)
-        elif event_type == "utterance":
-            if not user_input:
-                messagebox.showwarning("Warning", "Please enter some text before sending an utterance.")
-                return
-            # Build a DialogEvent directly and attach it to an UtteranceEvent
-            dialog = DialogEvent(
-                speakerUri=client_uri,
-                features={
-                    "text": {
-                        "mimeType": "text/plain",
-                        "tokens": [{"value": user_input}]
-                    }
-                }
-            )
-            envelope.events.append(UtteranceEvent(dialogEvent=dialog,
-                                                  to=To(serviceUrl=url_combobox.get().strip(), private=private)))
-        
-    last_event = envelope
-    envelope_to_send = envelope.to_json(as_payload=True)
-    
-    # Convert JSON string to Python object
-    try:
-        payload_obj = json.loads(envelope_to_send)
-        print("Payload to send:", json.dumps(payload_obj, indent=2))  # debug
-        # Send POST request
-        response = requests.post(
-            assistant_url,
-            json=payload_obj
-            )
-        print("HTTP status:", response.status_code)
-        print("Response headers:", dict(response.headers))
-        print("Response text (first 500 chars):", response.text[:500])
-        
-        # Check if response is actually JSON
-        if response.status_code != 200:
-            CTkMessagebox(title="Error", 
-                         message=f"Server returned status {response.status_code}\n\nResponse: {response.text[:200]}", 
-                         icon="cancel")
-            return
-            
-        try:
-            response_data = response.json()
-        except json.JSONDecodeError as e:
-            CTkMessagebox(title="Error", 
-                         message=f"Server did not return valid JSON.\n\nStatus: {response.status_code}\n\nResponse: {response.text[:200]}", 
-                         icon="cancel")
-            print(f"Full response text: {response.text}")
-            return
-            
-        print("Response JSON:", json.dumps(response_data, indent=2))
-        incoming_events = response_data.get("openFloor", {}).get("events", [])
-        for event in incoming_events:
-            if event.get("eventType") == "publishManifests":
-                manifests = event.get("parameters", {}).get("servicingManifests", [])
-                if manifests:
-                    manifest = manifests[0]
-                    assistantConversationalName = manifest.get("identification", {}).get("conversationalName", "")
-                    assistant_uri = manifest.get("identification", {}).get("uri", "")
-                    manifest_service_url = manifest.get("identification", {}).get("serviceUrl", assistant_url)
-                    
-                    # Add agent to floor manager if active
-                    if floor_manager is not None and assistant_uri:
-                        try:
-                            floor_manager.add_conversant(
-                                speaker_uri=assistant_uri,
-                                service_url=manifest_service_url,
-                                conversational_name=assistantConversationalName
-                            )
-                            print(f"Added {assistantConversationalName or assistant_uri} to floor manager")
-                        except Exception as e:
-                            print(f"Failed to add agent to floor manager: {e}")
-                    #assistant_url = manifest.get("identification", {}).get("serviceUrl", "")
-                else:
-                    CTkMessagebox(title="Error", message="No servicing manifests found in the response.", icon="cancel")
-            elif event.get("eventType") == "utterance":
-                parameters = event.get("parameters", {})
-                dialog_event = parameters.get("dialogEvent", {})
-                features = dialog_event.get("features", {})
-                text_features = features.get("text", {})
-                html_features = features.get("html", {})
+                # Utterance without 'to' field = broadcast
+                envelope.events.append(UtteranceEvent(dialogEvent=dialog))
                 
-                # Check if there's an HTML feature and display it in browser
-                if html_features:
-                    html_tokens = html_features.get("tokens", [])
-                    if html_tokens:
-                        html_value = html_tokens[0].get("value", "")
-                        if html_value:
-                            display_response_html(html_value)
-                        
-                # Check the MIME type to determine how to display the content
-                mime_type = text_features.get("mimeType", "")
-                tokens = text_features.get("tokens", [])  
-                if tokens:
-                    extracted_value = tokens[0].get("value", "No value found")
-                    # If MIME type is text/plain, only display JSON response
-                    if mime_type == "text/plain":
-                        # For plain text, don't convert to HTML or display in browser
-                        pass  # Just continue to display_response_json at the end
-                    else:
-                        # For other MIME types (or no MIME type), process as HTML
-                        html_content = f"{convert_text_to_html(extracted_value)}"
-                        display_response_html(html_content)
-            display_response_json(response_data)
+                # Update conversation history
+                update_conversation_history("You", user_input)
+            
+        last_event = envelope
+        outgoing_events.append(envelope)
+        envelope_to_send = envelope.to_json(as_payload=True)
+        
+        # Convert JSON string to Python object
+        try:
+            payload_obj = json.loads(envelope_to_send)
+            print("Payload to send (BROADCAST):", json.dumps(payload_obj, indent=2))  # debug
+            
+            # For invite events, only send to new agents; for other events, send to all target URLs
+            urls_to_send = new_invite_urls if "invite" in event_types else target_urls
+            
+            # Phase 1: Send broadcast to all agents and collect their responses
+            all_responses = event_handlers.send_broadcast_to_agents(payload_obj, urls_to_send)
+            
+            # Phase 2: Process all responses and update conversation history
+            event_handlers.process_agent_responses(root, all_responses, floor_manager, update_conversation_history)
+            
+            # Phase 3: Forward all responses to all other agents (after processing all initial responses)
+            event_handlers.forward_responses_to_agents(all_responses, urls_to_send, global_conversation, update_conversation_history)
+        
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"Error processing incoming event: {error_details}")
+            CTkMessagebox(title="Error", message=f"Error processing incoming event: {str(e)}\n\nCheck console for details.", icon="cancel")
+    
+    else:
+        # Send to each target URL with a properly addressed envelope
+        for target_url in target_urls:
+            #construct a conversation envelope for this specific target
+            # Use global conversation and add target as conversant if needed
+            add_conversant_to_global(target_url)
+            conversation = Conversation(id=global_conversation.id, conversants=list(global_conversation.conversants))
+            
+            sender = Sender(
+                speakerUri=client_uri,
+                serviceUrl=client_url
+            )
+            envelope = Envelope(
+                conversation=conversation,
+                sender=sender
+            )
 
-    except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"Error processing incoming event: {error_details}")
-        CTkMessagebox(title="Error", message=f"Error processing incoming event: {str(e)}\n\nCheck console for details.", icon="cancel")
+            for event_type in event_types:
+                if event_type == "invite":
+                    inviteEvent = openfloor.events.InviteEvent(to=To(serviceUrl=target_url))
+                    private = True
+                    envelope.events.append(inviteEvent)
+                    
+                    # Add to invited agents list
+                    add_invited_agent(target_url)
+                    
+                    # If floor manager is active, add "joining floor" utterance
+                    if floor_manager is not None:
+                        floor_join_dialog = DialogEvent(
+                            speakerUri=client_uri,
+                            features={
+                                "text": {
+                                    "mimeType": "text/plain",
+                                    "tokens": [{"value": "joining floor"}]
+                                }
+                            }
+                        )
+                        envelope.events.append(UtteranceEvent(dialogEvent=floor_join_dialog,
+                                                              to=To(serviceUrl=target_url, private=True)))
+                elif event_type == "getManifests":
+                    getManifestsEvent = openfloor.events.GetManifestsEvent(to=To(serviceUrl=target_url))
+                    envelope.events.append(getManifestsEvent)
+                elif event_type == "utterance":
+                    if not user_input:
+                        messagebox.showwarning("Warning", "Please enter some text before sending an utterance.")
+                        return
+                    # Build a DialogEvent directly and attach it to an UtteranceEvent
+                    dialog = DialogEvent(
+                        speakerUri=client_uri,
+                        features={
+                            "text": {
+                                "mimeType": "text/plain",
+                                "tokens": [{"value": user_input}]
+                            }
+                        }
+                    )
+                    # Use private flag when sending via individual checkboxes
+                    envelope.events.append(UtteranceEvent(dialogEvent=dialog,
+                                                          to=To(serviceUrl=target_url, private=use_private or private)))
+                    
+                    # Update conversation history (only once, not for each target)
+                    if target_url == target_urls[0]:
+                        update_conversation_history("You", user_input)
+                
+            last_event = envelope
+            outgoing_events.append(envelope)
+            envelope_to_send = envelope.to_json(as_payload=True)
+            
+            # Convert JSON string to Python object
+            try:
+                payload_obj = json.loads(envelope_to_send)
+                print("Payload to send:", json.dumps(payload_obj, indent=2))  # debug
+                
+                # Send POST request to this target URL
+                print(f"\nSending to: {target_url}")
+                response = requests.post(
+                    target_url,
+                    json=payload_obj
+                )
+                print(f"HTTP status from {target_url}: {response.status_code}")
+                print("Response headers:", dict(response.headers))
+                print("Response text (first 500 chars):", response.text[:500])
+                
+                # Check if response is actually JSON
+                if response.status_code != 200:
+                    CTkMessagebox(title="Error", 
+                                 message=f"Server {target_url} returned status {response.status_code}\n\nResponse: {response.text[:200]}", 
+                                 icon="cancel")
+                    continue
+                    
+                try:
+                    response_data = response.json()
+                except json.JSONDecodeError as e:
+                    CTkMessagebox(title="Error", 
+                                 message=f"Server {target_url} did not return valid JSON.\n\nStatus: {response.status_code}\n\nResponse: {response.text[:200]}", 
+                                 icon="cancel")
+                    print(f"Full response text: {response.text}")
+                    continue
+                    
+                print("Response JSON:", json.dumps(response_data, indent=2))
+                incoming_events = response_data.get("openFloor", {}).get("events", [])
+                for event in incoming_events:
+                    if event.get("eventType") == "publishManifests":
+                        manifests = event.get("parameters", {}).get("servicingManifests", [])
+                        if manifests:
+                            manifest = manifests[0]
+                            assistantConversationalName = manifest.get("identification", {}).get("conversationalName", "")
+                            assistant_uri = manifest.get("identification", {}).get("uri", "")
+                            manifest_service_url = manifest.get("identification", {}).get("serviceUrl", assistant_url)
+                            
+                            # Add agent to floor manager if active
+                            if floor_manager is not None and assistant_uri:
+                                try:
+                                    floor_manager.add_conversant(
+                                        speaker_uri=assistant_uri,
+                                        service_url=manifest_service_url,
+                                        conversational_name=assistantConversationalName
+                                    )
+                                    print(f"Added {assistantConversationalName or assistant_uri} to floor manager")
+                                except Exception as e:
+                                    print(f"Failed to add agent to floor manager: {e}")
+                            #assistant_url = manifest.get("identification", {}).get("serviceUrl", "")
+                        else:
+                            CTkMessagebox(title="Error", message="No servicing manifests found in the response.", icon="cancel")
+                    elif event.get("eventType") == "utterance":
+                        parameters = event.get("parameters", {})
+                        dialog_event = parameters.get("dialogEvent", {})
+                        features = dialog_event.get("features", {})
+                        text_features = features.get("text", {})
+                        html_features = features.get("html", {})
+                        
+                        # Extract speaker info for conversation history
+                        speaker_uri = dialog_event.get("speakerUri", "Unknown")
+                        
+                        # Check if there's an HTML feature and display it in browser
+                        if html_features:
+                            html_tokens = html_features.get("tokens", [])
+                            if html_tokens:
+                                html_value = html_tokens[0].get("value", "")
+                                if html_value:
+                                    ui_components.display_response_html(html_value)
+                                
+                        # Check the MIME type to determine how to display the content
+                        mime_type = text_features.get("mimeType", "")
+                        tokens = text_features.get("tokens", [])  
+                        if tokens:
+                            extracted_value = tokens[0].get("value", "No value found")
+                            
+                            # Update conversation history with utterance ID for deduplication
+                            utterance_id = dialog_event.get("id")
+                            update_conversation_history(assistantConversationalName or speaker_uri, extracted_value, speaker_uri, utterance_id)
+                            
+                            # If MIME type is text/plain, only display JSON response
+                            if mime_type == "text/plain":
+                                # For plain text, don't convert to HTML or display in browser
+                                pass  # Just continue to display_response_json at the end
+                            else:
+                                # For other MIME types (or no MIME type), process as HTML
+                                html_content = f"{ui_components.convert_text_to_html(extracted_value)}"
+                                ui_components.display_response_html(html_content)
+                    ui_components.display_response_json(root, response_data, assistantConversationalName, assistant_url)
+
+            except Exception as e:
+                import traceback
+                error_details = traceback.format_exc()
+                print(f"Error processing incoming event: {error_details}")
+                CTkMessagebox(title="Error", message=f"Error processing incoming event: {str(e)}\n\nCheck console for details.", icon="cancel")
 
 
 # user interface functions
-def getAssistantWindowTitle():
-    title = "Assistant Response from " + assistantConversationalName + "  at " + assistant_url
-    return title
-
-def display_response_json(response_data):
-    response_window = CTkToplevel(root)
-    title = getAssistantWindowTitle()
-    response_window.title(title)
-    response_window.geometry("600x400")
-    response_text = CTkTextbox(response_window, wrap="word", width=600, height=400)
-    response_text.insert("0.0", json.dumps(response_data, indent=2))
-    response_text.configure(state="disabled")
-    response_text.pack(padx=10, pady=10)
-
-def display_response_html(html_content):
-    file_path = Path.cwd() / "cards.html"
-    file_path.write_text(html_content, encoding="utf-8")
-
-    webbrowser.open(file_path.as_uri())
-    
 
 def show_outgoing_event():
-    global last_event
-    if last_event:
-        event_window = CTkToplevel(root)
-        event_window.title("Outgoing Event")
-        event_text = CTkTextbox(
-            event_window, wrap='word', width=600, height=400)
-        event_text.insert('insert', last_event.to_json(as_payload=True, indent=2))
-        event_text.configure(state='disabled')
-        event_text.pack(pady=10, padx=10)
-    else:
-        messagebox.showinfo("Info", "No outgoing event to show")
-
-
-def escape_blanks_in_url(url):
-    """
-    Escape blanks (spaces) in URLs by replacing them with %20
-    Uses regex to find and replace spaces in URLs
-    """
-    # Only escape if it's a standalone URL, not already in HTML
-    blank_pattern = r'\s+'
-    escaped_url = re.sub(blank_pattern, '%20', url)
-    return escaped_url
-
-def convert_text_to_html(text):
-    """Convert text to HTML with URL detection and blank escaping"""
-    # Check if the text already contains HTML tags (like img tags)
-    if '<' in text and '>' in text:
-        # If it's already HTML, don't process it further to avoid breaking image links
-        return text
-    
-    # Only process plain text for URL detection
-    # Improved URL detection to prevent trailing punctuation issues
-    url_pattern = r'(?<!\w)(https?://[^\s<>"\'()]+[^\s<>"\'().,])(?!\w)'
-
-    def url_replacer(match):
-        url = match.group(0)
-        # Escape any blanks in the URL before creating the link
-        escaped_url = escape_blanks_in_url(url)
-        return f'<a href="{escaped_url}" target="_blank">{url}</a>'
-    
-    text_with_links = re.sub(url_pattern, url_replacer, text)
-    #return text_with_links.replace("\n", "<br>")
-    return text_with_links
+    """Send all outgoing events to all invited agents and display them."""
+    ui_components.show_outgoing_event_window(root, outgoing_events, invited_agents, extract_url_from_agent_info)
 
 def start_floor_manager():
     """Start a new floor manager for the current conversation."""
     global floor_manager
-    try:
-        # Create floor manager with current client as convener
-        floor_manager = floor.create_floor_manager(convener_uri=client_uri)
-        
-        # Add the client as a conversant
-        floor_manager.add_conversant(
-            speaker_uri=client_uri,
-            service_url=client_url,
-            conversational_name=client_name,
-            roles={floor.FloorRole.CONVENER}
-        )
-        
-        # Show floor manager window
-        show_floor_manager_window()
-        
-        CTkMessagebox(title="Floor Manager", 
-                     message="Floor manager started successfully!", 
-                     icon="info")
-    except Exception as e:
-        CTkMessagebox(title="Error", 
-                     message=f"Failed to start floor manager: {str(e)}", 
-                     icon="cancel")
+    floor_manager = ui_components.start_floor_manager_ui(root, client_uri, client_url, client_name)
 
-def show_floor_manager_window():
-    """Show the floor manager status window."""
-    global floor_manager
-    if not floor_manager:
-        CTkMessagebox(title="Error", 
-                     message="No floor manager is running", 
-                     icon="cancel")
-        return
-        
-    floor_window = CTkToplevel(root)
-    floor_window.title("Floor Manager Status")
-    floor_window.geometry("500x400")
-    
-    # Get floor status
-    status = floor_manager.get_floor_status()
-    
-    # Create text widget to display status
-    status_text = CTkTextbox(floor_window, wrap="word", width=480, height=350)
-    status_text.insert("0.0", json.dumps(status, indent=2))
-    status_text.configure(state="disabled")
-    status_text.pack(padx=10, pady=10)
-    
-    # Add refresh button
-    def refresh_status():
-        status = floor_manager.get_floor_status()
-        status_text.configure(state="normal")
-        status_text.delete("0.0", "end")
-        status_text.insert("0.0", json.dumps(status, indent=2))
-        status_text.configure(state="disabled")
-    
-    refresh_button = CTkButton(floor_window, text="Refresh", command=refresh_status)
-    refresh_button.pack(pady=5)
-
-# Buttons
-get_manifests_button = CTkButton(
-    root, text="Get Manifests", command=get_manifests)
-get_manifests_button.pack(pady=(10, 5))
-
-invite_button = CTkButton(root, text="Invite", command=invite)
-invite_button.pack(pady=5)
-
-invite_sentinel_button = CTkButton(
-    root, text="Invite sentinel", command = invite_sentinel)
-invite_sentinel_button.pack(pady=5)
-
-send_utterance_button = CTkButton(
-    root, text = "Send Utterance", command=send_utterance)
-send_utterance_button.pack(pady=5)
-
-show_event_button = CTkButton(
-    root, text="Show Outgoing Event", command=show_outgoing_event)
-show_event_button.pack(pady=(10, 5))
-
-start_floor_button = CTkButton(
-    root, text="Start Floor Manager", command=start_floor_manager)
-start_floor_button.pack(pady=5)
+# Configure button commands
+get_manifests_button.configure(command=get_manifests)
+invite_button.configure(command=invite)
+send_utterance_button.configure(command=send_utterance)
+show_event_button.configure(command=show_outgoing_event)
+start_floor_button.configure(command=start_floor_manager)
 
 root.mainloop()

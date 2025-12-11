@@ -14,7 +14,7 @@ import datetime
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
-port = 8767
+port = 8768
 
 @app.route('/verity/', methods=['POST'])
 def home():

@@ -75,6 +75,9 @@ no_agents_label = widgets['no_agents_label']
 show_event_button = widgets['show_event_button']
 start_floor_button = widgets['start_floor_button']
 
+# Initialize send utterance button as disabled (no agents yet)
+send_utterance_button.configure(state="disabled")
+
 def add_invited_agent(agent_info):
     """Add an agent to the invited agents list."""
     if agent_info not in invited_agents:
@@ -347,6 +350,13 @@ def uninvite_agent(agent_info, agent_url):
         CTkMessagebox(title="Error", message=f"Failed to uninvite agent: {str(e)}", icon="cancel")
         print(f"Error uninviting agent: {e}")
 
+def update_send_utterance_button_state():
+    """Enable or disable the send utterance button based on whether there are invited agents."""
+    if invited_agents:
+        send_utterance_button.configure(state="normal")
+    else:
+        send_utterance_button.configure(state="disabled")
+
 def update_agent_textboxes():
     """Update all agent textboxes to match the invited agents list."""
     # Clear all existing textboxes
@@ -364,6 +374,9 @@ def update_agent_textboxes():
             create_agent_textbox(agent_info)
     else:
         no_agents_label.pack(pady=10)
+    
+    # Update send utterance button state
+    update_send_utterance_button_state()
 
 
 def construct_event(event_type, user_input, convo_id, timestamp):
@@ -439,22 +452,21 @@ def send_events(event_types):
     # Check if we should send to all invited agents
     send_to_all = send_to_all_checkbox.get()
     
-    # Determine target URLs
-    if send_to_all and invited_agents:
-        # Extract URLs from invited agents list
+    # Determine target URLs based on event type
+    if "invite" in event_types or "getManifests" in event_types:
+        # For invite and getManifests, use the URL from the combobox
+        target_urls = [assistant_url] if assistant_url else []
+    elif send_to_all and invited_agents:
+        # For utterances, extract URLs from invited agents list
         target_urls = [extract_url_from_agent_info(agent) for agent in invited_agents]
-        # Also include the URL in the combobox if it's not already in the list
-        if assistant_url and assistant_url not in target_urls:
-            target_urls.insert(0, assistant_url)
     else:
         # When send_to_all is unchecked, check individual agent checkboxes
         target_urls = []
         for agent_url, checkbox in agent_checkboxes.items():
             if checkbox.get():  # If checkbox is checked
-                target_urls.append(agent_url)
-        # Also include the URL in the combobox if not already in target_urls
-        if assistant_url and assistant_url not in target_urls:
-            target_urls.insert(0, assistant_url)
+                # Only include if the agent is in the invited list
+                if any(extract_url_from_agent_info(agent) == agent_url for agent in invited_agents):
+                    target_urls.append(agent_url)
     
     # For invite events, determine which URLs are new (not already invited)
     new_invite_urls = []

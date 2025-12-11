@@ -43,6 +43,16 @@ def create_ui_elements(root, known_agents):
     widgets['entry'] = CTkEntry(root, width=400)
     widgets['entry'].pack(pady=5, padx=20)
     
+    # Send utterance button (directly below text entry)
+    widgets['send_utterance_button'] = CTkButton(root, text="Send Utterance")
+    widgets['send_utterance_button'].pack(pady=5)
+    
+    # Conversation history
+    CTkLabel(root, text="Conversation History:").pack(pady=(10, 0))
+    widgets['conversation_text'] = CTkTextbox(root, wrap='word', height=150)
+    widgets['conversation_text'].configure(state='disabled')
+    widgets['conversation_text'].pack(pady=5, padx=20, fill="both")
+    
     # URL combobox
     CTkLabel(root, text="Assistant URL:").pack(pady=(10, 0))
     widgets['url_combobox'] = CTkComboBox(root, width=400, values=known_agents, state="normal")
@@ -54,12 +64,6 @@ def create_ui_elements(root, known_agents):
     widgets['send_to_all_checkbox'].select()  # Checked by default
     widgets['send_to_all_checkbox'].pack(pady=5)
     
-    # Conversation history
-    CTkLabel(root, text="Conversation History:").pack(pady=(10, 0))
-    widgets['conversation_text'] = CTkTextbox(root, wrap='word', height=150)
-    widgets['conversation_text'].configure(state='disabled')
-    widgets['conversation_text'].pack(pady=5, padx=20, fill="both")
-    
     # Top buttons frame
     buttons_frame = CTkFrame(root)
     buttons_frame.pack(pady=(10, 5))
@@ -69,9 +73,6 @@ def create_ui_elements(root, known_agents):
     
     widgets['invite_button'] = CTkButton(buttons_frame, text="Invite")
     widgets['invite_button'].pack(side="left", padx=5)
-    
-    widgets['send_utterance_button'] = CTkButton(buttons_frame, text="Send Utterance")
-    widgets['send_utterance_button'].pack(side="left", padx=5)
     
     # Agent list section
     CTkLabel(root, text="Agents invited to the floor:").pack(pady=(10, 0))

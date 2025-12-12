@@ -66,6 +66,7 @@ class StellaAgent(BotAgent):
         self.conversationJoined = False
         self.joinedFloor = False
         self.grantedFloor = False
+        self.floorRevoked = False
 
     # OpenFloor event handlers - delegate to event handler class
     def bot_on_invite(self, event: InviteEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:

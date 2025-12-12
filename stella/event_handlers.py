@@ -95,6 +95,11 @@ def bot_on_invite(agent, event, in_envelope: Envelope, out_envelope: Envelope) -
 
 def bot_on_utterance(agent, event: UtteranceEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
     """Handle utterance event - process user input and generate response."""
+    # If floor has been revoked, do not respond to utterances
+    if getattr(agent, 'floorRevoked', False):
+        print("Floor has been revoked - ignoring utterance")
+        return
+    
     # Extract the user text robustly
     try:
         # event.parameters may be a Parameters dict or contain dialogEvent directly
@@ -197,6 +202,7 @@ def bot_on_grant_floor(agent, event, in_envelope: Envelope, out_envelope: Envelo
     If another agent is granted the floor, this agent should send an empty event.
     """
     agent.grantedFloor = True
+    agent.floorRevoked = False  # Reset revoked flag when floor is granted
 
 
 def bot_on_decline_invite(agent, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
@@ -226,3 +232,5 @@ def bot_on_revoke_floor(agent, event, in_envelope: Envelope, out_envelope: Envel
     This event is triggered when the agent's floor permissions are revoked.
     """
     agent.grantedFloor = False
+    agent.floorRevoked = True
+    print("Floor has been revoked - will not respond to further utterances")

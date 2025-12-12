@@ -129,6 +129,15 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
                 # Extract speaker info for conversation history
                 speaker_uri = dialog_event.get("speakerUri", "Unknown")
                 
+                # Try to get conversational name from floor manager if we don't have it yet
+                if not assistantConversationalName and floor_manager is not None and speaker_uri != "Unknown":
+                    try:
+                        conversant = floor_manager.conversants.get(speaker_uri)
+                        if conversant and conversant.conversational_name:
+                            assistantConversationalName = conversant.conversational_name
+                    except Exception as e:
+                        print(f"Could not look up conversational name from floor manager: {e}")
+                
                 # Check if there's an HTML feature and display it in browser
                 if html_features:
                     html_tokens = html_features.get("tokens", [])

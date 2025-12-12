@@ -2,6 +2,9 @@
 
 A graphical user interface (GUI) application for coordinating multi-agent conversations using the OpenFloor Protocol. This client enables users to interact with multiple conversational AI agents simultaneously, managing conversation flow, floor control, and agent invitations.
 
+![Assistant Client Interface](clientInterface.png)
+*Example: Assistant Client interface with two agents (Stella and Verity) on the floor*
+
 ## Overview
 
 The Assistant Client acts as a conversation coordinator (convener) that:

@@ -82,9 +82,9 @@ def bot_on_invite(agent, event, in_envelope: Envelope, out_envelope: Envelope) -
     
     # Modify greeting based on whether we joined a floor
     if agent.joinedFloor:
-        greeting = f"Hi, I'm {name}. I've joined the floor and I'm ready to help with space facts!"
+        greeting = f"Hi, I'm {name}. I've joined the floor and I'm ready to help with space images!"
     else:
-        greeting = f"Hi, I'm {name}. How can I help with space facts today?"
+        greeting = f"Hi, I'm {name}. What astronomical images would you like to see today?"
 
     dialog = DialogEvent(
         speakerUri=agent._manifest.identification.speakerUri,

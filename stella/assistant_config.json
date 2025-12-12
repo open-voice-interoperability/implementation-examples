@@ -14,8 +14,8 @@
             "serviceName": "space assistant",
             "organization": "BeaconForge",
             "serviceEndpoint": "http://localhost:8767",
-            "role": "help with space facts",
-            "synopsis": "knows about space"
+            "role": "shows astronomical images",
+            "synopsis": "sends images from NASA's image libraries"
         },
         "capabilities": {
             "keyphrases": [
@@ -23,13 +23,14 @@
                 "NASA",
                 "astronomy",
                 "stars",
+                "astronomy images",
                 "planets"
             ],
             "languages": [
                 "en-us"
             ],
             "descriptions":[
-                "Can ask NASA APIs about space facts",
+                "Can ask NASA APIs about space images",
                 "knows about astronomy"
             ],
             "supportedLayers": [

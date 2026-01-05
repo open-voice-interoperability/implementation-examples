@@ -93,7 +93,7 @@ def create_ui_elements(root, known_agents):
     widgets['show_event_button'].pack(side="left", padx=5)
     
     widgets['start_floor_button'] = CTkButton(bottom_buttons_frame, text="Start Floor Manager")
-    widgets['start_floor_button'].pack(side="left", padx=5)
+    # widgets['start_floor_button'].pack(side="left", padx=5)  # Hidden - auto-started on launch
     
     return widgets
 
@@ -105,7 +105,7 @@ def create_agent_textbox_ui(agents_frame, agent_info, agent_url,
     
     Args:
         agents_frame: Parent frame to contain the agent UI
-        agent_info: Agent information string
+        agent_info: Agent information dict with 'url' and 'conversational_name'
         agent_url: Agent's service URL
         is_revoked: Whether the agent's floor has been revoked
         grant_floor_callback: Function to call when granting floor
@@ -113,7 +113,7 @@ def create_agent_textbox_ui(agents_frame, agent_info, agent_url,
         uninvite_callback: Function to call when uninviting
         
     Returns:
-        tuple: (agent_frame, textbox, uninvite_btn, floor_btn, checkbox)
+        tuple: (agent_frame, url_textbox, name_textbox, uninvite_btn, floor_btn, checkbox)
     """
     # Create a frame to hold both button and textbox
     agent_frame = CTkFrame(agents_frame)
@@ -137,25 +137,47 @@ def create_agent_textbox_ui(agents_frame, agent_info, agent_url,
                             command=uninvite_callback)
     uninvite_btn.pack(side="left", padx=(0,5), pady=5)
     
-    # Create textbox for agent info
-    textbox = CTkEntry(agent_frame, placeholder_text=agent_info)
-    textbox.insert(0, agent_info)
+    # Extract conversational name and URL from agent_info
+    if isinstance(agent_info, dict):
+        conversational_name = agent_info.get('conversational_name', '')
+        url_display = agent_info.get('url', agent_url)
+    else:
+        # Backwards compatibility: if agent_info is just a string URL
+        conversational_name = ''
+        url_display = agent_info
+    
+    # Create textbox for conversational name (left side)
+    name_textbox = CTkEntry(agent_frame, placeholder_text="Name", width=150)
+    if conversational_name:
+        name_textbox.insert(0, conversational_name)
+    
+    # Apply strikethrough if floor has been revoked
+    if is_revoked and conversational_name:
+        struck_text = ''.join([char + '\u0336' for char in conversational_name])
+        name_textbox.delete(0, 'end')
+        name_textbox.insert(0, struck_text)
+    
+    name_textbox.configure(state="disabled")
+    name_textbox.pack(side="left", padx=(0,5), pady=5)
+    
+    # Create textbox for URL (right side, expandable)
+    url_textbox = CTkEntry(agent_frame, placeholder_text=url_display)
+    url_textbox.insert(0, url_display)
     
     # Apply strikethrough if floor has been revoked
     if is_revoked:
-        # Create a struck-through version of the text
-        struck_text = ''.join([char + '\u0336' for char in agent_info])
-        textbox.delete(0, 'end')
-        textbox.insert(0, struck_text)
+        struck_text = ''.join([char + '\u0336' for char in url_display])
+        url_textbox.delete(0, 'end')
+        url_textbox.insert(0, struck_text)
     
-    textbox.configure(state="disabled")
-    textbox.pack(side="left", fill="x", expand=True, padx=(0,5), pady=5)
+    url_textbox.configure(state="disabled")
+    url_textbox.pack(side="left", fill="x", expand=True, padx=(0,5), pady=5)
     
     # Create checkbox for private messaging when send_to_all is unchecked
     agent_checkbox = CTkCheckBox(agent_frame, text="", width=30)
     agent_checkbox.pack(side="left", padx=(0,5), pady=5)
     
-    return agent_frame, textbox, uninvite_btn, floor_btn, agent_checkbox
+    return agent_frame, url_textbox, name_textbox, uninvite_btn, floor_btn, agent_checkbox
 
 
 def update_agent_textbox_ui(textbox, new_info):
@@ -246,8 +268,8 @@ def convert_text_to_html(text):
     return text_with_links
 
 
-def start_floor_manager_ui(root, client_uri, client_url, client_name):
-    """Start a new floor manager and show its window."""
+def start_floor_manager_ui(root, client_uri, client_url, client_name, show_window=True, show_message=True):
+    """Start a new floor manager and optionally show its window."""
     try:
         # Create floor manager with current client as convener
         floor_manager = floor.create_floor_manager(convener_uri=client_uri)
@@ -260,12 +282,14 @@ def start_floor_manager_ui(root, client_uri, client_url, client_name):
             roles={floor.FloorRole.CONVENER}
         )
         
-        # Show floor manager window
-        show_floor_manager_window(root, floor_manager)
+        # Show floor manager window only if requested
+        if show_window:
+            show_floor_manager_window(root, floor_manager)
         
-        CTkMessagebox(title="Floor Manager", 
-                     message="Floor manager started successfully!", 
-                     icon="info")
+        if show_message:
+            CTkMessagebox(title="Floor Manager", 
+                         message="Floor manager started successfully!", 
+                         icon="info")
         
         return floor_manager
     except Exception as e:

@@ -40,6 +40,7 @@ invited_agents = []  # List to keep track of invited agents
 agent_textboxes = []  # List to keep track of individual agent textboxes
 revoked_agents = []  # List to keep track of agents whose floor has been revoked
 agent_checkboxes = {}  # Dictionary to track checkboxes: {agent_url: checkbox_widget}
+manifest_cache = {}  # Dictionary to cache conversational names from manifests: {url: conversational_name}
 
 # Global conversation to track conversants across the session
 global_conversation = Conversation()
@@ -78,11 +79,25 @@ start_floor_button = widgets['start_floor_button']
 # Initialize send utterance button as disabled (no agents yet)
 send_utterance_button.configure(state="disabled")
 
-def add_invited_agent(agent_info):
+def add_invited_agent(agent_url, conversational_name='', update_ui=True):
     """Add an agent to the invited agents list."""
-    if agent_info not in invited_agents:
-        invited_agents.append(agent_info)
-    update_agent_textboxes()
+    # Check manifest cache for conversational name if not provided
+    if not conversational_name and agent_url in manifest_cache:
+        conversational_name = manifest_cache[agent_url]
+    
+    agent_info = {'url': agent_url, 'conversational_name': conversational_name}
+    # Check if URL already exists in list
+    for existing_agent in invited_agents:
+        if extract_url_from_agent_info(existing_agent) == agent_url:
+            # Update with conversational name if we now have one
+            if conversational_name:
+                existing_agent['conversational_name'] = conversational_name
+                if update_ui:
+                    update_agent_textboxes()
+            return
+    invited_agents.append(agent_info)
+    if update_ui:
+        update_agent_textboxes()
 
 def update_agent_status(old_info, new_info):
     """Update an existing agent's status in the list."""
@@ -100,7 +115,7 @@ def create_agent_textbox(agent_info):
     is_revoked = agent_url in revoked_agents
     
     # Create UI elements using ui_components
-    agent_frame, textbox, uninvite_btn, floor_btn, agent_checkbox = ui_components.create_agent_textbox_ui(
+    agent_frame, url_textbox, name_textbox, uninvite_btn, floor_btn, agent_checkbox = ui_components.create_agent_textbox_ui(
         agents_frame=agents_frame,
         agent_info=agent_info,
         agent_url=agent_url,
@@ -113,12 +128,14 @@ def create_agent_textbox(agent_info):
     # Store checkbox reference
     agent_checkboxes[agent_url] = agent_checkbox
     
-    agent_textboxes.append((agent_frame, textbox, uninvite_btn, floor_btn, agent_checkbox))
+    agent_textboxes.append((agent_frame, url_textbox, name_textbox, uninvite_btn, floor_btn, agent_checkbox))
     return agent_frame
 
 def extract_url_from_agent_info(agent_info):
-    """Extract URL from agent info string."""
-    # Agent info is now just the URL directly
+    """Extract URL from agent info."""
+    if isinstance(agent_info, dict):
+        return agent_info.get('url', '')
+    # Backwards compatibility: if agent_info is just a string URL
     return agent_info
 
 def add_conversant_to_global(agent_url):
@@ -326,9 +343,8 @@ def uninvite_agent(agent_info, agent_url):
         # Remove from global conversation
         remove_conversant_from_global(agent_url)
         
-        # Remove from invited agents list
-        if agent_info in invited_agents:
-            invited_agents.remove(agent_info)
+        # Remove from invited agents list by URL (since agent_info might be a reference issue)
+        invited_agents[:] = [agent for agent in invited_agents if extract_url_from_agent_info(agent) != agent_url]
         
         # Remove from revoked agents list if present
         if agent_url in revoked_agents:
@@ -526,20 +542,7 @@ def send_events(event_types):
                 
                 # Add only new target URLs to invited agents list (not already invited)
                 for target_url in new_invite_urls:
-                    add_invited_agent(target_url)
-                
-                # If floor manager is active, add "joining floor" utterance
-                if floor_manager is not None:
-                    floor_join_dialog = DialogEvent(
-                        speakerUri=client_uri,
-                        features={
-                            "text": {
-                                "mimeType": "text/plain",
-                                "tokens": [{"value": "joining floor"}]
-                            }
-                        }
-                    )
-                    envelope.events.append(UtteranceEvent(dialogEvent=floor_join_dialog))
+                    add_invited_agent(target_url, update_ui=True)
             elif event_type == "getManifests":
                 # GetManifests without 'to' field = broadcast
                 getManifestsEvent = openfloor.events.GetManifestsEvent()
@@ -580,7 +583,7 @@ def send_events(event_types):
             all_responses = event_handlers.send_broadcast_to_agents(payload_obj, urls_to_send)
             
             # Phase 2: Process all responses and update conversation history
-            event_handlers.process_agent_responses(root, all_responses, floor_manager, update_conversation_history)
+            event_handlers.process_agent_responses(root, all_responses, floor_manager, update_conversation_history, invited_agents, update_agent_textboxes, extract_url_from_agent_info, manifest_cache)
             
             # Phase 3: Forward all responses to all other agents (after processing all initial responses)
             event_handlers.forward_responses_to_agents(all_responses, urls_to_send, global_conversation, update_conversation_history)
@@ -615,21 +618,7 @@ def send_events(event_types):
                     envelope.events.append(inviteEvent)
                     
                     # Add to invited agents list
-                    add_invited_agent(target_url)
-                    
-                    # If floor manager is active, add "joining floor" utterance
-                    if floor_manager is not None:
-                        floor_join_dialog = DialogEvent(
-                            speakerUri=client_uri,
-                            features={
-                                "text": {
-                                    "mimeType": "text/plain",
-                                    "tokens": [{"value": "joining floor"}]
-                                }
-                            }
-                        )
-                        envelope.events.append(UtteranceEvent(dialogEvent=floor_join_dialog,
-                                                              to=To(serviceUrl=target_url, private=True)))
+                    add_invited_agent(target_url, update_ui=True)
                 elif event_type == "getManifests":
                     getManifestsEvent = openfloor.events.GetManifestsEvent(to=To(serviceUrl=target_url))
                     envelope.events.append(getManifestsEvent)
@@ -701,6 +690,24 @@ def send_events(event_types):
                             assistant_uri = manifest.get("identification", {}).get("uri", "")
                             manifest_service_url = manifest.get("identification", {}).get("serviceUrl", assistant_url)
                             
+                            # Cache conversational name for later use
+                            if assistantConversationalName:
+                                manifest_cache[manifest_service_url] = assistantConversationalName
+                                if manifest_service_url != target_url:
+                                    manifest_cache[target_url] = assistantConversationalName
+                            
+                            # Update agent info with conversational name
+                            for agent_info in invited_agents:
+                                agent_info_url = extract_url_from_agent_info(agent_info)
+                                # Try matching both with the manifest_service_url and target_url
+                                if agent_info_url == manifest_service_url or agent_info_url == target_url:
+                                    if assistantConversationalName:
+                                        print(f"Updating agent {agent_info_url} with conversational name: {assistantConversationalName}")
+                                        agent_info['conversational_name'] = assistantConversationalName
+                                        print(f"Agent info after update: {agent_info}")
+                                        update_agent_textboxes()
+                                    break
+                            
                             # Add agent to floor manager if active
                             if floor_manager is not None and assistant_uri:
                                 try:
@@ -769,7 +776,7 @@ def show_outgoing_event():
 def start_floor_manager():
     """Start a new floor manager for the current conversation."""
     global floor_manager
-    floor_manager = ui_components.start_floor_manager_ui(root, client_uri, client_url, client_name)
+    floor_manager = ui_components.start_floor_manager_ui(root, client_uri, client_url, client_name, show_window=False, show_message=False)
 
 # Configure button commands
 get_manifests_button.configure(command=get_manifests)
@@ -777,5 +784,8 @@ invite_button.configure(command=invite)
 send_utterance_button.configure(command=send_utterance)
 show_event_button.configure(command=show_outgoing_event)
 start_floor_button.configure(command=start_floor_manager)
+
+# Automatically start floor manager on launch
+start_floor_manager()
 
 root.mainloop()

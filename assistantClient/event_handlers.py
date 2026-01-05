@@ -83,7 +83,7 @@ def send_broadcast_to_agents(payload_obj, urls_to_send):
     return all_responses
 
 
-def process_agent_responses(root, all_responses, floor_manager, update_conversation_history_callback):
+def process_agent_responses(root, all_responses, floor_manager, update_conversation_history_callback, invited_agents=None, update_agent_textboxes_callback=None, extract_url_callback=None, manifest_cache=None):
     """Phase 2: Process all responses and update conversation history.
     
     Args:
@@ -91,6 +91,10 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
         all_responses: List of response tuples from Phase 1
         floor_manager: Floor manager instance (or None)
         update_conversation_history_callback: Function to update conversation history
+        invited_agents: List of invited agent info dicts (optional)
+        update_agent_textboxes_callback: Function to update agent textboxes (optional)
+        extract_url_callback: Function to extract URL from agent info (optional)
+        manifest_cache: Dictionary to cache conversational names (optional)
     """
     for target_url, response_data, original_sender, incoming_events in all_responses:
         assistantConversationalName = ""
@@ -104,6 +108,26 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
                     assistantConversationalName = manifest.get("identification", {}).get("conversationalName", "")
                     assistant_uri = manifest.get("identification", {}).get("uri", "")
                     manifest_service_url = manifest.get("identification", {}).get("serviceUrl", target_url)
+                    
+                    # Cache conversational name for later use
+                    if manifest_cache is not None and assistantConversationalName:
+                        manifest_cache[manifest_service_url] = assistantConversationalName
+                        if manifest_service_url != target_url:
+                            manifest_cache[target_url] = assistantConversationalName
+                    
+                    # Update agent info with conversational name
+                    if invited_agents is not None and extract_url_callback is not None:
+                        for agent_info in invited_agents:
+                            agent_info_url = extract_url_callback(agent_info)
+                            # Try matching both with the manifest_service_url and target_url
+                            if agent_info_url == manifest_service_url or agent_info_url == target_url:
+                                if assistantConversationalName:
+                                    print(f"[event_handlers] Updating agent {agent_info_url} with conversational name: {assistantConversationalName}")
+                                    agent_info['conversational_name'] = assistantConversationalName
+                                    print(f"[event_handlers] Agent info after update: {agent_info}")
+                                    if update_agent_textboxes_callback is not None:
+                                        update_agent_textboxes_callback()
+                                break
                     
                     # Add agent to floor manager if active
                     if floor_manager is not None and assistant_uri:

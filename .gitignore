@@ -52,3 +52,24 @@ stella/stella/.vscode/tasks.json
 node_modules/
 
 .vercel
+assistantClient/assistantClient-Pegasus.py
+assistantClient/cards-Pegasus.html
+assistantClient/known_agents-Pegasus.py
+.vs/VSWorkspaceState.json
+assistantClientStella.code-workspace
+cards.html
+stella/api/index-Pegasus.py
+stella/assistant_config-Pegasus.json
+stella/openfloor/agent-Pegasus.py
+stella/package-lock-Pegasus.json
+stella/package-Pegasus.json
+stella/server-Pegasus.py
+stella/stella_agent-Pegasus-2.py
+stella/stella_agent-Pegasus.py
+verity/agentic_hallucination-Pegasus.py
+stella/vercel-Pegasus.json
+verity/assistant-Pegasus.py
+verity/assistant_config-Pegasus.json
+verity/local-Pegasus.py
+verity/pipeline-Pegasus.log
+websockets/secondaryAssistantHTTP-Pegasus.py

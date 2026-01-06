@@ -29,6 +29,15 @@ agent = StellaAgent(manifest)
 # ----------------------------
 # Routes
 # ----------------------------
+@app.route("/health", methods=["GET"])
+def health_check():
+    """Simple health check endpoint to verify server is running"""
+    return Response(json.dumps({
+        "status": "running",
+        "agent": manifest.identification.conversationId,
+        "serviceUrl": manifest.identification.serviceUrl
+    }), mimetype="application/json")
+
 @app.route("/", methods=["POST"])
 def handle_post():
     payload_text = request.get_data(as_text=True)
@@ -63,5 +72,10 @@ def handle_post():
 # Run server
 # ----------------------------
 if __name__ == "__main__":
+    print("=" * 60, flush=True)
+    print(f"🚀 STELLA SERVER STARTING on port {port}", flush=True)
+    print(f"📍 Health check: http://localhost:{port}/health", flush=True)
+    print(f"📍 Main endpoint: http://localhost:{port}/", flush=True)
+    print("=" * 60, flush=True)
     # Listen on all interfaces for Vercel (0.0.0.0)
     app.run(host="0.0.0.0", port=port, debug=True, use_reloader=False)

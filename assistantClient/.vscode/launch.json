@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Debug assistantClient",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/assistantClient.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    }
+  ]
+}

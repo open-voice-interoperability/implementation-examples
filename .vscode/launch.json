@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Stella Server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/stella/server.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/stella",
+            "justMyCode": false,
+            "env": {
+                "FLASK_ENV": "development",
+                "FLASK_DEBUG": "1"
+            }
+        },
+        {
+            "name": "Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}

@@ -4,17 +4,18 @@ An intelligent conversational agent that provides information about space and as
 
 ## 🌟 Overview
 
-Stella is a specialized assistant focused on space exploration, astronomy, and NASA's vast collection of astronomical images and data. It can answer questions about space, retrieve images from NASA's archives, and present information through multiple modalities including text, voice, and HTML.
+Stella is a specialized assistant focused on space exploration, astronomy, and NASA's vast collection of astronomical images and data. Right now it just accesses NASA's image repository, but in the future it will be extended to NASA's other API endpoints.
+
+**Note:** Stella is a standard OpenFloor agent and can work with any OpenFloor-compliant Floor Manager. The examples in this documentation use `assistantClient` as one implementation, but Stella can integrate with other Floor Manager implementations. 
 
 ## 🚀 Features
 
 - **Natural Language Understanding**: Powered by OpenAI GPT-4o for intelligent conversation
-- **NASA API Integration**: Direct access to NASA's APOD (Astronomy Picture of the Day) and other space-related APIs
-- **Multi-Modal Output**: Supports text, voice, and HTML responses
+- **NASA API Integration**: Direct access to NASA's image repository
+- **Multi-Modal Output**: Supports text and HTML responses
 - **OpenFloor Protocol**: Fully compliant with OpenFloor multi-agent conversation standard
 - **Dynamic Gallery Generation**: Creates beautiful HTML galleries from NASA image collections
-- **Intent Recognition**: Intelligently identifies user questions about space topics
-- **Conversation State Management**: Maintains context across multiple interactions
+
 
 ## 📋 Requirements
 
@@ -38,21 +39,23 @@ httpx==0.24.1
 
 ### System Overview
 
+The diagram below shows Stella working with the `assistantClient` Floor Manager. Stella can work with any OpenFloor-compliant Floor Manager.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     Assistant Client                         │
-│  (assistantClient - User Interface & Orchestration)         │
+│  (assistantClient - One Example Floor Manager)              │
 │                                                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │   Web UI     │  │    Voice     │  │    Floor     │     │
-│  │  Interface   │  │   Interface  │  │   Manager    │     │
-│  └──────────────┘  └──────────────┘  └──────────────┘     │
+│  ┌──────────────┐  ┌──────────────┐                        │
+│  │      UI      │  │    Floor     │                        │
+│  │  Interface   │  │   Manager    │                        │
+│  └──────────────┘  └──────────────┘                        │
 └────────────────────┬────────────────────────────────────────┘
                      │ OpenFloor Protocol (HTTP/JSON)
                      │
 ┌────────────────────▼────────────────────────────────────────┐
 │                      Stella Agent                            │
-│          (Flask Server - localhost:8767)                    │
+│     (Flask Server - deployable locally or on the web)       │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │          OpenFloor Agent Framework                    │  │
@@ -89,7 +92,7 @@ httpx==0.24.1
 │                                                              │
 │  ┌──────────────┐         ┌──────────────┐                 │
 │  │  OpenAI API  │         │   NASA APIs  │                 │
-│  │   (GPT-4o)   │         │    (APOD)    │                 │
+│  │   (GPT-4o)   │         │              │                 │
 │  └──────────────┘         └──────────────┘                 │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -146,7 +149,7 @@ User Input
            ▼
 ┌─────────────────────────────────────────────┐
 │ NASA API Integration (if needed)            │
-│ - get_nasa(): Fetch APOD data              │
+│ - get_nasa(): Fetch NASA data               │
 │ - Parse and format results                  │
 └──────────┬──────────────────────────────────┘
            │
@@ -181,7 +184,7 @@ User Input
 │                OpenFloor Envelope                  │
 ├────────────────────────────────────────────────────┤
 │ schema:                                            │
-│   └─ version: "1.0.0"                             │
+│   └─ version: "1.1"                               │
 │   └─ url: "https://openvoicenetwork.org/..."     │
 │                                                    │
 │ conversation:                                      │
@@ -226,7 +229,7 @@ User Input
    └─ Determines: Use NASA API
    │
 7. nasa_api.get_nasa()
-   └─ Fetches from NASA APOD endpoint
+   └─ Fetches from NASA API
    │
 8. generate_gallery_html_from_json_obj()
    └─ Creates HTML gallery
@@ -275,7 +278,9 @@ User Input
 
 ## 🚀 Usage
 
-### Running Locally
+**Note:** Stella can be deployed on the web (e.g., using Vercel or other hosting services). The local endpoint described below is for testing and development purposes.
+
+### Running Locally (Testing)
 
 **Start the Stella server:**
 ```bash
@@ -323,7 +328,7 @@ The workspace includes predefined tasks:
 {
   "openFloor": {
     "schema": {
-      "version": "1.0.0",
+      "version": "1.1",
       "url": "https://openvoicenetwork.org/schema"
     },
     "conversation": {
@@ -394,7 +399,6 @@ The workspace includes predefined tasks:
 ```
 stella/
 ├── stella_agent.py          # Main agent implementation
-├── assistant.py             # Legacy assistant logic
 ├── local.py                 # Flask server for local deployment
 ├── server.py                # Production server configuration
 ├── nasa_api.py             # NASA API integration
@@ -438,7 +442,7 @@ stella/
     "capabilities": {
       "keyphrases": ["space", "NASA", "astronomy", ...],
       "languages": ["en-us"],
-      "supportedLayers": ["text", "voice", "html"]
+      "supportedLayers": ["text", "html"]
     }
   }
 }
@@ -460,12 +464,11 @@ Stella implements the full OpenFloor specification:
 - **Manifest Publishing**: Advertises capabilities
 - **Event Handling**: Processes utterances, invites, and context events
 - **Floor Management**: Participates in multi-agent conversations
-- **Multi-modal Responses**: Supports text, HTML, and voice layers
+- **Multi-modal Responses**: Supports text and HTML layers
 
 ### NASA API Integration
 
-Direct integration with NASA's APIs including:
-- **APOD (Astronomy Picture of the Day)**: Daily space images with explanations
+Direct integration with NASA's APIs:
 - Dynamic query construction based on user requests
 - Error handling and fallback responses
 
@@ -537,7 +540,7 @@ For issues, questions, or suggestions:
 
 - [ ] Support for more NASA APIs (Mars Rover Photos, Earth Polychromatic Imaging Camera)
 - [ ] Enhanced multi-turn conversation memory
-- [ ] Voice input/output integration
+
 - [ ] Multi-language support
 - [ ] Advanced image search and filtering
 - [ ] Integration with additional space data sources

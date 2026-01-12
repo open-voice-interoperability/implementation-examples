@@ -2,6 +2,7 @@
 # This file contains a list of known OpenFloor agents for quick invitations
 
 KNOWN_AGENTS = [
+    "http://localhost:8080/",
     "http://localhost:8767/",
     "http://localhost:8768/",
     "http://secondAssistant.pythonanywhere.com/verity/",

@@ -1,15 +1,14 @@
-from tkinterweb import HtmlFrame
 from customtkinter import CTkButton, CTkCheckBox
-import tkinter.messagebox as messagebox
-from CTkMessagebox import CTkMessagebox
-import openfloor
 
-from tkhtmlview import HTMLLabel
+# Set True to enable very verbose console debug output (HTTP payloads, headers, etc.)
+DEBUG_CONSOLE_HTTP = False
+import openfloor
 
 import json
 import requests
-from datetime import datetime, date
+from datetime import datetime
 import socket
+import traceback
 
 from openfloor import events,envelope,dialog_event,manifest,agent,DialogEvent,Conversation
 from openfloor import OpenFloorEvents, OpenFloorAgent, BotAgent
@@ -26,7 +25,6 @@ client_uri = ""
 client_url = ""  
 private = False
 # construct a uri for the client
-today_str = ""
 authority = socket.getfqdn()
 hostname = socket.gethostname()
 ip_address = socket.gethostbyname(hostname)
@@ -57,7 +55,6 @@ ui_components.setup_appearance()
 previous_urls = []
 # Initialize the outgoing_events variable globally to track all sent events
 outgoing_events = []
-last_event = None  # Keep for backward compatibility
 
 # Create main window and UI elements
 root = ui_components.create_main_window()
@@ -67,17 +64,89 @@ widgets = ui_components.create_ui_elements(root, KNOWN_AGENTS)
 entry = widgets['entry']
 url_combobox = widgets['url_combobox']
 send_to_all_checkbox = widgets['send_to_all_checkbox']
+show_incoming_events_checkbox = widgets['show_incoming_events_checkbox']
 conversation_text = widgets['conversation_text']
 get_manifests_button = widgets['get_manifests_button']
 invite_button = widgets['invite_button']
 send_utterance_button = widgets['send_utterance_button']
 agents_frame = widgets['agents_frame']
 no_agents_label = widgets['no_agents_label']
-show_event_button = widgets['show_event_button']
+show_outgoing_events_checkbox = widgets['show_outgoing_events_checkbox']
 start_floor_button = widgets['start_floor_button']
+show_error_log_checkbox = widgets['show_error_log_checkbox']
+
+# Error log window state (shown/hidden via checkbox)
+error_log_window = None
+error_log_textbox = None
+error_log_buffer = []  # list[str]
 
 # Initialize send utterance button as disabled (no agents yet)
 send_utterance_button.configure(state="disabled")
+
+def log_error(message):
+    """Log error message to the error log textbox."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entry = f"[{timestamp}] {message}\n" + ("-" * 80) + "\n"
+    error_log_buffer.append(entry)
+
+    # If the error log window is open, append to it.
+    global error_log_textbox
+    if error_log_textbox is not None:
+        try:
+            error_log_textbox.configure(state='normal')
+            error_log_textbox.insert('end', entry)
+            error_log_textbox.see('end')
+            error_log_textbox.configure(state='disabled')
+        except Exception:
+            pass
+    print(message)  # Also print to console
+
+
+def update_error_log_visibility():
+    """Show/hide the error log window based on the checkbox."""
+    global error_log_window, error_log_textbox
+    try:
+        if show_error_log_checkbox.get():
+            if error_log_window is None or not error_log_window.winfo_exists():
+                error_log_window, error_log_textbox = ui_components.create_error_log_window(root)
+
+                # Populate with buffered log entries
+                try:
+                    error_log_textbox.configure(state='normal')
+                    error_log_textbox.delete('0.0', 'end')
+                    error_log_textbox.insert('end', ''.join(error_log_buffer))
+                    error_log_textbox.see('end')
+                    error_log_textbox.configure(state='disabled')
+                except Exception:
+                    pass
+
+                # If user closes via X, reflect in checkbox state
+                def _on_close():
+                    global error_log_window, error_log_textbox
+                    try:
+                        show_error_log_checkbox.deselect()
+                    except Exception:
+                        pass
+                    try:
+                        if error_log_window is not None and error_log_window.winfo_exists():
+                            error_log_window.destroy()
+                    except Exception:
+                        pass
+                    error_log_window = None
+                    error_log_textbox = None
+
+                try:
+                    error_log_window.protocol("WM_DELETE_WINDOW", _on_close)
+                except Exception:
+                    pass
+        else:
+            if error_log_window is not None and error_log_window.winfo_exists():
+                error_log_window.destroy()
+            error_log_window = None
+            error_log_textbox = None
+    except Exception:
+        # UI should never crash on a visibility toggle
+        pass
 
 def add_invited_agent(agent_url, conversational_name='', update_ui=True):
     """Add an agent to the invited agents list."""
@@ -99,15 +168,6 @@ def add_invited_agent(agent_url, conversational_name='', update_ui=True):
     if update_ui:
         update_agent_textboxes()
 
-def update_agent_status(old_info, new_info):
-    """Update an existing agent's status in the list."""
-    if old_info in invited_agents:
-        index = invited_agents.index(old_info)
-        invited_agents[index] = new_info
-    else:
-        invited_agents.append(new_info)
-    update_agent_textboxes()
-
 def create_agent_textbox(agent_info):
     """Create a frame with uninvite button and textbox for a specific agent."""
     agent_url = extract_url_from_agent_info(agent_info)
@@ -124,6 +184,20 @@ def create_agent_textbox(agent_info):
         revoke_floor_callback=lambda: revoke_floor_from_agent(agent_info, agent_url),
         uninvite_callback=lambda: uninvite_agent(agent_info, agent_url)
     )
+
+    # UX rule: selecting any per-agent "send private" checkbox should turn off
+    # the global "Send to all invited agents" mode.
+    def _on_private_checkbox_toggle(url=agent_url, checkbox=agent_checkbox):
+        try:
+            if checkbox.get():
+                send_to_all_checkbox.deselect()
+        except Exception:
+            pass
+
+    try:
+        agent_checkbox.configure(command=_on_private_checkbox_toggle)
+    except Exception:
+        pass
     
     # Store checkbox reference
     agent_checkboxes[agent_url] = agent_checkbox
@@ -228,8 +302,7 @@ def grant_floor_to_agent(agent_info, agent_url):
         print(f"Grant floor sent to {agent_url}, status: {response.status_code}")
         
         # Store outgoing event for display
-        global last_event, outgoing_events
-        last_event = envelope
+        global outgoing_events
         outgoing_events.append(envelope)
         
         # Update floor manager if active
@@ -247,7 +320,9 @@ def grant_floor_to_agent(agent_info, agent_url):
         update_agent_textboxes()
         
     except Exception as e:
-        CTkMessagebox(title="Error", message=f"Failed to grant floor to agent: {str(e)}", icon="cancel")
+        error_msg = f"Failed to grant floor to agent: {str(e)}\n\n{traceback.format_exc()}"
+        log_error(error_msg)
+        ui_components.show_app_message(root, "Error", f"Failed to grant floor to agent: {str(e)}\n\nSee Error Log for details")
         print(f"Error granting floor to agent: {e}")
 
 def revoke_floor_from_agent(agent_info, agent_url):
@@ -282,8 +357,7 @@ def revoke_floor_from_agent(agent_info, agent_url):
         print(f"Revoke floor sent to {agent_url}, status: {response.status_code}")
         
         # Store outgoing event for display
-        global last_event, outgoing_events
-        last_event = envelope
+        global outgoing_events
         outgoing_events.append(envelope)
         
         # Update floor manager if active
@@ -301,7 +375,9 @@ def revoke_floor_from_agent(agent_info, agent_url):
         update_agent_textboxes()
         
     except Exception as e:
-        CTkMessagebox(title="Error", message=f"Failed to revoke floor from agent: {str(e)}", icon="cancel")
+        error_msg = f"Failed to revoke floor from agent: {str(e)}\n\n{traceback.format_exc()}"
+        log_error(error_msg)
+        ui_components.show_app_message(root, "Error", f"Failed to revoke floor from agent: {str(e)}\n\nSee Error Log for details")
         print(f"Error revoking floor from agent: {e}")
 
 def uninvite_agent(agent_info, agent_url):
@@ -336,8 +412,7 @@ def uninvite_agent(agent_info, agent_url):
         print(f"Uninvite sent to {agent_url}, status: {response.status_code}")
         
         # Store outgoing event for display
-        global last_event, outgoing_events
-        last_event = envelope
+        global outgoing_events
         outgoing_events.append(envelope)
         
         # Remove from global conversation
@@ -363,7 +438,9 @@ def uninvite_agent(agent_info, agent_url):
         update_agent_textboxes()
         
     except Exception as e:
-        CTkMessagebox(title="Error", message=f"Failed to uninvite agent: {str(e)}", icon="cancel")
+        error_msg = f"Failed to uninvite agent: {str(e)}\n\n{traceback.format_exc()}"
+        log_error(error_msg)
+        ui_components.show_app_message(root, "Error", f"Failed to uninvite agent: {str(e)}\n\nSee Error Log for details")
         print(f"Error uninviting agent: {e}")
 
 def update_send_utterance_button_state():
@@ -395,47 +472,6 @@ def update_agent_textboxes():
     update_send_utterance_button_state()
 
 
-def construct_event(event_type, user_input, convo_id, timestamp):
-    global client_uri, client_url, private
-    if event_type == "utterance":
-        event = openfloor.events.UtteranceEvent(
-            eventType="utterance",
-            to=To(
-                serviceUrl=url_combobox.get().strip(),
-                private=private
-            ),
-            parameters=Parameters(
-                dialogEvent=openfloor.dialog_event.DialogEvent(
-                    speakerUri=client_uri,
-                    features={
-                        "text": {
-                            "mimeType": "text/plain",
-                            "tokens": [{"value": user_input}]
-                        }
-                    }
-                )
-            )
-        )
-    elif event_type == "invite":
-        event = InviteEvent(
-            eventType="invite",
-            to=To(
-                serviceUrl=url_combobox.get().strip(),
-                private=private
-            ),
-            parameters=Parameters()
-        )
-    elif event_type == "getManifests":
-        event = openfloor.events.GetManifestsEvent(
-            eventType="getManifests",
-            to=To(
-                serviceUrl=url_combobox.get().strip(),
-                private=private
-            ),
-            parameters=Parameters()
-        )
-    return event
-
 def send_utterance():
     send_events(["utterance"])
 
@@ -461,9 +497,9 @@ def invite():
 # The main function to send events
 
 def send_events(event_types):
-    global client_url,client_uri,assistant_url, assistant_uri, assistantConversationalName, previous_urls, last_event, outgoing_events, private, global_conversation
+    global client_url,client_uri,assistant_url, assistant_uri, assistantConversationalName, previous_urls, outgoing_events, private, global_conversation
     user_input = entry.get().strip()
-    assistant_url = url_combobox.get()
+    assistant_url = (url_combobox.get() or "").strip()
     
     # Check if we should send to all invited agents
     send_to_all = send_to_all_checkbox.get()
@@ -494,7 +530,19 @@ def send_events(event_types):
             return
     
     if not target_urls:
-        messagebox.showwarning("Warning", "No target URL specified.")
+        # Note: for utterances we send to invited agents (or selected private-agent checkboxes),
+        # not directly to the combobox URL. So it’s possible to have a visible Assistant URL
+        # while still having “no target” for an utterance.
+        if "invite" in event_types or "getManifests" in event_types:
+            ui_components.show_app_message(root, "Warning", "No Assistant URL specified.")
+        elif not invited_agents:
+            ui_components.show_app_message(root, "Warning", "No invited agents to send to. Invite an agent first.")
+        else:
+            ui_components.show_app_message(
+                root,
+                "Warning",
+                "No agents selected. Enable 'Send to all invited agents' or select an agent checkbox.",
+            )
         return
     
     # Update previous_urls while keeping KNOWN_AGENTS
@@ -549,7 +597,7 @@ def send_events(event_types):
                 envelope.events.append(getManifestsEvent)
             elif event_type == "utterance":
                 if not user_input:
-                    messagebox.showwarning("Warning", "Please enter some text before sending an utterance.")
+                    ui_components.show_app_message(root, "Warning", "Please enter some text before sending an utterance.")
                     return
                 # Build a DialogEvent directly and attach it to an UtteranceEvent without 'to' field
                 dialog = DialogEvent(
@@ -567,14 +615,17 @@ def send_events(event_types):
                 # Update conversation history
                 update_conversation_history("You", user_input)
             
-        last_event = envelope
         outgoing_events.append(envelope)
         envelope_to_send = envelope.to_json(as_payload=True)
         
         # Convert JSON string to Python object
         try:
             payload_obj = json.loads(envelope_to_send)
-            print("Payload to send (BROADCAST):", json.dumps(payload_obj, indent=2))  # debug
+            if DEBUG_CONSOLE_HTTP:
+                print("Payload to send (BROADCAST):", json.dumps(payload_obj, indent=2))
+
+            if show_outgoing_events_checkbox.get():
+                ui_components.display_outgoing_envelope_json(root, payload_obj, target_label="broadcast")
             
             # For invite events, only send to new agents; for other events, send to all target URLs
             urls_to_send = new_invite_urls if "invite" in event_types else target_urls
@@ -583,7 +634,17 @@ def send_events(event_types):
             all_responses = event_handlers.send_broadcast_to_agents(payload_obj, urls_to_send)
             
             # Phase 2: Process all responses and update conversation history
-            event_handlers.process_agent_responses(root, all_responses, floor_manager, update_conversation_history, invited_agents, update_agent_textboxes, extract_url_from_agent_info, manifest_cache)
+            event_handlers.process_agent_responses(
+                root,
+                all_responses,
+                floor_manager,
+                update_conversation_history,
+                invited_agents,
+                update_agent_textboxes,
+                extract_url_from_agent_info,
+                manifest_cache,
+                show_incoming_events=bool(show_incoming_events_checkbox.get())
+            )
             
             # Phase 3: Forward all responses to all other agents (after processing all initial responses)
             event_handlers.forward_responses_to_agents(all_responses, urls_to_send, global_conversation, update_conversation_history)
@@ -592,7 +653,7 @@ def send_events(event_types):
             import traceback
             error_details = traceback.format_exc()
             print(f"Error processing incoming event: {error_details}")
-            CTkMessagebox(title="Error", message=f"Error processing incoming event: {str(e)}\n\nCheck console for details.", icon="cancel")
+            ui_components.show_app_message(root, "Error", f"Error processing incoming event: {str(e)}\n\nCheck console for details.")
     
     else:
         # Send to each target URL with a properly addressed envelope
@@ -624,7 +685,7 @@ def send_events(event_types):
                     envelope.events.append(getManifestsEvent)
                 elif event_type == "utterance":
                     if not user_input:
-                        messagebox.showwarning("Warning", "Please enter some text before sending an utterance.")
+                        ui_components.show_app_message(root, "Warning", "Please enter some text before sending an utterance.")
                         return
                     # Build a DialogEvent directly and attach it to an UtteranceEvent
                     dialog = DialogEvent(
@@ -644,42 +705,59 @@ def send_events(event_types):
                     if target_url == target_urls[0]:
                         update_conversation_history("You", user_input)
                 
-            last_event = envelope
             outgoing_events.append(envelope)
             envelope_to_send = envelope.to_json(as_payload=True)
             
             # Convert JSON string to Python object
             try:
                 payload_obj = json.loads(envelope_to_send)
-                print("Payload to send:", json.dumps(payload_obj, indent=2))  # debug
+                if DEBUG_CONSOLE_HTTP:
+                    print("="*80)
+                    print("OUTGOING ENVELOPE JSON:")
+                    print("="*80)
+                    print(json.dumps(payload_obj, indent=2))
+                    print("="*80)
+
+                if show_outgoing_events_checkbox.get():
+                    ui_components.display_outgoing_envelope_json(root, payload_obj, target_label=target_url)
                 
                 # Send POST request to this target URL
-                print(f"\nSending to: {target_url}")
+                if DEBUG_CONSOLE_HTTP:
+                    print(f"\nSending to: {target_url}")
                 response = requests.post(
                     target_url,
                     json=payload_obj
                 )
-                print(f"HTTP status from {target_url}: {response.status_code}")
-                print("Response headers:", dict(response.headers))
-                print("Response text (first 500 chars):", response.text[:500])
+                if DEBUG_CONSOLE_HTTP:
+                    print(f"HTTP status from {target_url}: {response.status_code}")
+                    print("Response headers:", dict(response.headers))
+                    print("Response text (first 500 chars):", response.text[:500])
                 
                 # Check if response is actually JSON
                 if response.status_code != 200:
-                    CTkMessagebox(title="Error", 
-                                 message=f"Server {target_url} returned status {response.status_code}\n\nResponse: {response.text[:200]}", 
-                                 icon="cancel")
+                    error_msg = f"Server {target_url} returned status {response.status_code}\n\nFull Response:\n{response.text}"
+                    log_error(error_msg)
+                    ui_components.show_app_message(
+                        root,
+                        "Error",
+                        f"Server {target_url} returned status {response.status_code}\n\nSee Error Log for full response",
+                    )
                     continue
                     
                 try:
                     response_data = response.json()
                 except json.JSONDecodeError as e:
-                    CTkMessagebox(title="Error", 
-                                 message=f"Server {target_url} did not return valid JSON.\n\nStatus: {response.status_code}\n\nResponse: {response.text[:200]}", 
-                                 icon="cancel")
-                    print(f"Full response text: {response.text}")
+                    error_msg = f"Server {target_url} did not return valid JSON.\n\nStatus: {response.status_code}\n\nFull Response:\n{response.text}\n\nJSON Error: {str(e)}"
+                    log_error(error_msg)
+                    ui_components.show_app_message(
+                        root,
+                        "Error",
+                        f"Server {target_url} did not return valid JSON.\n\nSee Error Log for full response",
+                    )
                     continue
                     
-                print("Response JSON:", json.dumps(response_data, indent=2))
+                if DEBUG_CONSOLE_HTTP:
+                    print("Response JSON:", json.dumps(response_data, indent=2))
                 incoming_events = response_data.get("openFloor", {}).get("events", [])
                 for event in incoming_events:
                     if event.get("eventType") == "publishManifests":
@@ -702,9 +780,11 @@ def send_events(event_types):
                                 # Try matching both with the manifest_service_url and target_url
                                 if agent_info_url == manifest_service_url or agent_info_url == target_url:
                                     if assistantConversationalName:
-                                        print(f"Updating agent {agent_info_url} with conversational name: {assistantConversationalName}")
+                                        if DEBUG_CONSOLE_HTTP:
+                                            print(f"Updating agent {agent_info_url} with conversational name: {assistantConversationalName}")
                                         agent_info['conversational_name'] = assistantConversationalName
-                                        print(f"Agent info after update: {agent_info}")
+                                        if DEBUG_CONSOLE_HTTP:
+                                            print(f"Agent info after update: {agent_info}")
                                         update_agent_textboxes()
                                     break
                             
@@ -716,12 +796,14 @@ def send_events(event_types):
                                         service_url=manifest_service_url,
                                         conversational_name=assistantConversationalName
                                     )
-                                    print(f"Added {assistantConversationalName or assistant_uri} to floor manager")
+                                    if DEBUG_CONSOLE_HTTP:
+                                        print(f"Added {assistantConversationalName or assistant_uri} to floor manager")
                                 except Exception as e:
-                                    print(f"Failed to add agent to floor manager: {e}")
+                                    if DEBUG_CONSOLE_HTTP:
+                                        print(f"Failed to add agent to floor manager: {e}")
                             #assistant_url = manifest.get("identification", {}).get("serviceUrl", "")
                         else:
-                            CTkMessagebox(title="Error", message="No servicing manifests found in the response.", icon="cancel")
+                            ui_components.show_app_message(root, "Error", "No servicing manifests found in the response.")
                     elif event.get("eventType") == "utterance":
                         parameters = event.get("parameters", {})
                         dialog_event = parameters.get("dialogEvent", {})
@@ -758,20 +840,20 @@ def send_events(event_types):
                                 # For other MIME types (or no MIME type), process as HTML
                                 html_content = f"{ui_components.convert_text_to_html(extracted_value)}"
                                 ui_components.display_response_html(html_content)
-                    ui_components.display_response_json(root, response_data, assistantConversationalName, assistant_url)
+
+                # Optionally show incoming events in separate windows
+                if show_incoming_events_checkbox.get():
+                    for event in incoming_events:
+                        ui_components.display_incoming_event_json(root, event, assistantConversationalName, assistant_url)
 
             except Exception as e:
                 import traceback
                 error_details = traceback.format_exc()
                 print(f"Error processing incoming event: {error_details}")
-                CTkMessagebox(title="Error", message=f"Error processing incoming event: {str(e)}\n\nCheck console for details.", icon="cancel")
+                ui_components.show_app_message(root, "Error", f"Error processing incoming event: {str(e)}\n\nCheck console for details.")
 
 
 # user interface functions
-
-def show_outgoing_event():
-    """Send all outgoing events to all invited agents and display them."""
-    ui_components.show_outgoing_event_window(root, outgoing_events, invited_agents, extract_url_from_agent_info)
 
 def start_floor_manager():
     """Start a new floor manager for the current conversation."""
@@ -782,10 +864,13 @@ def start_floor_manager():
 get_manifests_button.configure(command=get_manifests)
 invite_button.configure(command=invite)
 send_utterance_button.configure(command=send_utterance)
-show_event_button.configure(command=show_outgoing_event)
 start_floor_button.configure(command=start_floor_manager)
+show_error_log_checkbox.configure(command=update_error_log_visibility)
 
 # Automatically start floor manager on launch
 start_floor_manager()
+
+# Apply initial error log visibility
+update_error_log_visibility()
 
 root.mainloop()

@@ -1,0 +1,31 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "TimeAgent",
+      "speakerUri": "http://localhost:8081",
+      "serviceUrl": "http://localhost:8081",
+      "organization": "Open Voice Network",
+      "role": "assistant",
+      "synopsis": "A world time information agent providing current time in major cities"
+    },
+    "capabilities": {
+      "keyphrases": [
+        "time",
+        "clock",
+        "timezone",
+        "what time",
+        "current time"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Provides current time information for major cities worldwide",
+        "Supports queries about time zones and current time in different locations"
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

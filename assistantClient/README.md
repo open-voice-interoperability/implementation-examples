@@ -20,7 +20,7 @@ The Assistant Client acts as a conversation coordinator (convener) that:
 
 The application uses a modular architecture with three main components:
 
-### 1. `assistantClient.py` (728 lines)
+### 1. `assistantClient.py`
 **Main coordinator and application entry point**
 - Initializes the GUI and manages global state
 - Handles agent management (add, update, invite, uninvite)
@@ -34,13 +34,14 @@ The application uses a modular architecture with three main components:
 - Floor manager integration
 - Event envelope construction
 
-### 2. `ui_components.py` (281 lines)
+### 2. `ui_components.py`
 **User interface layer**
 - Creates all GUI elements using CustomTkinter
 - Handles UI display and updates
 - Manages conversation history display
-- Provides HTML response rendering in browser
-- Handles JSON response display
+- Displays JSON response/event windows when enabled
+- Provides a toggleable error log window
+- Applies the same app icon to all windows (main + event/error windows)
 
 **Key Components:**
 - Text entry and send button
@@ -49,7 +50,7 @@ The application uses a modular architecture with three main components:
 - Agent checkboxes with floor control buttons
 - Event viewer and floor status display
 
-### 3. `event_handlers.py` (292 lines)
+### 3. `event_handlers.py`
 **Three-phase message processing engine**
 - **Phase 1: Broadcast** - Send messages to all target agents
 - **Phase 2: Process** - Handle responses and update UI
@@ -72,12 +73,7 @@ The application uses a modular architecture with three main components:
 
 **Install dependencies:**
 ```bash
-pip install customtkinter CTkMessagebox requests
-```
-
-Optional (for HTML display):
-```bash
-pip install tkhtmlview
+pip install customtkinter requests pillow
 ```
 
 **Run the application:**
@@ -106,7 +102,10 @@ python assistantClient.py
 4. **Send utterances**
    - Type your message in the text entry field
    - Click "Send Utterance" (only enabled when agents are invited)
-   - Messages are sent to all checked (invited) agents
+   - If "Send to all invited agents" is checked, utterances go to all invited agents
+   - If unchecked, utterances go only to the per-agent checkboxes you selected
+
+Note: the "Assistant URL" combobox is used for "Invite" and "Get Manifests". Utterances are sent to invited agents (or selected per-agent checkboxes), not directly to the combobox URL.
 
 ### Floor Management
 
@@ -154,9 +153,11 @@ The client includes an optional floor manager for controlling conversation turn-
 
 ### Viewing Events
 
-**Show Last Event:**
-- Click "Show Event" button to view the last sent OpenFloor envelope
-- Displays full JSON structure for debugging
+Use the bottom-bar toggles:
+
+- **show outgoing events**: opens a window showing each outgoing envelope
+- **show incoming events**: opens a window showing each incoming event
+- **show error log**: opens the error log window
 
 **Conversation History:**
 - Displays all utterances with speaker labels
@@ -245,9 +246,9 @@ Optional floor management for turn-taking control. Features:
 ## Error Handling
 
 **Connection Errors:**
-- Displays user-friendly error dialogs
+- Displays user-friendly in-app dialogs
 - Continues processing other agents if one fails
-- Logs errors to console
+- Logs errors to the Error Log window (and console)
 
 **Timeout Handling:**
 - 5-second timeout per agent request
@@ -295,9 +296,9 @@ Optional floor management for turn-taking control. Features:
 
 ```
 assistantClient/
-├── assistantClient.py       # Main coordinator (728 lines)
-├── ui_components.py         # UI layer (281 lines)
-├── event_handlers.py        # Event processing (326 lines)
+├── assistantClient.py       # Main coordinator
+├── ui_components.py         # UI layer (windows, icons, event/error windows)
+├── event_handlers.py        # Event processing (broadcast/process/forward)
 ├── floor.py                 # Floor management
 ├── known_agents.py          # Agent discovery
 ├── openfloor/              # OpenFloor protocol classes
@@ -306,6 +307,7 @@ assistantClient/
 │   ├── events.py
 │   ├── manifest.py
 │   └── dialog_event.py
+├── assets/                 # App icon sources + generated Windows .ico
 └── README.md               # This file
 ```
 

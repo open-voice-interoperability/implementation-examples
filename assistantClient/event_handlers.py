@@ -83,7 +83,7 @@ def send_broadcast_to_agents(payload_obj, urls_to_send):
     return all_responses
 
 
-def process_agent_responses(root, all_responses, floor_manager, update_conversation_history_callback, invited_agents=None, update_agent_textboxes_callback=None, extract_url_callback=None, manifest_cache=None):
+def process_agent_responses(root, all_responses, floor_manager, update_conversation_history_callback, invited_agents=None, update_agent_textboxes_callback=None, extract_url_callback=None, manifest_cache=None, show_incoming_events: bool = False):
     """Phase 2: Process all responses and update conversation history.
     
     Args:
@@ -194,7 +194,9 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
                         html_content = f"{ui_components.convert_text_to_html(extracted_value)}"
                         ui_components.display_response_html(html_content)
                         
-        ui_components.display_response_json(root, response_data, assistantConversationalName, assistant_url)
+        if show_incoming_events:
+            for event in incoming_events:
+                ui_components.display_incoming_event_json(root, event, assistantConversationalName, assistant_url)
 
 
 def forward_responses_to_agents(all_responses, urls_to_send, global_conversation, update_conversation_history_callback):

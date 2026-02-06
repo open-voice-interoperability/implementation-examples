@@ -124,7 +124,7 @@ def generate_response(inputOPENFLOOR, sender_from):
              
             else: 
                 response_text = ("the request was to verify: " + 
-                                user_input + "." + "The utterance is " +
+                                user_input + "." + "\nThe utterance is " +
                                 decision + " with a likelihood of being factual of " +
                                 str(response_dict["factual_likelihood"]) + ". " +
                                 response_dict["explanation"] 

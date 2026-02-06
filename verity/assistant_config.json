@@ -14,7 +14,7 @@
             "conversationalName": "Verity",
             "department": "Fact checking",
             "organization": "BeaconForge",
-            "serviceUrl": "http://localhost:8767/verity",
+            "serviceUrl": "http://localhost:8768/verity",
             "role": "detect and mitigate hallucinations",
             "synopsis": "can detect if statements are correct or not"
         },

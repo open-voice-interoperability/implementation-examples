@@ -1,0 +1,30 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Erin",
+      "speakerUri": "http://localhost:8080",
+      "serviceUrl": "http://localhost:8080",
+      "organization": "OpenFloor",
+      "role": "assistant",
+      "synopsis": "An OpenFloor compliant agent whose answers are often false"
+    },
+    "capabilities": {
+      "keyphrases": [
+        "help",
+        "assist",
+        "support"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "A template agent demonstrating OpenFloor compliance",
+        "Handles all OpenFloor events with customizable utterance processing"
+      ],
+      "supportedLayers": [
+        "text",
+        "html"
+      ]
+    }
+  }
+}

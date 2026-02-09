@@ -1,0 +1,31 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "GeminiGeo",
+      "speakerUri": "http://localhost:8769",
+      "serviceUrl": "http://localhost:8769",
+      "organization": "OpenFloor",
+      "role": "geography assistant",
+      "synopsis": "Conversational front end to the Gemini API for geography facts"
+    },
+    "capabilities": {
+      "keyphrases": [
+        "geography",
+        "maps",
+        "countries",
+        "coordinates",
+        "distances"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Conversational geography facts via Gemini",
+        "Answers questions about places, regions, and distances"
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

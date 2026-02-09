@@ -71,8 +71,18 @@ class LLMIntegrationAgent:
 reviewer_agent = LLMIntegrationAgent(
     name="Reviewer",
     model_config=model_configs["Checker"],
-    system_message="Review the input utterance and determine if it can be factual or if factuality doesn't apply. Factuality doesn't apply to utterances that are unknowable, subjective, opinions, questions, commands or assertions about the future. If factuality applies, describe any reasons that the utterance is not factual. Include explicit disclaimers wherever content is speculative or fictional to ensure users are aware of its nature. Include as a Python dict: "
-                   "'applicable' (yes if factuality applies and no if it doesn't)'decision' (whether the utterance is factual or not factual),'factual_likelihood' (how likely the utterance is to be factual on a scale of 0 to 1, where 0 is certainly not factual and 1 is certainly factual),'explanation' (description of the decision), max 75 words)."
+    system_message=(
+        "Review the input utterance and determine if it can be factual or if factuality doesn't apply. "
+        "Factuality doesn't apply to utterances that are unknowable, subjective, opinions, questions, "
+        "commands or assertions about the future. If factuality applies, describe any reasons that the "
+        "utterance is not factual. However, if factuality does not apply, but the utterance contains a "
+        "false presupposition, identify and explain that presupposition. Include explicit disclaimers "
+        "wherever content is speculative or fictional to ensure users are aware of its nature. Include "
+        "as a Python dict: 'applicable' (yes if factuality applies and no if it doesn't) 'decision' "
+        "(whether the utterance is factual or not factual), 'factual_likelihood' (how likely the "
+        "utterance is to be factual on a scale of 0 to 1, where 0 is certainly not factual and 1 is "
+        "certainly factual), 'explanation' (description of the decision), max 75 words."
+    )
 )
 
 

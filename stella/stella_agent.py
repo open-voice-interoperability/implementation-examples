@@ -170,7 +170,7 @@ class StellaAgent(BotAgent):
                 return "I'm sorry — I can't access the language model right now."
 
             # Build message history
-            system_prompt = "You are a helpful astronomy assistant named stella that knows how to access the NASA image API with information about space.  You will generate an API call for the NASA search API that provides image information about the topic of the user's query. You will only provide the exact API call without any other explanation. You will decline to answer questions outside of this domain."
+            system_prompt = "You are a helpful astronomy assistant named stella that knows how to access the NASA image API with information about space.  You will generate an API call for the NASA search API that provides image information about the topic of the user's query. You will only provide the exact API call without any other explanation. You will decline to answer questions outside astronomy images."
             if self._config and self._config.get("functionPrompt"):
                 content = self._config.get("functionPrompt") + " " + system_prompt
             else:

@@ -330,3 +330,759 @@
 2025-07-05 11:36:54,912 - INFO - Reviewer generated a response.
 2025-07-05 11:36:54,913 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The Eiffel Tower is not located in Berlin. It is in Paris, France.'}.
 2025-07-05 11:36:56,482 - INFO - 127.0.0.1 - - [05/Jul/2025 11:36:56] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 10:44:39,564 - INFO - Loading agent configuration...
+2026-02-07 10:44:39,612 - INFO - Agent initialized: Verity
+2026-02-07 10:44:39,613 - INFO - Service URL: http://localhost:8768/verity
+2026-02-07 10:44:39,613 - INFO - Agent initialized: Verity
+2026-02-07 10:44:39,614 - INFO - Service URL: http://localhost:8768/verity
+2026-02-07 10:44:39,615 - INFO - ============================================================
+2026-02-07 10:44:39,615 - INFO - Verity OpenFloor Agent Server
+2026-02-07 10:44:39,617 - INFO - ============================================================
+2026-02-07 10:44:39,617 - INFO - Agent: Verity
+2026-02-07 10:44:39,618 - INFO - Service URL: http://localhost:8768/verity
+2026-02-07 10:44:39,618 - INFO - Speaker URI: openFloor:verity
+2026-02-07 10:44:39,618 - INFO - ============================================================
+2026-02-07 10:44:39,618 - INFO - ============================================================
+2026-02-07 10:44:39,618 - INFO - Verity OpenFloor Agent Server
+2026-02-07 10:44:39,619 - INFO - ============================================================
+2026-02-07 10:44:39,620 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-02-07 10:44:39,620 - INFO - Agent: Verity
+2026-02-07 10:44:39,620 - INFO -   POST /        - OpenFloor envelope processing
+2026-02-07 10:44:39,620 - INFO - Service URL: http://localhost:8768/verity
+2026-02-07 10:44:39,622 - INFO -   GET  /health  - Health check
+2026-02-07 10:44:39,622 - INFO -   POST /manifest - Agent manifest
+2026-02-07 10:44:39,622 - INFO - Server starting on http://0.0.0.0:8768
+2026-02-07 10:44:39,622 - INFO - ============================================================
+2026-02-07 10:44:39,622 - INFO - ============================================================
+2026-02-07 10:44:39,623 - INFO - Endpoints:
+2026-02-07 10:44:39,623 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-02-07 10:44:39,623 - INFO -   POST /        - OpenFloor envelope processing
+2026-02-07 10:44:39,623 - INFO -   GET  /health  - Health check
+2026-02-07 10:44:39,624 - INFO -   POST /manifest - Agent manifest
+2026-02-07 10:44:39,624 - INFO - ============================================================
+2026-02-07 10:44:40,843 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-02-07 10:44:40,843 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-02-07 10:44:40,844 - INFO - [33mPress CTRL+C to quit[0m
+2026-02-07 10:44:40,844 - INFO - [33mPress CTRL+C to quit[0m
+2026-02-07 10:46:10,816 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 10:46:10,817 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 10:46:10,822 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-02-07 10:46:10,828 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 10:46:10,830 - INFO - 127.0.0.1 - - [07/Feb/2026 10:46:10] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 10:46:43,478 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 10:46:43,478 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 10:46:43,492 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 10:46:43,494 - INFO - 127.0.0.1 - - [07/Feb/2026 10:46:43] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 10:47:36,681 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 10:47:36,681 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 10:47:36,692 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 10:47:36,694 - INFO - 127.0.0.1 - - [07/Feb/2026 10:47:36] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 16:52:17,640 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 16:52:17,727 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 16:52:17,745 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 16:52:17,749 - INFO - 127.0.0.1 - - [07/Feb/2026 16:52:17] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 16:53:36,181 - INFO - Loading agent configuration...
+2026-02-07 16:53:36,299 - INFO - Agent initialized: Verity
+2026-02-07 16:53:36,300 - INFO - Service URL: http://localhost:8768/verity
+2026-02-07 16:53:36,306 - INFO - ============================================================
+2026-02-07 16:53:36,306 - INFO - Verity OpenFloor Agent Server
+2026-02-07 16:53:36,306 - INFO - ============================================================
+2026-02-07 16:53:36,307 - INFO - Agent: Verity
+2026-02-07 16:53:36,308 - INFO - Service URL: http://localhost:8768/verity
+2026-02-07 16:53:36,308 - INFO - Speaker URI: openFloor:verity
+2026-02-07 16:53:36,309 - INFO - Server starting on http://0.0.0.0:8768
+2026-02-07 16:53:36,309 - INFO - ============================================================
+2026-02-07 16:53:36,309 - INFO - Endpoints:
+2026-02-07 16:53:36,310 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-02-07 16:53:36,311 - INFO -   POST /        - OpenFloor envelope processing
+2026-02-07 16:53:36,311 - INFO -   GET  /health  - Health check
+2026-02-07 16:53:36,311 - INFO -   POST /manifest - Agent manifest
+2026-02-07 16:53:36,312 - INFO - ============================================================
+2026-02-07 16:53:37,985 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-02-07 16:53:37,985 - INFO - [33mPress CTRL+C to quit[0m
+2026-02-07 16:53:46,871 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 16:53:46,871 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 16:53:46,871 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 16:53:46,871 - INFO - 127.0.0.1 - - [07/Feb/2026 16:53:46] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 16:54:09,955 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 16:54:09,955 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 16:54:09,955 - INFO - [UNINVITE] Received uninvite from conversation: conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 16:54:09,975 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 16:54:09,977 - INFO - 127.0.0.1 - - [07/Feb/2026 16:54:09] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 16:54:17,841 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 16:54:17,842 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 16:54:17,845 - INFO - [INVITE] Received invitation to conversation: conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 16:54:18,041 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 16:54:18,041 - INFO - 127.0.0.1 - - [07/Feb/2026 16:54:18] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 16:54:29,764 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 16:54:29,765 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 16:54:29,776 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 16:54:29,778 - INFO - 127.0.0.1 - - [07/Feb/2026 16:54:29] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 16:55:02,416 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 16:55:02,416 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 16:55:02,416 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-02-07 16:55:02,416 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 16:55:02,416 - INFO - 127.0.0.1 - - [07/Feb/2026 16:55:02] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 16:55:42,744 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 16:55:42,744 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 16:55:42,744 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 16:55:42,744 - INFO - 127.0.0.1 - - [07/Feb/2026 16:55:42] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 16:58:38,342 - INFO - Loading agent configuration...
+2026-02-07 16:58:38,344 - INFO - Agent initialized: Verity
+2026-02-07 16:58:38,345 - INFO - Service URL: http://localhost:8768/verity
+2026-02-07 16:58:38,348 - INFO - ============================================================
+2026-02-07 16:58:38,348 - INFO - Verity OpenFloor Agent Server
+2026-02-07 16:58:38,349 - INFO - ============================================================
+2026-02-07 16:58:38,349 - INFO - Agent: Verity
+2026-02-07 16:58:38,350 - INFO - Service URL: http://localhost:8768/verity
+2026-02-07 16:58:38,350 - INFO - Speaker URI: openFloor:verity
+2026-02-07 16:58:38,351 - INFO - Server starting on http://0.0.0.0:8768
+2026-02-07 16:58:38,351 - INFO - ============================================================
+2026-02-07 16:58:38,351 - INFO - Endpoints:
+2026-02-07 16:58:38,352 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-02-07 16:58:38,352 - INFO -   POST /        - OpenFloor envelope processing
+2026-02-07 16:58:38,353 - INFO -   GET  /health  - Health check
+2026-02-07 16:58:38,353 - INFO -   POST /manifest - Agent manifest
+2026-02-07 16:58:38,354 - INFO - ============================================================
+2026-02-07 16:58:39,243 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-02-07 16:58:39,243 - INFO - [33mPress CTRL+C to quit[0m
+2026-02-07 16:59:50,947 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 16:59:50,947 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 16:59:50,947 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-02-07 16:59:50,964 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 16:59:50,965 - INFO - 127.0.0.1 - - [07/Feb/2026 16:59:50] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 17:30:47,350 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 17:30:47,352 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 17:30:47,353 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-02-07 17:30:47,353 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 17:30:47,353 - INFO - 127.0.0.1 - - [07/Feb/2026 17:30:47] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 17:32:59,889 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 17:32:59,889 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 17:32:59,905 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 17:32:59,906 - INFO - 127.0.0.1 - - [07/Feb/2026 17:32:59] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 17:36:34,744 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 17:36:34,744 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 17:36:34,744 - INFO - [UNINVITE] Received uninvite from conversation: conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 17:36:34,744 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 17:36:34,744 - INFO - 127.0.0.1 - - [07/Feb/2026 17:36:34] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 17:36:56,433 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 17:36:56,434 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 17:36:56,436 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-02-07 17:36:56,437 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 17:36:56,438 - INFO - 127.0.0.1 - - [07/Feb/2026 17:36:56] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 17:37:06,290 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 17:37:06,290 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 17:37:06,290 - INFO - [INVITE] Received invitation to conversation: conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 17:37:06,299 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 17:37:06,300 - INFO - 127.0.0.1 - - [07/Feb/2026 17:37:06] "POST /verity/ HTTP/1.1" 200 -
+2026-02-07 17:37:14,402 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-07 17:37:14,403 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-07 17:37:14,409 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-07 17:37:14,410 - INFO - 127.0.0.1 - - [07/Feb/2026 17:37:14] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 11:10:47,863 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 11:10:47,980 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 11:10:48,099 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-02-09 11:10:48,215 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 11:10:48,851 - INFO - 127.0.0.1 - - [09/Feb/2026 11:10:48] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 11:11:38,489 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 11:11:38,490 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 11:11:38,508 - INFO - [UNINVITE] Received uninvite from conversation: conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 11:11:38,689 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 11:11:38,690 - INFO - 127.0.0.1 - - [09/Feb/2026 11:11:38] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 11:11:55,486 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 11:11:55,487 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 11:11:55,490 - INFO - [INVITE] Received invitation to conversation: conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 11:11:55,916 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 11:11:55,917 - INFO - 127.0.0.1 - - [09/Feb/2026 11:11:55] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 11:12:21,499 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 11:12:21,499 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 11:12:21,499 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 11:12:21,499 - INFO - 127.0.0.1 - - [09/Feb/2026 11:12:21] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 11:15:35,292 - INFO - Loading agent configuration...
+2026-02-09 11:15:35,312 - INFO - Agent initialized: Verity
+2026-02-09 11:15:35,312 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 11:15:35,312 - INFO - ============================================================
+2026-02-09 11:15:35,312 - INFO - Verity OpenFloor Agent Server
+2026-02-09 11:15:35,312 - INFO - ============================================================
+2026-02-09 11:15:35,312 - INFO - Agent: Verity
+2026-02-09 11:15:35,312 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 11:15:35,312 - INFO - Speaker URI: openFloor:verity
+2026-02-09 11:15:35,312 - INFO - Server starting on http://0.0.0.0:8768
+2026-02-09 11:15:35,312 - INFO - ============================================================
+2026-02-09 11:15:35,312 - INFO - Endpoints:
+2026-02-09 11:15:35,312 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-02-09 11:15:35,321 - INFO -   POST /        - OpenFloor envelope processing
+2026-02-09 11:15:35,322 - INFO -   GET  /health  - Health check
+2026-02-09 11:15:35,322 - INFO -   POST /manifest - Agent manifest
+2026-02-09 11:15:35,322 - INFO - ============================================================
+2026-02-09 11:15:35,641 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-02-09 11:15:35,641 - INFO - [33mPress CTRL+C to quit[0m
+2026-02-09 11:19:44,320 - INFO - Loading agent configuration...
+2026-02-09 11:19:44,320 - INFO - Agent initialized: Verity
+2026-02-09 11:19:44,320 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 11:19:44,320 - INFO - ============================================================
+2026-02-09 11:19:44,320 - INFO - Verity OpenFloor Agent Server
+2026-02-09 11:19:44,320 - INFO - ============================================================
+2026-02-09 11:19:44,320 - INFO - Agent: Verity
+2026-02-09 11:19:44,333 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 11:19:44,333 - INFO - Speaker URI: openFloor:verity
+2026-02-09 11:19:44,334 - INFO - Server starting on http://0.0.0.0:8768
+2026-02-09 11:19:44,334 - INFO - ============================================================
+2026-02-09 11:19:44,335 - INFO - Endpoints:
+2026-02-09 11:19:44,335 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-02-09 11:19:44,335 - INFO -   POST /        - OpenFloor envelope processing
+2026-02-09 11:19:44,336 - INFO -   GET  /health  - Health check
+2026-02-09 11:19:44,336 - INFO -   POST /manifest - Agent manifest
+2026-02-09 11:19:44,337 - INFO - ============================================================
+2026-02-09 11:19:44,358 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-02-09 11:19:44,358 - INFO - [33mPress CTRL+C to quit[0m
+2026-02-09 11:20:17,353 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 11:20:17,353 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 11:20:17,356 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-02-09 11:20:17,609 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 11:20:17,609 - INFO - 127.0.0.1 - - [09/Feb/2026 11:20:17] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 11:20:28,236 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 11:20:28,237 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 11:20:28,240 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 11:20:28,260 - INFO - 127.0.0.1 - - [09/Feb/2026 11:20:28] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 11:23:19,335 - INFO - Loading agent configuration...
+2026-02-09 11:23:19,339 - INFO - Agent initialized: Verity
+2026-02-09 11:23:19,340 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 11:23:19,343 - INFO - ============================================================
+2026-02-09 11:23:19,344 - INFO - Verity OpenFloor Agent Server
+2026-02-09 11:23:19,345 - INFO - ============================================================
+2026-02-09 11:23:19,345 - INFO - Agent: Verity
+2026-02-09 11:23:19,345 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 11:23:19,346 - INFO - Speaker URI: openFloor:verity
+2026-02-09 11:23:19,346 - INFO - Server starting on http://0.0.0.0:8768
+2026-02-09 11:23:19,347 - INFO - ============================================================
+2026-02-09 11:23:19,347 - INFO - Endpoints:
+2026-02-09 11:23:19,347 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-02-09 11:23:19,348 - INFO -   POST /        - OpenFloor envelope processing
+2026-02-09 11:23:19,348 - INFO -   GET  /health  - Health check
+2026-02-09 11:23:19,349 - INFO -   POST /manifest - Agent manifest
+2026-02-09 11:23:19,349 - INFO - ============================================================
+2026-02-09 11:23:19,384 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-02-09 11:23:19,385 - INFO - [33mPress CTRL+C to quit[0m
+2026-02-09 11:23:52,286 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 11:23:52,287 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 11:23:52,291 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-02-09 11:23:52,492 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 11:23:52,493 - INFO - 127.0.0.1 - - [09/Feb/2026 11:23:52] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 11:24:02,495 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 11:24:02,496 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 11:24:02,590 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 11:24:02,591 - INFO - 127.0.0.1 - - [09/Feb/2026 11:24:02] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 11:29:25,251 - INFO - Loading agent configuration...
+2026-02-09 11:29:25,266 - INFO - Agent initialized: Verity
+2026-02-09 11:29:25,266 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 11:29:25,266 - INFO - ============================================================
+2026-02-09 11:29:25,266 - INFO - Verity OpenFloor Agent Server
+2026-02-09 11:29:25,266 - INFO - ============================================================
+2026-02-09 11:29:25,274 - INFO - Agent: Verity
+2026-02-09 11:29:25,274 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 11:29:25,275 - INFO - Speaker URI: openFloor:verity
+2026-02-09 11:29:25,275 - INFO - Server starting on http://0.0.0.0:8768
+2026-02-09 11:29:25,276 - INFO - ============================================================
+2026-02-09 11:29:25,276 - INFO - Endpoints:
+2026-02-09 11:29:25,277 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-02-09 11:29:25,277 - INFO -   POST /        - OpenFloor envelope processing
+2026-02-09 11:29:25,278 - INFO -   GET  /health  - Health check
+2026-02-09 11:29:25,278 - INFO -   POST /manifest - Agent manifest
+2026-02-09 11:29:25,278 - INFO - ============================================================
+2026-02-09 11:29:25,308 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-02-09 11:29:25,308 - INFO - [33mPress CTRL+C to quit[0m
+2026-02-09 11:29:36,969 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 11:29:36,969 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 11:29:37,025 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 11:29:41,242 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 11:29:41,265 - INFO - Reviewer generated a response.
+2026-02-09 11:29:41,265 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0.0, 'explanation': 'A standard piano has 88 keys, not 50. This includes 52 white keys and 36 black keys.'}.
+2026-02-09 11:29:41,265 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0.0, 'explanation': 'A standard piano has 88 keys, not 50. This includes 52 white keys and 36 black keys.'}.
+2026-02-09 11:29:41,270 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 11:29:41,278 - INFO - 127.0.0.1 - - [09/Feb/2026 11:29:41] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 11:32:09,479 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 11:32:09,480 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 11:32:09,484 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 11:32:13,641 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 11:32:13,644 - INFO - Reviewer generated a response.
+2026-02-09 11:32:13,644 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The moon is not larger than the sun. In fact, the sun is much larger than the moon. The sun's diameter is about 400 times larger than that of the moon.'}.
+2026-02-09 11:32:13,645 - ERROR - [UTTERANCE] Error processing utterance
+Traceback (most recent call last):
+  File "c:\Users\dahl\OneDrive\Open Voice Network\GitHub\implementation-examples\verity\template_agent.py", line 99, in _handle_utterance
+    response_dict = utterance_handler.review_utterance(user_text)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\dahl\OneDrive\Open Voice Network\GitHub\implementation-examples\verity\utterance_handler.py", line 16, in review_utterance
+    response_dict = ast.literal_eval(response_components)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Program Files\Python311\Lib\ast.py", line 64, in literal_eval
+    node_or_string = parse(node_or_string.lstrip(" \t"), mode='eval')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Program Files\Python311\Lib\ast.py", line 50, in parse
+    return compile(source, filename, mode, flags,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<unknown>", line 1
+    {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The moon is not larger than the sun. In fact, the sun is much larger than the moon. The sun's diameter is about 400 times larger than that of the moon.'}
+                                                                                                                                                                                                                                                     ^
+SyntaxError: unterminated string literal (detected at line 1)
+2026-02-09 11:32:13,826 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 11:32:13,827 - INFO - 127.0.0.1 - - [09/Feb/2026 11:32:13] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 11:32:39,031 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 11:32:39,031 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 11:32:39,031 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 11:32:41,417 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 11:32:41,417 - INFO - Reviewer generated a response.
+2026-02-09 11:32:41,417 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The sun is indeed larger than the Earth. This is a well-established fact in astronomy.'}.
+2026-02-09 11:32:41,417 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The sun is indeed larger than the Earth. This is a well-established fact in astronomy.'}.
+2026-02-09 11:32:41,417 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 11:32:41,417 - INFO - 127.0.0.1 - - [09/Feb/2026 11:32:41] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:14:39,687 - INFO - Loading agent configuration...
+2026-02-09 14:14:39,705 - INFO - Agent initialized: Verity
+2026-02-09 14:14:39,706 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 14:14:39,713 - INFO - ============================================================
+2026-02-09 14:14:39,714 - INFO - Verity OpenFloor Agent Server
+2026-02-09 14:14:39,715 - INFO - ============================================================
+2026-02-09 14:14:39,716 - INFO - Agent: Verity
+2026-02-09 14:14:39,717 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 14:14:39,718 - INFO - Speaker URI: openFloor:verity
+2026-02-09 14:14:39,718 - INFO - Server starting on http://0.0.0.0:8768
+2026-02-09 14:14:39,719 - INFO - ============================================================
+2026-02-09 14:14:39,721 - INFO - Endpoints:
+2026-02-09 14:14:39,721 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-02-09 14:14:39,721 - INFO -   POST /        - OpenFloor envelope processing
+2026-02-09 14:14:39,721 - INFO -   GET  /health  - Health check
+2026-02-09 14:14:39,721 - INFO -   POST /manifest - Agent manifest
+2026-02-09 14:14:39,721 - INFO - ============================================================
+2026-02-09 14:14:39,774 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-02-09 14:14:39,776 - INFO - [33mPress CTRL+C to quit[0m
+2026-02-09 14:15:01,610 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:15:01,610 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:15:01,629 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:15:04,266 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:15:04,289 - INFO - Reviewer generated a response.
+2026-02-09 14:15:04,290 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The sun is indeed larger than the Earth. This is a well-established fact in astronomy.'}.
+2026-02-09 14:15:04,290 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The sun is indeed larger than the Earth. This is a well-established fact in astronomy.'}.
+2026-02-09 14:15:04,295 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:15:04,298 - INFO - 127.0.0.1 - - [09/Feb/2026 14:15:04] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:15:35,271 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:15:35,271 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:15:35,275 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:15:38,141 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:15:38,141 - INFO - Reviewer generated a response.
+2026-02-09 14:15:38,141 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The Earth only has one moon, known as the Moon. The presupposition that Earth has a second moon is incorrect.'}.
+2026-02-09 14:15:38,141 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The Earth only has one moon, known as the Moon. The presupposition that Earth has a second moon is incorrect.'}.
+2026-02-09 14:15:38,160 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:15:38,161 - INFO - 127.0.0.1 - - [09/Feb/2026 14:15:38] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:16:00,798 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:16:00,798 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:16:00,798 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:16:04,028 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:16:04,032 - INFO - Reviewer generated a response.
+2026-02-09 14:16:04,033 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The name of the Earth\'s moon is "Moon". This is a universally accepted fact.'}.
+2026-02-09 14:16:04,034 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The name of the Earth\'s moon is "Moon". This is a universally accepted fact.'}.
+2026-02-09 14:16:04,037 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:16:04,038 - INFO - 127.0.0.1 - - [09/Feb/2026 14:16:04] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:16:27,547 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:16:27,547 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:16:27,547 - INFO - [UNINVITE] Received uninvite from conversation: conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:16:27,559 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:16:27,560 - INFO - 127.0.0.1 - - [09/Feb/2026 14:16:27] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:16:51,605 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:16:51,607 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:16:51,621 - INFO - [INVITE] Received invitation to conversation: conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:16:51,647 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:16:54,388 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:16:54,413 - INFO - Reviewer generated a response.
+2026-02-09 14:16:54,455 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is a command, so factuality does not apply.'}.
+2026-02-09 14:16:54,470 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is a command, so factuality does not apply.'}.
+2026-02-09 14:16:54,487 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:16:54,488 - INFO - 127.0.0.1 - - [09/Feb/2026 14:16:54] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:17:01,552 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:17:01,553 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:17:01,559 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:17:05,111 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:17:05,113 - INFO - Reviewer generated a response.
+2026-02-09 14:17:05,114 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is a command, so factuality does not apply.'}.
+2026-02-09 14:17:05,114 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is a command, so factuality does not apply.'}.
+2026-02-09 14:17:05,117 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:17:05,118 - INFO - 127.0.0.1 - - [09/Feb/2026 14:17:05] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:17:17,746 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:17:17,747 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:17:17,751 - INFO - [UNINVITE] Received uninvite from conversation: conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:17:17,751 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:17:17,753 - INFO - 127.0.0.1 - - [09/Feb/2026 14:17:17] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:17:21,766 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:17:21,766 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:17:21,766 - INFO - [INVITE] Received invitation to conversation: conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:17:21,776 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:17:26,985 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:17:26,988 - INFO - Reviewer generated a response.
+2026-02-09 14:17:26,988 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is a command, so factuality does not apply.'}.
+2026-02-09 14:17:26,989 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is a command, so factuality does not apply.'}.
+2026-02-09 14:17:26,992 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:17:26,993 - INFO - 127.0.0.1 - - [09/Feb/2026 14:17:26] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:18:04,848 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:18:04,849 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:18:04,852 - INFO - [UNINVITE] Received uninvite from conversation: conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:18:04,854 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:18:04,855 - INFO - 127.0.0.1 - - [09/Feb/2026 14:18:04] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:18:11,363 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:18:11,364 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:18:11,369 - INFO - [INVITE] Received invitation to conversation: conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:18:11,372 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:18:13,766 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:18:13,766 - INFO - Reviewer generated a response.
+2026-02-09 14:18:13,766 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is a command, so factuality does not apply.'}.
+2026-02-09 14:18:13,766 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is a command, so factuality does not apply.'}.
+2026-02-09 14:18:13,776 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:18:13,777 - INFO - 127.0.0.1 - - [09/Feb/2026 14:18:13] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:18:46,934 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:18:46,934 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:18:46,934 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:18:48,719 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:18:48,719 - INFO - Reviewer generated a response.
+2026-02-09 14:18:48,719 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The statement is factual. The Earth does indeed have one moon, known as the Moon or Luna.'}.
+2026-02-09 14:18:48,719 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The statement is factual. The Earth does indeed have one moon, known as the Moon or Luna.'}.
+2026-02-09 14:18:48,719 - INFO - [UTTERANCE] Sentinel active and decision is factual; no response sent
+2026-02-09 14:18:48,730 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:18:48,731 - INFO - 127.0.0.1 - - [09/Feb/2026 14:18:48] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:21:22,154 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:21:22,156 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:21:22,165 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:21:25,267 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:21:25,291 - INFO - Reviewer generated a response.
+2026-02-09 14:21:25,291 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The Earth only has one moon, not three. Therefore, the statement is not factual.'}.
+2026-02-09 14:21:25,292 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The Earth only has one moon, not three. Therefore, the statement is not factual.'}.
+2026-02-09 14:21:25,296 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:21:25,297 - INFO - 127.0.0.1 - - [09/Feb/2026 14:21:25] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:21:30,094 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0", "conversants": [{...
+2026-02-09 14:21:30,094 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from Stella
+2026-02-09 14:21:30,113 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:21:33,110 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:21:33,110 - INFO - Reviewer generated a response.
+2026-02-09 14:21:33,110 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The Earth only has one moon, not three. Therefore, the information provided cannot be factual.'}.
+2026-02-09 14:21:33,110 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The Earth only has one moon, not three. Therefore, the information provided cannot be factual.'}.
+2026-02-09 14:21:33,124 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:21:33,125 - INFO - 127.0.0.1 - - [09/Feb/2026 14:21:33] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:22:36,380 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:22:36,380 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:22:36,383 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:22:38,265 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:22:38,265 - INFO - Reviewer generated a response.
+2026-02-09 14:22:38,265 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The Earth only has one moon, not three. Therefore, the utterance is not factual.'}.
+2026-02-09 14:22:38,265 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The Earth only has one moon, not three. Therefore, the utterance is not factual.'}.
+2026-02-09 14:22:38,281 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:22:38,282 - INFO - 127.0.0.1 - - [09/Feb/2026 14:22:38] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:23:02,640 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0", "conversants": [{...
+2026-02-09 14:23:02,640 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from Stella
+2026-02-09 14:23:02,640 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:23:06,015 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:23:06,016 - INFO - Reviewer generated a response.
+2026-02-09 14:23:06,016 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The Earth only has one moon, not three. Therefore, the utterance is not factual.'}.
+2026-02-09 14:23:06,016 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The Earth only has one moon, not three. Therefore, the utterance is not factual.'}.
+2026-02-09 14:23:06,022 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:23:06,023 - INFO - 127.0.0.1 - - [09/Feb/2026 14:23:06] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:23:17,270 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0", "conversants": [{...
+2026-02-09 14:23:17,271 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from http://localhost:8080
+2026-02-09 14:23:17,274 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:23:20,797 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:23:20,797 - INFO - Reviewer generated a response.
+2026-02-09 14:23:20,797 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The utterance is factual. It correctly states that Earth has one moon, and the idea of additional moons is often a mix-up with other celestial bodies or asteroids.'}.
+2026-02-09 14:23:20,797 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The utterance is factual. It correctly states that Earth has one moon, and the idea of additional moons is often a mix-up with other celestial bodies or asteroids.'}.
+2026-02-09 14:23:20,797 - INFO - [UTTERANCE] Sentinel active and decision is factual; no response sent
+2026-02-09 14:23:20,812 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:23:20,814 - INFO - 127.0.0.1 - - [09/Feb/2026 14:23:20] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:23:22,829 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0", "conversants": [{...
+2026-02-09 14:23:22,829 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from http://localhost:8080
+2026-02-09 14:23:22,829 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:23:26,392 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:23:26,392 - INFO - Reviewer generated a response.
+2026-02-09 14:23:26,408 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The utterance is factual. It correctly states that Earth has one moon, which is the fifth largest in the solar system and plays a crucial role in stabilizing Earth\'s axial tilt and influencing ocean tides.'}.
+2026-02-09 14:23:26,408 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': "The utterance is factual. It correctly states that Earth has one moon, which is the fifth largest in the solar system and plays a crucial role in stabilizing Earth's axial tilt and influencing ocean tides."}.
+2026-02-09 14:23:26,408 - INFO - [UTTERANCE] Sentinel active and decision is factual; no response sent
+2026-02-09 14:23:26,411 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:23:26,412 - INFO - 127.0.0.1 - - [09/Feb/2026 14:23:26] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:23:30,063 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0", "conversants": [{...
+2026-02-09 14:23:30,063 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from Stella
+2026-02-09 14:23:30,105 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:23:32,819 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:23:32,821 - INFO - Reviewer generated a response.
+2026-02-09 14:23:32,822 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The utterance is factual. It correctly states that Earth has one moon, which is the fifth largest in the solar system and plays a crucial role in stabilizing Earth\'s axial tilt and influencing ocean tides.'}.
+2026-02-09 14:23:32,823 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': "The utterance is factual. It correctly states that Earth has one moon, which is the fifth largest in the solar system and plays a crucial role in stabilizing Earth's axial tilt and influencing ocean tides."}.
+2026-02-09 14:23:32,823 - INFO - [UTTERANCE] Sentinel active and decision is factual; no response sent
+2026-02-09 14:23:32,825 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:23:32,826 - INFO - 127.0.0.1 - - [09/Feb/2026 14:23:32] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:25:21,127 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:25:21,127 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:25:21,130 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:25:24,025 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:25:24,045 - INFO - Reviewer generated a response.
+2026-02-09 14:25:24,046 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': "The utterance is a question seeking an opinion, so factuality doesn't apply. The 'good number of dogs to have' is subjective and varies from person to person."}.
+2026-02-09 14:25:24,047 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': "The utterance is a question seeking an opinion, so factuality doesn't apply. The 'good number of dogs to have' is subjective and varies from person to person."}.
+2026-02-09 14:25:24,051 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:25:24,052 - INFO - 127.0.0.1 - - [09/Feb/2026 14:25:24] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:25:42,845 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0", "conversants": [{...
+2026-02-09 14:25:42,845 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from Stella
+2026-02-09 14:25:42,866 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:25:45,110 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:25:45,125 - INFO - Reviewer generated a response.
+2026-02-09 14:25:45,125 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is subjective as the "good number of dogs to have" varies from person to person based on their preferences, lifestyle, and capacity to care for pets.'}.
+2026-02-09 14:25:45,128 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is subjective as the "good number of dogs to have" varies from person to person based on their preferences, lifestyle, and capacity to care for pets.'}.
+2026-02-09 14:25:45,131 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:25:45,136 - INFO - 127.0.0.1 - - [09/Feb/2026 14:25:45] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:25:55,547 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0", "conversants": [{...
+2026-02-09 14:25:55,547 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from http://localhost:8080
+2026-02-09 14:25:55,547 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:25:57,767 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:25:57,773 - INFO - Reviewer generated a response.
+2026-02-09 14:25:57,774 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is subjective as it presents an opinion about the ideal number of dogs to have. The "best" number of dogs for social interaction and companionship varies depending on individual circumstances and preferences.'}.
+2026-02-09 14:25:57,774 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is subjective as it presents an opinion about the ideal number of dogs to have. The "best" number of dogs for social interaction and companionship varies depending on individual circumstances and preferences.'}.
+2026-02-09 14:25:57,778 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:25:57,779 - INFO - 127.0.0.1 - - [09/Feb/2026 14:25:57] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:25:59,839 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0", "conversants": [{...
+2026-02-09 14:25:59,841 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from http://localhost:8080
+2026-02-09 14:25:59,849 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:26:02,594 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:26:02,611 - INFO - Reviewer generated a response.
+2026-02-09 14:26:02,613 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is subjective and based on personal opinion. The "ideal" number of dogs to have varies from person to person and depends on individual circumstances and preferences.'}.
+2026-02-09 14:26:02,615 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is subjective and based on personal opinion. The "ideal" number of dogs to have varies from person to person and depends on individual circumstances and preferences.'}.
+2026-02-09 14:26:02,622 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:26:02,623 - INFO - 127.0.0.1 - - [09/Feb/2026 14:26:02] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:26:07,019 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0", "conversants": [{...
+2026-02-09 14:26:07,020 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from Stella
+2026-02-09 14:26:07,024 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:26:10,985 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:26:10,985 - INFO - Reviewer generated a response.
+2026-02-09 14:26:10,985 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is subjective, as it presents an opinion about the ideal number of dogs to have. This can vary greatly depending on individual circumstances and preferences.'}.
+2026-02-09 14:26:10,985 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is subjective, as it presents an opinion about the ideal number of dogs to have. This can vary greatly depending on individual circumstances and preferences.'}.
+2026-02-09 14:26:10,999 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:26:11,000 - INFO - 127.0.0.1 - - [09/Feb/2026 14:26:11] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:34:40,610 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-...
+2026-02-09 14:34:40,610 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 14:34:40,610 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:34:42,422 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:34:42,422 - INFO - Reviewer generated a response.
+2026-02-09 14:34:42,422 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The utterance is factual. There are 50 states in the United States.'}.
+2026-02-09 14:34:42,422 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The utterance is factual. There are 50 states in the United States.'}.
+2026-02-09 14:34:42,422 - INFO - [UTTERANCE] Sentinel active and decision is factual; no response sent
+2026-02-09 14:34:42,438 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:34:42,439 - INFO - 127.0.0.1 - - [09/Feb/2026 14:34:42] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:34:52,344 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0", "conversants": [{...
+2026-02-09 14:34:52,344 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from Stella
+2026-02-09 14:34:52,365 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:34:54,188 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:34:54,204 - INFO - Reviewer generated a response.
+2026-02-09 14:34:54,204 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The utterance is factual as it is a statement about the number of states in the United States, which is a known fact.'}.
+2026-02-09 14:34:54,204 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The utterance is factual as it is a statement about the number of states in the United States, which is a known fact.'}.
+2026-02-09 14:34:54,206 - INFO - [UTTERANCE] Sentinel active and decision is factual; no response sent
+2026-02-09 14:34:54,208 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:34:54,208 - INFO - 127.0.0.1 - - [09/Feb/2026 14:34:54] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:34:59,901 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0", "conversants": [{...
+2026-02-09 14:34:59,903 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from http://localhost:8080
+2026-02-09 14:34:59,914 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:35:02,143 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:35:02,145 - INFO - Reviewer generated a response.
+2026-02-09 14:35:02,146 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The United States consists of 50 states, not 52. Washington D.C. and Puerto Rico are not considered states, despite their significant populations and political importance.'}.
+2026-02-09 14:35:02,146 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The United States consists of 50 states, not 52. Washington D.C. and Puerto Rico are not considered states, despite their significant populations and political importance.'}.
+2026-02-09 14:35:02,149 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:35:02,150 - INFO - 127.0.0.1 - - [09/Feb/2026 14:35:02] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:35:04,208 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0", "conversants": [{...
+2026-02-09 14:35:04,208 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from http://localhost:8080
+2026-02-09 14:35:04,212 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:35:06,719 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:35:06,719 - INFO - Reviewer generated a response.
+2026-02-09 14:35:06,719 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The United States consists of 50 states, not 52. There have been no recent additions to the union.'}.
+2026-02-09 14:35:06,719 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The United States consists of 50 states, not 52. There have been no recent additions to the union.'}.
+2026-02-09 14:35:06,730 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:35:06,731 - INFO - 127.0.0.1 - - [09/Feb/2026 14:35:06] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:35:10,782 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0", "conversants": [{...
+2026-02-09 14:35:10,782 - INFO - Processing conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0 from Stella
+2026-02-09 14:35:10,803 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 14:35:12,944 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 14:35:12,948 - INFO - Reviewer generated a response.
+2026-02-09 14:35:12,949 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is not factual because there are only 50 states in the United States, not 52. No additional states have been added recently.'}.
+2026-02-09 14:35:12,950 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is not factual because there are only 50 states in the United States, not 52. No additional states have been added recently.'}.
+2026-02-09 14:35:12,952 - INFO - Returning response for conversation conv:9bac10fa-afb6-416d-94e8-8fb32b537bb0
+2026-02-09 14:35:12,953 - INFO - 127.0.0.1 - - [09/Feb/2026 14:35:12] "POST /verity/ HTTP/1.1" 200 -
+2026-02-09 14:46:00,078 - INFO - Loading agent configuration...
+2026-02-09 14:46:00,078 - INFO - Agent initialized: Verity
+2026-02-09 14:46:00,078 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 14:46:00,094 - INFO - ============================================================
+2026-02-09 14:46:00,094 - INFO - Verity OpenFloor Agent Server
+2026-02-09 14:46:00,094 - INFO - ============================================================
+2026-02-09 14:46:00,097 - INFO - Agent: Verity
+2026-02-09 14:46:00,097 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 14:46:00,098 - INFO - Speaker URI: openFloor:verity
+2026-02-09 14:46:00,099 - INFO - Server starting on http://0.0.0.0:8768
+2026-02-09 14:46:00,100 - INFO - ============================================================
+2026-02-09 14:46:00,100 - INFO - Endpoints:
+2026-02-09 14:46:00,101 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-02-09 14:46:00,101 - INFO -   POST /        - OpenFloor envelope processing
+2026-02-09 14:46:00,102 - INFO -   GET  /health  - Health check
+2026-02-09 14:46:00,102 - INFO -   POST /manifest - Agent manifest
+2026-02-09 14:46:00,103 - INFO - ============================================================
+2026-02-09 14:46:00,211 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-02-09 14:46:00,219 - INFO - [33mPress CTRL+C to quit[0m
+2026-02-09 15:23:37,106 - INFO - Loading agent configuration...
+2026-02-09 15:23:37,110 - INFO - Agent initialized: Verity
+2026-02-09 15:23:37,111 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 15:23:37,118 - INFO - ============================================================
+2026-02-09 15:23:37,120 - INFO - Verity OpenFloor Agent Server
+2026-02-09 15:23:37,121 - INFO - ============================================================
+2026-02-09 15:23:37,122 - INFO - Agent: Verity
+2026-02-09 15:23:37,124 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 15:23:37,125 - INFO - Speaker URI: openFloor:verity
+2026-02-09 15:23:37,125 - INFO - Server starting on http://0.0.0.0:8768
+2026-02-09 15:23:37,126 - INFO - ============================================================
+2026-02-09 15:23:37,127 - INFO - Endpoints:
+2026-02-09 15:23:37,127 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-02-09 15:23:37,128 - INFO -   POST /        - OpenFloor envelope processing
+2026-02-09 15:23:37,129 - INFO -   GET  /health  - Health check
+2026-02-09 15:23:37,132 - INFO -   POST /manifest - Agent manifest
+2026-02-09 15:23:37,135 - INFO - ============================================================
+2026-02-09 15:23:37,187 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-02-09 15:23:37,187 - INFO - [33mPress CTRL+C to quit[0m
+2026-02-09 15:25:21,916 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:153d35f4-fcc2-4eff-8f6e-...
+2026-02-09 15:25:21,917 - INFO - Processing conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 15:25:21,921 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-02-09 15:25:21,928 - INFO - Returning response for conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39
+2026-02-09 15:25:21,928 - INFO - 127.0.0.1 - - [09/Feb/2026 15:25:21] "POST / HTTP/1.1" 200 -
+2026-02-09 15:25:31,378 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:153d35f4-fcc2-4eff-8f6e-...
+2026-02-09 15:25:31,379 - INFO - Processing conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 15:25:31,383 - INFO - [INVITE] Received invitation to conversation: conv:153d35f4-fcc2-4eff-8f6e-769374db4e39
+2026-02-09 15:25:31,386 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 15:25:33,764 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 15:25:33,787 - INFO - Reviewer generated a response.
+2026-02-09 15:25:33,787 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The first US president was George Washington. This is a well-documented historical fact.'}.
+2026-02-09 15:25:33,787 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The first US president was George Washington. This is a well-documented historical fact.'}.
+2026-02-09 15:25:33,798 - INFO - Returning response for conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39
+2026-02-09 15:25:33,799 - INFO - 127.0.0.1 - - [09/Feb/2026 15:25:33] "POST / HTTP/1.1" 200 -
+2026-02-09 15:25:48,627 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:153d35f4-fcc2-4eff-8f6e-...
+2026-02-09 15:25:48,627 - INFO - Processing conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 15:25:48,627 - INFO - [UNINVITE] Received uninvite from conversation: conv:153d35f4-fcc2-4eff-8f6e-769374db4e39
+2026-02-09 15:25:48,627 - INFO - Returning response for conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39
+2026-02-09 15:25:48,627 - INFO - 127.0.0.1 - - [09/Feb/2026 15:25:48] "POST / HTTP/1.1" 200 -
+2026-02-09 15:26:24,943 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:153d35f4-fcc2-4eff-8f6e-...
+2026-02-09 15:26:24,944 - INFO - Processing conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 15:26:24,948 - INFO - [INVITE] Received invitation to conversation: conv:153d35f4-fcc2-4eff-8f6e-769374db4e39
+2026-02-09 15:26:24,950 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 15:26:27,400 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 15:26:27,405 - INFO - Reviewer generated a response.
+2026-02-09 15:26:27,406 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is a command, so factuality does not apply.'}.
+2026-02-09 15:26:27,408 - INFO - generated {'applicable': 'no', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is a command, so factuality does not apply.'}.
+2026-02-09 15:26:27,414 - INFO - Returning response for conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39
+2026-02-09 15:26:27,416 - INFO - 127.0.0.1 - - [09/Feb/2026 15:26:27] "POST / HTTP/1.1" 200 -
+2026-02-09 15:27:09,227 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:153d35f4-fcc2-4eff-8f6e-...
+2026-02-09 15:27:09,227 - INFO - Processing conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 15:27:09,227 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 15:27:12,663 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 15:27:12,663 - INFO - Reviewer generated a response.
+2026-02-09 15:27:12,663 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'This is a factual question asking for a specific historical event date. The fall of the Western Roman Empire is commonly dated to 476 AD.'}.
+2026-02-09 15:27:12,679 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'This is a factual question asking for a specific historical event date. The fall of the Western Roman Empire is commonly dated to 476 AD.'}.
+2026-02-09 15:27:12,679 - INFO - [UTTERANCE] Sentinel active and decision is factual; no response sent
+2026-02-09 15:27:12,682 - INFO - Returning response for conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39
+2026-02-09 15:27:12,683 - INFO - 127.0.0.1 - - [09/Feb/2026 15:27:12] "POST / HTTP/1.1" 200 -
+2026-02-09 15:27:14,709 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:153d35f4-fcc2-4eff-8f6e-769374db4e39", "conversants": [{...
+2026-02-09 15:27:14,711 - INFO - Processing conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39 from http://localhost:8080
+2026-02-09 15:27:14,715 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 15:27:18,941 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 15:27:18,943 - INFO - Reviewer generated a response.
+2026-02-09 15:27:18,943 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0.4, 'explanation': 'The fall of the Western Roman Empire is widely accepted to have occurred in 476 AD, not 1492. The claim that it fell in 1492, coinciding with Columbus\'s discovery of America, is not a widely accepted historical perspective.'}.
+2026-02-09 15:27:18,944 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0.4, 'explanation': "The fall of the Western Roman Empire is widely accepted to have occurred in 476 AD, not 1492. The claim that it fell in 1492, coinciding with Columbus's discovery of America, is not a widely accepted historical perspective."}.
+2026-02-09 15:27:18,947 - INFO - Returning response for conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39
+2026-02-09 15:27:18,948 - INFO - 127.0.0.1 - - [09/Feb/2026 15:27:18] "POST / HTTP/1.1" 200 -
+2026-02-09 15:29:35,646 - INFO - Received envelope: {"openFloor": {"schema": {"version": "1.0.0"}, "conversation": {"id": "conv:153d35f4-fcc2-4eff-8f6e-...
+2026-02-09 15:29:35,648 - INFO - Processing conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39 from openFloor://192.168.56.1/AssistantClientConvener
+2026-02-09 15:29:35,651 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 15:29:37,867 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 15:29:37,887 - INFO - Reviewer generated a response.
+2026-02-09 15:29:37,890 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'North America is located in the Northern Hemisphere, not the Southern Hemisphere.'}.
+2026-02-09 15:29:37,891 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'North America is located in the Northern Hemisphere, not the Southern Hemisphere.'}.
+2026-02-09 15:29:37,897 - INFO - Returning response for conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39
+2026-02-09 15:29:37,899 - INFO - 127.0.0.1 - - [09/Feb/2026 15:29:37] "POST / HTTP/1.1" 200 -
+2026-02-09 15:29:39,960 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "conv:153d35f4-fcc2-4eff-8f6e-769374db4e39", "conversants": [{...
+2026-02-09 15:29:39,962 - INFO - Processing conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39 from http://localhost:8080
+2026-02-09 15:29:39,971 - INFO - [UTTERANCE] Handling utterance event
+2026-02-09 15:29:42,798 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-02-09 15:29:42,802 - INFO - Reviewer generated a response.
+2026-02-09 15:29:42,803 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is incorrect. North America is primarily located in the Northern Hemisphere, not the Southern Hemisphere. Also, the majority of North America does not experience a tropical climate.'}.
+2026-02-09 15:29:42,804 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0, 'explanation': 'The utterance is incorrect. North America is primarily located in the Northern Hemisphere, not the Southern Hemisphere. Also, the majority of North America does not experience a tropical climate.'}.
+2026-02-09 15:29:42,807 - INFO - Returning response for conversation conv:153d35f4-fcc2-4eff-8f6e-769374db4e39
+2026-02-09 15:29:42,808 - INFO - 127.0.0.1 - - [09/Feb/2026 15:29:42] "POST / HTTP/1.1" 200 -
+2026-02-09 15:45:44,298 - INFO - Loading agent configuration...
+2026-02-09 15:45:44,301 - INFO - Agent initialized: Verity
+2026-02-09 15:45:44,302 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 15:45:44,305 - INFO - ============================================================
+2026-02-09 15:45:44,306 - INFO - Verity OpenFloor Agent Server
+2026-02-09 15:45:44,307 - INFO - ============================================================
+2026-02-09 15:45:44,307 - INFO - Agent: Verity
+2026-02-09 15:45:44,308 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 15:45:44,309 - INFO - Speaker URI: openFloor:verity
+2026-02-09 15:45:44,309 - INFO - Server starting on http://0.0.0.0:8768
+2026-02-09 15:45:44,310 - INFO - ============================================================
+2026-02-09 15:45:44,311 - INFO - Endpoints:
+2026-02-09 15:45:44,311 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-02-09 15:45:44,312 - INFO -   POST /        - OpenFloor envelope processing
+2026-02-09 15:45:44,312 - INFO -   GET  /health  - Health check
+2026-02-09 15:45:44,313 - INFO -   POST /manifest - Agent manifest
+2026-02-09 15:45:44,314 - INFO - ============================================================
+2026-02-09 15:45:44,347 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-02-09 15:45:44,348 - INFO - [33mPress CTRL+C to quit[0m
+2026-02-09 15:46:33,427 - INFO - Loading agent configuration...
+2026-02-09 15:46:33,427 - INFO - Agent initialized: Verity
+2026-02-09 15:46:33,427 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 15:46:33,446 - INFO - ============================================================
+2026-02-09 15:46:33,447 - INFO - Verity OpenFloor Agent Server
+2026-02-09 15:46:33,447 - INFO - ============================================================
+2026-02-09 15:46:33,448 - INFO - Agent: Verity
+2026-02-09 15:46:33,449 - INFO - Service URL: http://localhost:8768/verity
+2026-02-09 15:46:33,449 - INFO - Speaker URI: openFloor:verity
+2026-02-09 15:46:33,450 - INFO - Server starting on http://0.0.0.0:8768
+2026-02-09 15:46:33,451 - INFO - ============================================================
+2026-02-09 15:46:33,451 - INFO - Endpoints:
+2026-02-09 15:46:33,452 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-02-09 15:46:33,452 - INFO -   POST /        - OpenFloor envelope processing
+2026-02-09 15:46:33,452 - INFO -   GET  /health  - Health check
+2026-02-09 15:46:33,453 - INFO -   POST /manifest - Agent manifest
+2026-02-09 15:46:33,453 - INFO - ============================================================
+2026-02-09 15:46:33,485 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-02-09 15:46:33,486 - INFO - [33mPress CTRL+C to quit[0m

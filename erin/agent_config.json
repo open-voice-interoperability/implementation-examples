@@ -6,7 +6,7 @@
       "serviceUrl": "http://localhost:8080",
       "organization": "OpenFloor",
       "role": "assistant",
-      "synopsis": "An OpenFloor compliant agent whose answers are often false"
+      "synopsis": "An OpenFloor compliant agent whose answers are always false"
     },
     "capabilities": {
       "keyphrases": [
@@ -18,8 +18,9 @@
         "en-us"
       ],
       "descriptions": [
-        "A template agent demonstrating OpenFloor compliance",
-        "Handles all OpenFloor events with customizable utterance processing"
+        "A standard agent demonstrating OpenFloor compliance.",
+        "An agent whose answers are always false, for testing and demonstration purposes only.",
+        "This agent should not be used for any real-world applications, as it is designed to provide incorrect information."
       ],
       "supportedLayers": [
         "text",

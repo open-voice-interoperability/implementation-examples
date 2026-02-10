@@ -73,3 +73,10 @@ verity/assistant_config-Pegasus.json
 verity/local-Pegasus.py
 verity/pipeline-Pegasus.log
 websockets/secondaryAssistantHTTP-Pegasus.py
+
+# Python virtual environments
+.venv/
+gemini-agent/.venv/
+
+# VS Code settings
+.vscode/

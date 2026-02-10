@@ -21,6 +21,16 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": false
+        },
+        {
+            "name": "Python: gemini-agent Flask server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/gemini-agent/flask_server.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/gemini-agent",
+            "justMyCode": false,
+            "python": "${workspaceFolder}/gemini-agent/.venv/Scripts/python.exe"
         }
     ]
 }

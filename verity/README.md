@@ -33,6 +33,9 @@ Default server URL is printed on startup.
 ## Notes
 
 - Verity is designed to spot and correct hallucinations, not to be a general assistant.
+- Verity can run as a regular agent or as a sentinel.
+- To run as a sentinel, include an utterance in the invite like "join the floor as a sentinel".
+- Sentinels respond only when a message triggers one of their conditions; for example, Verity speaks up only if it detects a non-factual message.
 - To change identity or capabilities, edit `agent_config.json`.
 
 ## License

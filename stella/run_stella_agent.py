@@ -1,8 +1,8 @@
 import json
-from openfloor.envelope import Envelope, Conversation, Sender, Payload
+from openfloor.envelope import Envelope, Conversation, Sender
 from openfloor.events import InviteEvent, UtteranceEvent
 from openfloor.dialog_event import DialogEvent, TextFeature
-from stella_agent import load_manifest_from_config, StellaAgent
+from template_agent import load_manifest_from_config, TemplateAgent
 
 
 def make_sample_envelope(manifest):
@@ -22,7 +22,7 @@ def make_sample_envelope(manifest):
 
 def main():
     manifest = load_manifest_from_config()
-    agent = StellaAgent(manifest)
+    agent = TemplateAgent(manifest)
 
     env = make_sample_envelope(manifest)
     out_env = agent.process_envelope(env)

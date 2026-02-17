@@ -31,7 +31,7 @@ if not client:
 ###############################################################################
 model_configs = {
     "Checker": {
-        "model": "gpt-4",
+        "model": "gpt-4o-mini",
         "temperature": 0.0,
         "max_tokens": 150,
     }

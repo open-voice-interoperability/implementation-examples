@@ -4,7 +4,7 @@ import tkinter as tk
 import sys
 from customtkinter import (
     CTk, CTkLabel, CTkEntry, CTkButton, CTkTextbox, CTkToplevel, 
-    CTkComboBox, CTkCheckBox, CTkScrollableFrame, CTkFrame,
+    CTkComboBox, CTkCheckBox, CTkScrollableFrame, CTkFrame, CTkImage,
     set_appearance_mode, set_default_color_theme
 )
 import json
@@ -244,14 +244,21 @@ def setup_appearance():
 
 BUTTON_TEXT_COLOR = "#FFFFFF"
 HEADING_FONT = ("Arial", 14, "bold")
+FLOOR_ACTIVITY_FONT = ("Arial", 18, "bold")
+
+_EVENT_WINDOWS = {
+    "incoming": [],
+    "outgoing": [],
+}
 
 
 def create_main_window():
     """Create and configure the main application window."""
     root = CTk()
     root.title("Open Floor Client Assistant")
-    # Shorter by default now that errors are shown in a separate window.
-    root.geometry("750x850")
+    # Start larger so the event checkboxes are visible without resizing.
+    root.geometry("900x1180")
+    root.minsize(900, 1180)
     apply_app_icon(root)
     return root
 
@@ -269,11 +276,36 @@ def create_ui_elements(root, known_agents):
     content_frame = CTkFrame(root)
     content_frame.pack(side="top", fill="both", expand=True)
     
+    # Add logo above conversation history with white background spanning full width
+    try:
+        logo_path = Path(__file__).resolve().parent / "assets" / "Interoperability_Logo_color.png"
+        if logo_path.exists():
+            logo_image = None
+            try:
+                from PIL import Image
+                pil_image = Image.open(logo_path)
+                logo_image = CTkImage(light_image=pil_image, dark_image=pil_image, size=(250, 72))
+            except Exception:
+                logo_image = tk.PhotoImage(file=str(logo_path)).subsample(4, 4)
+            # Create a frame with white background that spans full width
+            logo_frame = CTkFrame(content_frame, fg_color="white")
+            logo_frame.pack(side="top", fill="x", pady=(5, 0))
+            logo_label = CTkLabel(logo_frame, image=logo_image, text="", fg_color="white")
+            logo_label.image = logo_image  # Keep a reference to prevent garbage collection
+            logo_label.pack(padx=4, pady=4)
+    except Exception:
+        # If logo fails to load, continue without it
+        pass
+    
+    # Floor Activity title
+    CTkLabel(content_frame, text="Floor Activity", font=FLOOR_ACTIVITY_FONT).pack(pady=(10, 5))
+    
     # Conversation history
     CTkLabel(content_frame, text="Conversation History:", font=HEADING_FONT).pack(pady=(5, 0))
-    widgets['conversation_text'] = CTkTextbox(content_frame, wrap='word', height=150)
+    widgets['conversation_text'] = CTkTextbox(content_frame, wrap='word', height=294)
     widgets['conversation_text'].configure(state='disabled')
     widgets['conversation_text'].pack(pady=5, padx=20, fill="both")
+
     
     # Text entry
     CTkLabel(content_frame, text="Enter text for utterance:", font=HEADING_FONT).pack(pady=(10, 0))
@@ -322,24 +354,40 @@ def create_ui_elements(root, known_agents):
     widgets['no_agents_label'] = CTkLabel(widgets['agents_frame'], text="No agents invited yet")
     widgets['no_agents_label'].pack(pady=10)
     
-    # Bottom buttons frame
-    bottom_buttons_frame = CTkFrame(root)
-    bottom_buttons_frame.pack(side="bottom", fill="x", pady=(10, 5))
+    # Bottom buttons frame - ensure it's always visible
+    bottom_buttons_frame = CTkFrame(root, height=50)
+    bottom_buttons_frame.pack(side="bottom", fill="x", pady=10, padx=10)
+    bottom_buttons_frame.pack_propagate(False)  # Maintain the height
 
     widgets['show_outgoing_events_checkbox'] = CTkCheckBox(bottom_buttons_frame, text="show outgoing events")
     # Unchecked by default
     widgets['show_outgoing_events_checkbox'].deselect()
-    widgets['show_outgoing_events_checkbox'].pack(side="left", padx=5)
+    widgets['show_outgoing_events_checkbox'].pack(side="left", padx=5, pady=5)
 
     widgets['show_incoming_events_checkbox'] = CTkCheckBox(bottom_buttons_frame, text="show incoming events")
     # Unchecked by default (do not auto-pop incoming events)
     widgets['show_incoming_events_checkbox'].deselect()
-    widgets['show_incoming_events_checkbox'].pack(side="left", padx=5)
+    widgets['show_incoming_events_checkbox'].pack(side="left", padx=5, pady=5)
 
     widgets['show_error_log_checkbox'] = CTkCheckBox(bottom_buttons_frame, text="show error log")
     # Unchecked by default
     widgets['show_error_log_checkbox'].deselect()
-    widgets['show_error_log_checkbox'].pack(side="left", padx=5)
+    widgets['show_error_log_checkbox'].pack(side="left", padx=5, pady=5)
+
+    widgets['close_event_windows_button'] = CTkButton(
+        bottom_buttons_frame,
+        text="Close Event Windows",
+        text_color=BUTTON_TEXT_COLOR,
+        command=close_event_windows,
+    )
+    widgets['close_event_windows_button'].pack(side="left", padx=5, pady=5)
+
+    widgets['reset_conversation_button'] = CTkButton(
+        bottom_buttons_frame,
+        text="Reset Conversation History",
+        text_color=BUTTON_TEXT_COLOR,
+    )
+    widgets['reset_conversation_button'].pack(side="left", padx=5, pady=5)
     
     widgets['start_floor_button'] = CTkButton(bottom_buttons_frame, text="Start Floor Manager", text_color=BUTTON_TEXT_COLOR)
     # widgets['start_floor_button'].pack(side="left", padx=5)  # Hidden - auto-started on launch
@@ -463,22 +511,17 @@ def display_response_json(root, response_data, assistant_name, assistant_url):
     response_text.pack(padx=10, pady=10)
 
 
-def display_incoming_event_json(root, event_data, assistant_name, assistant_url):
-    """Display a single incoming event (dict) in its own window."""
+def display_incoming_envelope_json(root, envelope_data, assistant_name, assistant_url):
+    """Display a single incoming envelope (dict) in its own window."""
     response_window = CTkToplevel(root)
+    _register_event_window(response_window, "incoming")
     apply_app_icon(response_window)
-    event_type = ""
-    try:
-        if isinstance(event_data, dict):
-            event_type = event_data.get("eventType", "")
-    except Exception:
-        event_type = ""
 
-    title = f"Incoming Event{f' ({event_type})' if event_type else ''} from {assistant_name} at {assistant_url}"
+    title = f"Incoming Envelope from {assistant_name} at {assistant_url}"
     response_window.title(title)
     response_window.geometry("600x400")
     response_text = CTkTextbox(response_window, wrap="word", width=600, height=400)
-    response_text.insert("0.0", json.dumps(event_data, indent=2))
+    response_text.insert("0.0", json.dumps(envelope_data, indent=2))
     response_text.configure(state="disabled")
     response_text.pack(padx=10, pady=10)
 
@@ -486,6 +529,7 @@ def display_incoming_event_json(root, event_data, assistant_name, assistant_url)
 def display_outgoing_envelope_json(root, envelope_data, target_label: str = ""):
     """Display a single outgoing envelope (dict) in its own window."""
     response_window = CTkToplevel(root)
+    _register_event_window(response_window, "outgoing")
     title = "Outgoing Envelope"
     if target_label:
         title += f" to {target_label}"
@@ -503,6 +547,32 @@ def display_response_html(html_content):
     file_path = Path.cwd() / "cards.html"
     file_path.write_text(html_content, encoding="utf-8")
     webbrowser.open(file_path.as_uri())
+
+
+def _register_event_window(window, bucket: str) -> None:
+    if bucket not in _EVENT_WINDOWS:
+        return
+    _EVENT_WINDOWS[bucket].append(window)
+
+    def _on_close():
+        try:
+            _EVENT_WINDOWS[bucket].remove(window)
+        except ValueError:
+            pass
+        window.destroy()
+
+    window.protocol("WM_DELETE_WINDOW", _on_close)
+
+
+def close_event_windows() -> None:
+    for bucket in ("incoming", "outgoing"):
+        windows = list(_EVENT_WINDOWS.get(bucket, []))
+        for window in windows:
+            try:
+                window.destroy()
+            except Exception:
+                pass
+        _EVENT_WINDOWS[bucket] = []
 
 
 def escape_blanks_in_url(url):

@@ -7,6 +7,11 @@ import openfloor
 from openfloor import DialogEvent, UtteranceEvent
 import ui_components
 
+DEFAULT_REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    "Accept": "application/json",
+}
+
 
 def send_broadcast_to_agents(payload_obj, urls_to_send):
     """Phase 1: Send broadcast to all agents and collect their responses.
@@ -23,7 +28,12 @@ def send_broadcast_to_agents(payload_obj, urls_to_send):
     for target_url in urls_to_send:
         try:
             print(f"\nSending broadcast to: {target_url}")
-            response = requests.post(target_url, json=payload_obj, timeout=5)
+            response = requests.post(
+                target_url,
+                json=payload_obj,
+                timeout=5,
+                headers=DEFAULT_REQUEST_HEADERS,
+            )
             print(f"HTTP status from {target_url}: {response.status_code}")
             print("Response headers:", dict(response.headers))
             print("Response text (first 500 chars):", response.text[:500])
@@ -96,6 +106,13 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
         extract_url_callback: Function to extract URL from agent info (optional)
         manifest_cache: Dictionary to cache conversational names (optional)
     """
+    def _normalize_agent_id(value):
+        if not value:
+            return value
+        if value.startswith("agent:"):
+            value = value[len("agent:"):]
+        return value.rstrip("/").lower()
+
     for target_url, response_data, original_sender, incoming_events in all_responses:
         assistantConversationalName = ""
         assistant_url = target_url
@@ -107,13 +124,15 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
                     manifest = manifests[0]
                     assistantConversationalName = manifest.get("identification", {}).get("conversationalName", "")
                     assistant_uri = manifest.get("identification", {}).get("uri", "")
+                    manifest_speaker_uri = manifest.get("identification", {}).get("speakerUri", "")
                     manifest_service_url = manifest.get("identification", {}).get("serviceUrl", target_url)
                     
                     # Cache conversational name for later use
                     if manifest_cache is not None and assistantConversationalName:
-                        manifest_cache[manifest_service_url] = assistantConversationalName
-                        if manifest_service_url != target_url:
-                            manifest_cache[target_url] = assistantConversationalName
+                        for key in (manifest_service_url, target_url, assistant_uri, manifest_speaker_uri):
+                            normalized = _normalize_agent_id(key)
+                            if normalized:
+                                manifest_cache[normalized] = assistantConversationalName
                     
                     # Update agent info with conversational name
                     if invited_agents is not None and extract_url_callback is not None:
@@ -152,15 +171,28 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
                 
                 # Extract speaker info for conversation history
                 speaker_uri = dialog_event.get("speakerUri", "Unknown")
+                print(f"[DEBUG] Processing utterance - speakerUri from dialogEvent: {speaker_uri}")
                 
-                # Try to get conversational name from floor manager if we don't have it yet
-                if not assistantConversationalName and floor_manager is not None and speaker_uri != "Unknown":
+                # Get the conversational name for the actual speaker (from speakerUri in dialogEvent)
+                speaker_conversational_name = None
+                if floor_manager is not None and speaker_uri != "Unknown":
                     try:
+                        print(f"[DEBUG] Looking up speaker in floor manager. Available conversants: {list(floor_manager.conversants.keys())}")
                         conversant = floor_manager.conversants.get(speaker_uri)
-                        if conversant and conversant.conversational_name:
-                            assistantConversationalName = conversant.conversational_name
+                        if conversant:
+                            speaker_conversational_name = conversant.conversational_name
+                            print(f"[DEBUG] Found conversant: {speaker_conversational_name}")
+                        else:
+                            print(f"[DEBUG] No conversant found for speaker_uri: {speaker_uri}")
                     except Exception as e:
                         print(f"Could not look up conversational name from floor manager: {e}")
+                if not speaker_conversational_name and manifest_cache is not None:
+                    normalized_speaker = _normalize_agent_id(speaker_uri)
+                    normalized_target = _normalize_agent_id(target_url)
+                    if normalized_speaker and normalized_speaker in manifest_cache:
+                        speaker_conversational_name = manifest_cache.get(normalized_speaker)
+                    elif normalized_target and normalized_target in manifest_cache:
+                        speaker_conversational_name = manifest_cache.get(normalized_target)
                 
                 # Check if there's an HTML feature and display it in browser
                 if html_features:
@@ -178,8 +210,9 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
                     
                     # Update conversation history with utterance ID for deduplication
                     utterance_id = dialog_event.get("id")
+                    # Use the speaker's conversational name, not the responding agent's name
                     update_conversation_history_callback(
-                        assistantConversationalName or speaker_uri,
+                        speaker_conversational_name or speaker_uri,
                         extracted_value,
                         speaker_uri,
                         utterance_id
@@ -195,8 +228,12 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
                         ui_components.display_response_html(html_content)
                         
         if show_incoming_events:
-            for event in incoming_events:
-                ui_components.display_incoming_event_json(root, event, assistantConversationalName, assistant_url)
+            ui_components.display_incoming_envelope_json(
+                root,
+                response_data,
+                assistantConversationalName,
+                assistant_url,
+            )
 
 
 def forward_responses_to_agents(all_responses, urls_to_send, global_conversation, update_conversation_history_callback):
@@ -255,7 +292,11 @@ def forward_responses_to_agents(all_responses, urls_to_send, global_conversation
                         print(f"Conversation ID: {global_conversation.id}")
                         print(f"Number of broadcast events: {len(broadcast_events)}")
                         print(f"Broadcast events: {json.dumps(broadcast_events, indent=2)}")
-                        forward_response = requests.post(other_agent_url, json=forward_payload)
+                        forward_response = requests.post(
+                            other_agent_url,
+                            json=forward_payload,
+                            headers=DEFAULT_REQUEST_HEADERS,
+                        )
                         print(f"Forward response status: {forward_response.status_code}")
                         
                         # Check what the agent returned
@@ -350,7 +391,11 @@ def forward_responses_to_agents(all_responses, urls_to_send, global_conversation
                                     for recipient_url in other_recipients:
                                         try:
                                             print(f"  → Recursive forward from {other_agent_url} to {recipient_url}")
-                                            recursive_response = requests.post(recipient_url, json=recursive_payload)
+                                            recursive_response = requests.post(
+                                                recipient_url,
+                                                json=recursive_payload,
+                                                headers=DEFAULT_REQUEST_HEADERS,
+                                            )
                                             print(f"  → Recursive forward status: {recursive_response.status_code}")
                                         except Exception as e:
                                             print(f"  → Failed recursive forward to {recipient_url}: {e}")

@@ -14,6 +14,8 @@ And returns:
 All OpenFloor event parsing and envelope construction is handled by template_agent.py.
 """
 
+import globals
+
 from datetime import datetime
 import pytz
 import re
@@ -105,15 +107,17 @@ def process_utterance(user_text: str, agent_name: str = "TimeAgent") -> str:
     user_text_lower = user_text.lower().strip()
     
     # Check if query is time-related at all
-    time_keywords = ["time", "clock", "timezone", "hour", "minute", "what time", "when is it"]
+    time_keywords = ["time", "clock", "timezone", "time zone", "hour", "minute", "what time", "when is it"]
     city_found = any(city in user_text_lower for city in CITY_TIMEZONES.keys())
     has_time_keyword = any(keyword in user_text_lower for keyword in time_keywords)
     has_help_keyword = any(word in user_text_lower for word in ["help", "what can you do", "capabilities"])
     has_list_keyword = any(phrase in user_text_lower for phrase in ["list cities", "which cities", "what cities", "available cities"])
     
-    # If query is not time-related, return None to send empty response
+    # If query is not time-related, suppress response for multi-agent floors.
     if not (city_found or has_time_keyword or has_help_keyword or has_list_keyword):
-        return None
+        if globals.number_conversants > 1:
+            return ""
+        return "I am only able to give time information."
     
     # Check for help requests
     if has_help_keyword:
@@ -127,10 +131,14 @@ def process_utterance(user_text: str, agent_name: str = "TimeAgent") -> str:
     city = _extract_city_from_query(user_text_lower)
     
     if city:
+        if "timezone" in user_text_lower or "time zone" in user_text_lower:
+            return _get_timezone_for_city(city)
         return _get_time_for_city(city)
     
     # If no specific city found, check for general time request
     if has_time_keyword:
+        if "timezone" in user_text_lower or "time zone" in user_text_lower:
+            return "I can tell you the timezone for major cities. Which city are you interested in?"
         return "I can tell you the current time in major cities worldwide. Which city are you interested in? (Or ask 'list cities' to see available cities)"
     
     # If we got here with time-related keywords but nothing matched, return None
@@ -190,6 +198,34 @@ def _get_time_for_city(city: str) -> str:
         
     except Exception as e:
         return f"Sorry, I encountered an error getting the time for {city}: {str(e)}"
+
+
+def _get_timezone_for_city(city: str) -> str:
+    """
+    Get timezone identifier for a specific city.
+    """
+    timezone_str = CITY_TIMEZONES.get(city)
+
+    if not timezone_str:
+        return f"Sorry, I don't have timezone information for '{city}'. Try 'list cities' to see available cities."
+
+    try:
+        tz = pytz.timezone(timezone_str)
+        now = datetime.now(tz)
+        tz_abbrev = now.strftime("%Z")
+        offset = now.utcoffset()
+    except Exception as e:
+        return f"Sorry, I encountered an error getting the timezone for {city}: {str(e)}"
+
+    total_minutes = int(offset.total_seconds() / 60) if offset else 0
+    sign = "+" if total_minutes >= 0 else "-"
+    abs_minutes = abs(total_minutes)
+    hours = abs_minutes // 60
+    minutes = abs_minutes % 60
+    gmt_offset = f"GMT{sign}{hours:02d}:{minutes:02d}"
+
+    city_display = city.title()
+    return f"{city_display} is in the {timezone_str} time zone ({tz_abbrev}, {gmt_offset})."
 
 
 def _list_available_cities() -> str:

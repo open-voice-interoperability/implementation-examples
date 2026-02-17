@@ -167,7 +167,7 @@ def get_manifest():
 if __name__ == '__main__':
     # Get configuration from environment
     host = os.environ.get('HOST', '0.0.0.0')
-    port = int(os.environ.get('PORT', 8080))
+    port = int(os.environ.get('PORT', 8082))
     debug = os.environ.get('DEBUG', 'false').lower() == 'true'
     
     logger.info("=" * 60)

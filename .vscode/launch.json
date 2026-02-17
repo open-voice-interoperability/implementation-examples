@@ -1,14 +1,16 @@
 {
     "version": "0.2.0",
     "configurations": [
+        
         {
             "name": "Python: Stella Server",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/stella/server.py",
+            "program": "${workspaceFolder}/stella/flask_server.py",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/stella",
             "justMyCode": false,
+            "python": "${workspaceFolder}/gemini-agent/.venv/Scripts/python.exe",
             "env": {
                 "FLASK_ENV": "development",
                 "FLASK_DEBUG": "1"
@@ -31,6 +33,48 @@
             "cwd": "${workspaceFolder}/gemini-agent",
             "justMyCode": false,
             "python": "${workspaceFolder}/gemini-agent/.venv/Scripts/python.exe"
+        },
+        {
+            "name": "Python: erin Flask server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/erin/flask_server.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/erin",
+            "justMyCode": false,
+            "python": "${workspaceFolder}/gemini-agent/.venv/Scripts/python.exe"
+        },
+        {
+            "name": "Python: verity Flask server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/verity/flask_server.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/verity",
+            "justMyCode": false,
+            "python": "${workspaceFolder}/gemini-agent/.venv/Scripts/python.exe"
+        },
+        {
+            "name": "Python: time-agent Flask server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/time-agent/flask_server.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/time-agent",
+            "justMyCode": false,
+            "python": "${workspaceFolder}/gemini-agent/.venv/Scripts/python.exe"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Python: All Local Agents",
+            "configurations": [
+                "Python: Stella Server",
+                "Python: gemini-agent Flask server",
+                "Python: erin Flask server",
+                "Python: verity Flask server",
+                "Python: time-agent Flask server"
+            ]
         }
     ]
 }

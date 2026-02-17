@@ -21,6 +21,11 @@ from known_agents import KNOWN_AGENTS
 import ui_components
 import event_handlers
 
+DEFAULT_REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    "Accept": "application/json",
+}
+
 client_uri = ""
 client_url = ""  
 private = False
@@ -40,6 +45,166 @@ revoked_agents = []  # List to keep track of agents whose floor has been revoked
 agent_checkboxes = {}  # Dictionary to track checkboxes: {agent_url: checkbox_widget}
 manifest_cache = {}  # Dictionary to cache conversational names from manifests: {url: conversational_name}
 
+def _extract_known_agent_url(agent_info):
+    if isinstance(agent_info, dict):
+        return agent_info.get("url", "")
+    return agent_info
+
+def _extract_known_agent_name(agent_info):
+    if isinstance(agent_info, dict):
+        return agent_info.get("conversational_name", "")
+    return ""
+
+def _build_known_agent_urls(known_agents):
+    urls = []
+    for agent_info in known_agents:
+        url = _extract_known_agent_url(agent_info)
+        if url and url not in urls:
+            urls.append(url)
+    return urls
+
+def _build_known_agent_name_map(known_agents):
+    name_map = {}
+    for agent_info in known_agents:
+        url = _extract_known_agent_url(agent_info)
+        if not url:
+            continue
+        name = _extract_known_agent_name(agent_info)
+        if name:
+            name_map[url] = name
+    return name_map
+
+def _format_known_agent_display(url, conversational_name):
+    if conversational_name:
+        return f"{conversational_name} | {url}"
+    return url
+
+def _build_known_agent_displays(known_agents):
+    displays = []
+    for agent_info in known_agents:
+        url = _extract_known_agent_url(agent_info)
+        if not url:
+            continue
+        display = _format_known_agent_display(url, _extract_known_agent_name(agent_info))
+        if display not in displays:
+            displays.append(display)
+    return displays
+
+def _build_display_to_url_map(known_agents):
+    display_map = {}
+    for agent_info in known_agents:
+        url = _extract_known_agent_url(agent_info)
+        if not url:
+            continue
+        display = _format_known_agent_display(url, _extract_known_agent_name(agent_info))
+        display_map[display] = url
+        display_map[url] = url
+    return display_map
+
+def _display_for_url(url):
+    name = KNOWN_AGENT_NAME_BY_URL.get(url, "")
+    if not name:
+        name = resolve_conversational_name(f"agent:{url}", url) or ""
+    if not name:
+        for agent_info in invited_agents:
+            if extract_url_from_agent_info(agent_info) == url:
+                if isinstance(agent_info, dict):
+                    name = agent_info.get("conversational_name", "")
+                break
+    return _format_known_agent_display(url, name)
+
+def _build_unique_urls(*url_lists):
+    ordered = []
+    seen = set()
+    for urls in url_lists:
+        for url in urls:
+            if url and url not in seen:
+                ordered.append(url)
+                seen.add(url)
+    return ordered
+
+def refresh_agent_combobox():
+    all_urls = _build_unique_urls(KNOWN_AGENT_URLS, previous_urls)
+    all_displays = [_display_for_url(url) for url in all_urls]
+    url_combobox.configure(values=all_displays)
+
+KNOWN_AGENT_URLS = _build_known_agent_urls(KNOWN_AGENTS)
+KNOWN_AGENT_NAME_BY_URL = _build_known_agent_name_map(KNOWN_AGENTS)
+KNOWN_AGENT_DISPLAYS = _build_known_agent_displays(KNOWN_AGENTS)
+KNOWN_AGENT_DISPLAY_TO_URL = _build_display_to_url_map(KNOWN_AGENTS)
+
+def _resolve_assistant_url(value):
+    if not value:
+        return value
+    resolved = KNOWN_AGENT_DISPLAY_TO_URL.get(value)
+    if resolved:
+        return resolved
+    if " | " in value:
+        return value.split(" | ", 1)[-1].strip()
+    return value
+
+def _normalize_agent_id(value):
+    if not value:
+        return value
+    if value.startswith("agent:"):
+        value = value[len("agent:"):]
+    return value.rstrip("/").lower()
+
+def _cache_conversational_name(conversational_name, *keys):
+    if not conversational_name:
+        return
+    for key in keys:
+        normalized = _normalize_agent_id(key)
+        if normalized:
+            manifest_cache[normalized] = conversational_name
+
+def resolve_conversational_name(speaker_uri, target_url=None):
+    """Resolve a friendly name for a speaker using floor manager or manifest cache."""
+    normalized_speaker = _normalize_agent_id(speaker_uri)
+    normalized_target = _normalize_agent_id(target_url)
+
+    if floor_manager is not None and normalized_speaker:
+        try:
+            conversant = floor_manager.conversants.get(speaker_uri)
+            if conversant and conversant.conversational_name:
+                return conversant.conversational_name
+        except Exception:
+            pass
+
+    if normalized_speaker and normalized_speaker in manifest_cache:
+        return manifest_cache.get(normalized_speaker)
+    if normalized_target and normalized_target in manifest_cache:
+        return manifest_cache.get(normalized_target)
+
+    return None
+
+def resolve_display_name_for_target(target_url, speaker_uri=None):
+    if speaker_uri:
+        name = resolve_conversational_name(speaker_uri, target_url)
+        if name:
+            return name
+    for agent_info in invited_agents:
+        if extract_url_from_agent_info(agent_info) == target_url:
+            if isinstance(agent_info, dict):
+                name = agent_info.get("conversational_name", "")
+                if name:
+                    return name
+            break
+    name = KNOWN_AGENT_NAME_BY_URL.get(target_url, "")
+    if name:
+        return name
+    name = resolve_conversational_name(f"agent:{target_url}", target_url)
+    if name:
+        return name
+    return target_url or speaker_uri or "Unknown"
+
+def _normalize_display_name(name):
+    if not name:
+        return name
+    if name.strip().lower().startswith("verity"):
+        return "Verity"
+    return name
+
 # Global conversation to track conversants across the session
 global_conversation = Conversation()
 
@@ -58,7 +223,7 @@ outgoing_events = []
 
 # Create main window and UI elements
 root = ui_components.create_main_window()
-widgets = ui_components.create_ui_elements(root, KNOWN_AGENTS)
+widgets = ui_components.create_ui_elements(root, KNOWN_AGENT_DISPLAYS)
 
 # Extract widget references for easier access
 entry = widgets['entry']
@@ -69,6 +234,7 @@ conversation_text = widgets['conversation_text']
 get_manifests_button = widgets['get_manifests_button']
 invite_button = widgets['invite_button']
 send_utterance_button = widgets['send_utterance_button']
+reset_conversation_button = widgets['reset_conversation_button']
 agents_frame = widgets['agents_frame']
 no_agents_label = widgets['no_agents_label']
 show_outgoing_events_checkbox = widgets['show_outgoing_events_checkbox']
@@ -82,6 +248,20 @@ error_log_buffer = []  # list[str]
 
 # Initialize send utterance button as disabled (no agents yet)
 send_utterance_button.configure(state="disabled")
+
+def reset_conversation_history():
+    """Clear the conversation history and reset numbering."""
+    global conversation_history_for_context, processed_utterance_ids
+    conversation_history_for_context = []
+    processed_utterance_ids = set()
+    try:
+        conversation_text.configure(state='normal')
+        conversation_text.delete('1.0', 'end')
+        conversation_text.configure(state='disabled')
+    except Exception:
+        pass
+
+reset_conversation_button.configure(command=reset_conversation_history)
 
 def log_error(message):
     """Log error message to the error log textbox."""
@@ -153,6 +333,8 @@ def add_invited_agent(agent_url, conversational_name='', update_ui=True):
     # Check manifest cache for conversational name if not provided
     if not conversational_name and agent_url in manifest_cache:
         conversational_name = manifest_cache[agent_url]
+    if not conversational_name:
+        conversational_name = KNOWN_AGENT_NAME_BY_URL.get(agent_url, "")
     
     agent_info = {'url': agent_url, 'conversational_name': conversational_name}
     # Check if URL already exists in list
@@ -165,6 +347,7 @@ def add_invited_agent(agent_url, conversational_name='', update_ui=True):
                     update_agent_textboxes()
             return
     invited_agents.append(agent_info)
+    add_conversant_to_global(agent_url)
     if update_ui:
         update_agent_textboxes()
 
@@ -241,6 +424,8 @@ def remove_conversant_from_global(agent_url):
 def update_conversation_history(speaker, text, speaker_uri=None, utterance_id=None):
     """Update the conversation history text area with a new utterance."""
     global conversation_history_for_context, processed_utterance_ids
+
+    speaker = _normalize_display_name(speaker)
     
     # Skip if we've already processed this utterance
     if utterance_id and utterance_id in processed_utterance_ids:
@@ -480,7 +665,7 @@ def get_manifests():
 
 def invite():
     # Check if the agent in the URL combobox is already invited
-    assistant_url = url_combobox.get()
+    assistant_url = _resolve_assistant_url(url_combobox.get())
     if assistant_url:
         # Check if this URL is already in the invited agents list
         for agent_info in invited_agents:
@@ -499,7 +684,7 @@ def invite():
 def send_events(event_types):
     global client_url,client_uri,assistant_url, assistant_uri, assistantConversationalName, previous_urls, outgoing_events, private, global_conversation
     user_input = entry.get().strip()
-    assistant_url = (url_combobox.get() or "").strip()
+    assistant_url = _resolve_assistant_url((url_combobox.get() or "").strip())
     
     # Check if we should send to all invited agents
     send_to_all = send_to_all_checkbox.get()
@@ -528,6 +713,12 @@ def send_events(event_types):
         # If all target URLs are already invited, don't send anything
         if not new_invite_urls and "invite" in event_types and len(event_types) == 1:
             return
+
+    if "utterance" in event_types:
+        if not user_input:
+            ui_components.show_app_message(root, "Warning", "Please enter some text before sending an utterance.")
+            return
+        update_conversation_history("You", user_input)
     
     if not target_urls:
         # Note: for utterances we send to invited agents (or selected private-agent checkboxes),
@@ -548,12 +739,8 @@ def send_events(event_types):
     # Update previous_urls while keeping KNOWN_AGENTS
     if assistant_url and assistant_url not in previous_urls:
         previous_urls.append(assistant_url)
-    # Merge KNOWN_AGENTS with previous_urls, preserving order and removing duplicates
-    all_urls = KNOWN_AGENTS.copy()
-    for url in previous_urls:
-        if url not in all_urls:
-            all_urls.append(url)
-    url_combobox.configure(values=all_urls)
+    # Merge known and previous URLs, preserving order and removing duplicates
+    refresh_agent_combobox()
     
     # When sending to all, use broadcast (no 'to' field) and send same envelope to all URLs
     # Each agent will process it as a broadcast message
@@ -567,10 +754,6 @@ def send_events(event_types):
         # Create a single envelope with no 'to' field (broadcast)
         # Use global conversation with current conversants
         conversation = Conversation(id=global_conversation.id, conversants=list(global_conversation.conversants))
-        
-        # Add any new conversants from target_urls to global conversation
-        for agent_url in target_urls:
-            add_conversant_to_global(agent_url)
         
         sender = Sender(
             speakerUri=client_uri,
@@ -596,9 +779,6 @@ def send_events(event_types):
                 getManifestsEvent = openfloor.events.GetManifestsEvent()
                 envelope.events.append(getManifestsEvent)
             elif event_type == "utterance":
-                if not user_input:
-                    ui_components.show_app_message(root, "Warning", "Please enter some text before sending an utterance.")
-                    return
                 # Build a DialogEvent directly and attach it to an UtteranceEvent without 'to' field
                 dialog = DialogEvent(
                     speakerUri=client_uri,
@@ -611,9 +791,6 @@ def send_events(event_types):
                 )
                 # Utterance without 'to' field = broadcast
                 envelope.events.append(UtteranceEvent(dialogEvent=dialog))
-                
-                # Update conversation history
-                update_conversation_history("You", user_input)
             
         outgoing_events.append(envelope)
         envelope_to_send = envelope.to_json(as_payload=True)
@@ -659,8 +836,7 @@ def send_events(event_types):
         # Send to each target URL with a properly addressed envelope
         for target_url in target_urls:
             #construct a conversation envelope for this specific target
-            # Use global conversation and add target as conversant if needed
-            add_conversant_to_global(target_url)
+            # Use global conversation (conversants are added on invite)
             conversation = Conversation(id=global_conversation.id, conversants=list(global_conversation.conversants))
             
             sender = Sender(
@@ -684,9 +860,6 @@ def send_events(event_types):
                     getManifestsEvent = openfloor.events.GetManifestsEvent(to=To(serviceUrl=target_url))
                     envelope.events.append(getManifestsEvent)
                 elif event_type == "utterance":
-                    if not user_input:
-                        ui_components.show_app_message(root, "Warning", "Please enter some text before sending an utterance.")
-                        return
                     # Build a DialogEvent directly and attach it to an UtteranceEvent
                     dialog = DialogEvent(
                         speakerUri=client_uri,
@@ -700,10 +873,6 @@ def send_events(event_types):
                     # Use private flag when sending via individual checkboxes
                     envelope.events.append(UtteranceEvent(dialogEvent=dialog,
                                                           to=To(serviceUrl=target_url, private=use_private or private)))
-                    
-                    # Update conversation history (only once, not for each target)
-                    if target_url == target_urls[0]:
-                        update_conversation_history("You", user_input)
                 
             outgoing_events.append(envelope)
             envelope_to_send = envelope.to_json(as_payload=True)
@@ -724,10 +893,22 @@ def send_events(event_types):
                 # Send POST request to this target URL
                 if DEBUG_CONSOLE_HTTP:
                     print(f"\nSending to: {target_url}")
-                response = requests.post(
-                    target_url,
-                    json=payload_obj
-                )
+                try:
+                    response = requests.post(
+                        target_url,
+                        json=payload_obj,
+                        timeout=10,
+                        headers=DEFAULT_REQUEST_HEADERS,
+                    )
+                except requests.RequestException as exc:
+                    error_msg = f"Failed to reach {target_url}: {exc}"
+                    log_error(error_msg)
+                    ui_components.show_app_message(
+                        root,
+                        "Error",
+                        f"Failed to reach {target_url}. See Error Log for details.",
+                    )
+                    continue
                 if DEBUG_CONSOLE_HTTP:
                     print(f"HTTP status from {target_url}: {response.status_code}")
                     print("Response headers:", dict(response.headers))
@@ -766,13 +947,17 @@ def send_events(event_types):
                             manifest = manifests[0]
                             assistantConversationalName = manifest.get("identification", {}).get("conversationalName", "")
                             assistant_uri = manifest.get("identification", {}).get("uri", "")
+                            manifest_speaker_uri = manifest.get("identification", {}).get("speakerUri", "")
                             manifest_service_url = manifest.get("identification", {}).get("serviceUrl", assistant_url)
                             
                             # Cache conversational name for later use
-                            if assistantConversationalName:
-                                manifest_cache[manifest_service_url] = assistantConversationalName
-                                if manifest_service_url != target_url:
-                                    manifest_cache[target_url] = assistantConversationalName
+                            _cache_conversational_name(
+                                assistantConversationalName,
+                                manifest_service_url,
+                                target_url,
+                                assistant_uri,
+                                manifest_speaker_uri,
+                            )
                             
                             # Update agent info with conversational name
                             for agent_info in invited_agents:
@@ -787,6 +972,10 @@ def send_events(event_types):
                                             print(f"Agent info after update: {agent_info}")
                                         update_agent_textboxes()
                                     break
+
+                            if manifest_service_url and manifest_service_url not in previous_urls and manifest_service_url not in KNOWN_AGENT_URLS:
+                                previous_urls.append(manifest_service_url)
+                                refresh_agent_combobox()
                             
                             # Add agent to floor manager if active
                             if floor_manager is not None and assistant_uri:
@@ -814,6 +1003,12 @@ def send_events(event_types):
                         # Extract speaker info for conversation history
                         speaker_uri = dialog_event.get("speakerUri", "Unknown")
                         
+                        # Resolve speaker name for this utterance (avoid stale global name)
+                        resolved_name = resolve_conversational_name(speaker_uri, target_url)
+                        display_name = resolve_display_name_for_target(target_url, speaker_uri)
+                        if not assistantConversationalName and resolved_name:
+                            assistantConversationalName = resolved_name
+                        
                         # Check if there's an HTML feature and display it in browser
                         if html_features:
                             html_tokens = html_features.get("tokens", [])
@@ -830,7 +1025,7 @@ def send_events(event_types):
                             
                             # Update conversation history with utterance ID for deduplication
                             utterance_id = dialog_event.get("id")
-                            update_conversation_history(assistantConversationalName or speaker_uri, extracted_value, speaker_uri, utterance_id)
+                            update_conversation_history(display_name, extracted_value, speaker_uri, utterance_id)
                             
                             # If MIME type is text/plain, only display JSON response
                             if mime_type == "text/plain":
@@ -843,8 +1038,12 @@ def send_events(event_types):
 
                 # Optionally show incoming events in separate windows
                 if show_incoming_events_checkbox.get():
-                    for event in incoming_events:
-                        ui_components.display_incoming_event_json(root, event, assistantConversationalName, assistant_url)
+                    ui_components.display_incoming_envelope_json(
+                        root,
+                        response_data,
+                        assistantConversationalName,
+                        assistant_url,
+                    )
 
             except Exception as e:
                 import traceback

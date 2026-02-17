@@ -1,9 +1,9 @@
 {
     "AIVendor": "OpenAI",
     "urlAI": "https://api.openai.com/v1/chat/completions",
-    "model": "gpt-4o",
+    "model": "gpt-4o-mini",
     "temperature": "0.0",
-    "personalPrompt": "If you think the conversation is moving outside of your specific expertise, you will say so and suggest that the user look for another assistant to address that topic. ",
+    "personalPrompt": "If you think the conversation is moving outside of the topic of astronomy or space images, you will say so and suggest that the user look for another assistant to address that topic. ",
     "openingGreeting": "Hi ",
     "functionPrompt": "You will identify NASA APIs that can provide information that answers the user's questions about space.",
     "assistantName": "Stella",

@@ -2,8 +2,8 @@
   "manifest": {
     "identification": {
       "conversationalName": "Erin",
-      "speakerUri": "http://localhost:8080",
-      "serviceUrl": "http://localhost:8080",
+      "speakerUri": "http://localhost:8082",
+      "serviceUrl": "http://localhost:8082",
       "organization": "OpenFloor",
       "role": "assistant",
       "synopsis": "An OpenFloor compliant agent whose answers are always false"

@@ -17,6 +17,8 @@ And returns:
 All OpenFloor event parsing and envelope construction is handled by template_agent.py.
 """
 
+import globals
+
 
 def process_utterance(user_text: str, agent_name: str = "Agent") -> str:
     """

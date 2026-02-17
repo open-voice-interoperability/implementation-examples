@@ -24,7 +24,7 @@ macOS/Linux (bash/zsh):
 export GEMINI_API_KEY="your_key"
 ```
 
-Optional: override the model name with `GEMINI_MODEL` (default is `gemini-1.5-flash`).
+Optional: override the model name with `GEMINI_MODEL` (default is `gemini-1.5-flash-latest`).
 
 ## Run
 

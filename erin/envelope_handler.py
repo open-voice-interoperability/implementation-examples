@@ -15,8 +15,19 @@ import logging
 from typing import Optional
 from openfloor.envelope import Envelope, Conversation, Sender, Schema, To
 from openfloor.manifest import Manifest
+import globals
 
 logger = logging.getLogger(__name__)
+
+
+def _update_conversant_count(envelope: Envelope) -> None:
+    try:
+        conversants = None
+        if envelope and getattr(envelope, "conversation", None):
+            conversants = getattr(envelope.conversation, "conversants", None)
+        globals.number_conversants = len(conversants) if conversants else 0
+    except Exception:
+        globals.number_conversants = 0
 
 
 def parse_incoming_envelope(json_payload: str) -> Envelope:
@@ -38,6 +49,7 @@ def parse_incoming_envelope(json_payload: str) -> Envelope:
         # Use openfloor library's from_json method
         # as_payload=True indicates this is a full OpenFloor payload wrapper
         envelope = Envelope.from_json(json_payload, as_payload=True)
+        _update_conversant_count(envelope)
         return envelope
     except Exception as e:
         raise ValueError(f"Failed to parse incoming envelope: {e}")

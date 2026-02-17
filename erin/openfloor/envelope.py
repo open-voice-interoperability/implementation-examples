@@ -10,13 +10,13 @@ import json
 @dataclass
 class Schema(JsonSerializableDataclass):
     """Represents the schema section of an Open Floor message envelope"""
-    version: str = "1.0.0"
+    version: str = "1.1.0"
     url: Optional[str] = None
 
     def __post_init__(self):
         """Initialize after dataclass initialization"""
         if self.version is None:
-            self.version="1.0.0"
+            self.version = "1.1.0"
 
     def __iter__(self) -> Iterator[Tuple[str, Any]]:
         """Convert Schema instance to JSON-compatible dictionary"""

@@ -284,7 +284,7 @@ class TemplateAgent(BotAgent):
         if self.joinedFloor:
             greeting = f"Hi, I'm {agent_name}. I've joined the floor and I'm ready to help!"
         else:
-            greeting = f"Hi, I'm {agent_name}. How can I help you today?"
+            greeting = f"Hi, I'm {agent_name}. I am an agent that always delivers responses that are not factual"
         
         # Create greeting utterance
         dialog = DialogEvent(

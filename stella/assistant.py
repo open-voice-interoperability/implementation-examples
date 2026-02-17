@@ -3,6 +3,7 @@ from openai import OpenAI
 import json
 from datetime import datetime
 import os
+import globals
 
 import sys
 import nasa_api 
@@ -78,7 +79,7 @@ def generate_openai_response(prompt):
 
         # Make the API call
         response = client.chat.completions.create(
-            model="gpt-4",
+            model=agent_config.get("model", "gpt-4o-mini"),
             messages=message_history,
             max_tokens=200,
             temperature=0.7
@@ -112,7 +113,14 @@ def generate_response(inputOpenFloor, sender_from):
     detected_intents = []
     include_manifest_request = False
 
-    envelope = Envelope.from_json(inputOpenFloor,as_payload=True)  
+    envelope = Envelope.from_json(inputOpenFloor,as_payload=True)
+    try:
+        conversants = None
+        if envelope and getattr(envelope, "conversation", None):
+            conversants = getattr(envelope.conversation, "conversants", None)
+        globals.number_conversants = len(conversants) if conversants else 0
+    except Exception:
+        globals.number_conversants = 0
     event_list  = envelope.events
     print(f"Received event to {to_url} from {sender_from}")
 

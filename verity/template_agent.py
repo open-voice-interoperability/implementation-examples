@@ -99,21 +99,27 @@ class TemplateAgent(BotAgent):
             response_dict = utterance_handler.review_utterance(user_text)
             logger.info("generated %s.", response_dict)
 
+            if response_dict.get("suppress"):
+                logger.info("[UTTERANCE] Suppressing response due to conversant count")
+                return
+
             applicable = response_dict.get("applicable")
             self.decision = response_dict.get("decision", "factual")
             if applicable == "no":
                 response_text = (
                     "the request was to verify: "
+                    + '"'
                     + user_text
-                    + "."
+                    + '".'
                     + "\n\nHowever, this utterance is neither factual nor fictional. "
                     + response_dict.get("explanation", "")
                 )
             else:
                 response_text = (
                     "the request was to verify: "
+                    + '"'
                     + user_text
-                    + "."
+                    + '".'
                     + "\n\nThe utterance is "
                     + self.decision
                     + " with a likelihood of being factual of "

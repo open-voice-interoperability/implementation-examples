@@ -8,7 +8,66 @@ Sends test queries to the running TimeAgent server and displays responses.
 import requests
 import json
 
+import globals
+import utterance_handler
+
 AGENT_URL = "http://localhost:8081"
+
+
+def run_local_intent_tests():
+    """Run local (non-server) intent tests against utterance_handler."""
+    print("\n" + "=" * 60)
+    print("Running local intent tests")
+    print("=" * 60)
+
+    original_conversants = globals.number_conversants
+    globals.number_conversants = 2
+
+    try:
+        test_cases = [
+            {
+                "name": "Non-time statement should not trigger",
+                "input": "the moon is smaller than the earth",
+                "expect_empty": True,
+            },
+            {
+                "name": "City-only mention should not trigger",
+                "input": "san francisco",
+                "expect_empty": True,
+            },
+            {
+                "name": "Time query should trigger",
+                "input": "what time is it in san francisco?",
+                "expect_contains": "The current time in San Francisco is",
+            },
+            {
+                "name": "Timezone query should trigger",
+                "input": "what timezone is san francisco in?",
+                "expect_contains": "San Francisco is in the America/Los_Angeles time zone",
+            },
+        ]
+
+        for case in test_cases:
+            response = utterance_handler.process_utterance(case["input"])
+            passed = True
+
+            if case.get("expect_empty"):
+                passed = (response == "")
+            elif case.get("expect_contains"):
+                expected = case["expect_contains"]
+                passed = isinstance(response, str) and expected in response
+
+            status = "PASS" if passed else "FAIL"
+            print(f"[{status}] {case['name']}")
+            print(f"  input: {case['input']}")
+            print(f"  response: {response!r}")
+
+            if not passed:
+                raise AssertionError(f"Test failed: {case['name']}")
+
+        print("All local intent tests passed.")
+    finally:
+        globals.number_conversants = original_conversants
 
 
 def send_utterance(text: str):
@@ -81,6 +140,8 @@ def main():
     print("TimeAgent Test Script")
     print("=" * 60)
     print(f"Testing TimeAgent at {AGENT_URL}")
+
+    run_local_intent_tests()
     
     # Test various queries
     queries = [

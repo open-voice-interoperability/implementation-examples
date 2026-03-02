@@ -64,12 +64,15 @@ class TemplateAgent(BotAgent):
                 logger.debug("[UTTERANCE] No response generated")
                 return
 
+            responding_to_name = self._resolve_utterance_speaker_name(event, in_envelope)
+            response_prefix = f"{responding_to_name}: " if responding_to_name else ""
+
             if self._is_html_response(response_text):
                 html_feature = Feature(
                     mimeType="text/html",
                     tokens=[Token(value=response_text)],
                 )
-                text_feature = TextFeature(values=[self._build_html_summary(user_text)])
+                text_feature = TextFeature(values=[f"{response_prefix}{self._build_html_summary(user_text)}"])
                 dialog = DialogEvent(
                     speakerUri=self._manifest.identification.speakerUri,
                     features={
@@ -80,7 +83,7 @@ class TemplateAgent(BotAgent):
             else:
                 dialog = DialogEvent(
                     speakerUri=self._manifest.identification.speakerUri,
-                    features={"text": TextFeature(values=[response_text])},
+                    features={"text": TextFeature(values=[f"{response_prefix}{response_text}"])},
                 )
             out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
         except Exception:
@@ -154,6 +157,64 @@ class TemplateAgent(BotAgent):
         except Exception:
             logger.exception("[EXTRACT_TEXT] Error extracting text")
             return ""
+
+    def _extract_speaker_uri_from_utterance_event(self, event: UtteranceEvent) -> str:
+        try:
+            params = None
+            if hasattr(event, "parameters"):
+                params = event.parameters
+            elif isinstance(event, dict):
+                params = event.get("parameters")
+
+            dialog_event = None
+            if hasattr(params, "dialogEvent"):
+                dialog_event = params.dialogEvent
+            elif hasattr(params, "__contains__") and hasattr(params, "get") and "dialogEvent" in params:
+                dialog_event = params.get("dialogEvent")
+            elif isinstance(params, dict) and "dialogEvent" in params:
+                dialog_event = params["dialogEvent"]
+            elif isinstance(event, dict) and "dialogEvent" in event:
+                dialog_event = event["dialogEvent"]
+            else:
+                dialog_event = params
+
+            if hasattr(dialog_event, "speakerUri"):
+                return getattr(dialog_event, "speakerUri", "") or ""
+            if isinstance(dialog_event, dict):
+                return dialog_event.get("speakerUri", "") or ""
+            return ""
+        except Exception:
+            return ""
+
+    def _resolve_utterance_speaker_name(self, event: UtteranceEvent, in_envelope: Envelope) -> str:
+        speaker_uri = self._extract_speaker_uri_from_utterance_event(event)
+        if not speaker_uri:
+            return ""
+        if "assistantclientconvener" in str(speaker_uri).strip().lower():
+            return ""
+
+        conversation = getattr(in_envelope, "conversation", None)
+        conversants = getattr(conversation, "conversants", []) if conversation else []
+
+        for conversant in conversants or []:
+            identification = getattr(conversant, "identification", None)
+            if identification is None and isinstance(conversant, dict):
+                identification = conversant.get("identification", {})
+
+            if identification is None:
+                continue
+
+            if isinstance(identification, dict):
+                conversant_speaker = identification.get("speakerUri")
+                conversational_name = identification.get("conversationalName")
+            else:
+                conversant_speaker = getattr(identification, "speakerUri", None)
+                conversational_name = getattr(identification, "conversationalName", None)
+
+            if conversant_speaker and str(conversant_speaker).strip().lower() == str(speaker_uri).strip().lower():
+                return conversational_name or speaker_uri
+
+        return speaker_uri
 
     def _is_html_response(self, text: str) -> bool:
         if not text:

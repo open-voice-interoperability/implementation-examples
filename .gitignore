@@ -80,3 +80,5 @@ gemini-agent/.venv/
 
 # VS Code settings
 .vscode/
+assistantClient/test.cpp
+stella/failure.json

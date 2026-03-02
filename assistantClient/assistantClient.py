@@ -6,6 +6,7 @@ import openfloor
 
 import json
 import requests
+import re
 from datetime import datetime
 import socket
 import traceback
@@ -204,6 +205,62 @@ def _normalize_display_name(name):
     if name.strip().lower().startswith("verity"):
         return "Verity"
     return name
+
+
+def _resolve_speaker_uri_for_agent_url(agent_url):
+    if not agent_url:
+        return None
+
+    for conversant in global_conversation.conversants:
+        identification = getattr(conversant, "identification", None)
+        if identification is None:
+            continue
+        if getattr(identification, "serviceUrl", None) == agent_url:
+            speaker_uri = getattr(identification, "speakerUri", None)
+            if speaker_uri:
+                return speaker_uri
+
+    return f"agent:{agent_url}"
+
+
+def _find_addressed_agent_in_utterance(user_input):
+    if not user_input:
+        return None
+
+    matches = []
+    lowered_input = user_input.lower()
+
+    for agent_info in invited_agents:
+        target_url = extract_url_from_agent_info(agent_info)
+        if not target_url:
+            continue
+
+        conversational_name = ""
+        if isinstance(agent_info, dict):
+            conversational_name = (agent_info.get("conversational_name") or "").strip()
+        if not conversational_name:
+            conversational_name = resolve_conversational_name(f"agent:{target_url}", target_url) or ""
+        if not conversational_name:
+            conversational_name = KNOWN_AGENT_NAME_BY_URL.get(target_url, "")
+
+        if not conversational_name:
+            continue
+
+        pattern = rf"(?<!\w){re.escape(conversational_name.lower())}(?!\w)"
+        if re.search(pattern, lowered_input):
+            matches.append((len(conversational_name), target_url, conversational_name))
+
+    if not matches:
+        return None
+
+    matches.sort(key=lambda item: item[0], reverse=True)
+    _, target_url, conversational_name = matches[0]
+
+    return {
+        "url": target_url,
+        "name": conversational_name,
+        "speaker_uri": _resolve_speaker_uri_for_agent_url(target_url),
+    }
 
 # Global conversation to track conversants across the session
 global_conversation = Conversation()
@@ -685,6 +742,7 @@ def send_events(event_types):
     global client_url,client_uri,assistant_url, assistant_uri, assistantConversationalName, previous_urls, outgoing_events, private, global_conversation
     user_input = entry.get().strip()
     assistant_url = _resolve_assistant_url((url_combobox.get() or "").strip())
+    addressed_agent = None
     
     # Check if we should send to all invited agents
     send_to_all = send_to_all_checkbox.get()
@@ -719,6 +777,9 @@ def send_events(event_types):
             ui_components.show_app_message(root, "Warning", "Please enter some text before sending an utterance.")
             return
         update_conversation_history("You", user_input)
+        addressed_agent = _find_addressed_agent_in_utterance(user_input)
+        if addressed_agent and invited_agents:
+            target_urls = [extract_url_from_agent_info(agent) for agent in invited_agents]
     
     if not target_urls:
         # Note: for utterances we send to invited agents (or selected private-agent checkboxes),
@@ -789,8 +850,16 @@ def send_events(event_types):
                         }
                     }
                 )
-                # Utterance without 'to' field = broadcast
-                envelope.events.append(UtteranceEvent(dialogEvent=dialog))
+                if addressed_agent and addressed_agent.get("speaker_uri"):
+                    envelope.events.append(
+                        UtteranceEvent(
+                            dialogEvent=dialog,
+                            to=To(speakerUri=addressed_agent["speaker_uri"]),
+                        )
+                    )
+                else:
+                    # Utterance without 'to' field = broadcast
+                    envelope.events.append(UtteranceEvent(dialogEvent=dialog))
             
         outgoing_events.append(envelope)
         envelope_to_send = envelope.to_json(as_payload=True)
@@ -870,9 +939,22 @@ def send_events(event_types):
                             }
                         }
                     )
-                    # Use private flag when sending via individual checkboxes
-                    envelope.events.append(UtteranceEvent(dialogEvent=dialog,
-                                                          to=To(serviceUrl=target_url, private=use_private or private)))
+                    # If a conversational name was used in the utterance, target by speakerUri.
+                    if addressed_agent and addressed_agent.get("speaker_uri"):
+                        envelope.events.append(
+                            UtteranceEvent(
+                                dialogEvent=dialog,
+                                to=To(speakerUri=addressed_agent["speaker_uri"], private=use_private or private),
+                            )
+                        )
+                    else:
+                        # Use private flag when sending via individual checkboxes
+                        envelope.events.append(
+                            UtteranceEvent(
+                                dialogEvent=dialog,
+                                to=To(serviceUrl=target_url, private=use_private or private),
+                            )
+                        )
                 
             outgoing_events.append(envelope)
             envelope_to_send = envelope.to_json(as_payload=True)

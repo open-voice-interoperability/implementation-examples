@@ -148,6 +148,10 @@ class TemplateAgent(BotAgent):
                 logger.debug("[UTTERANCE] No response generated")
                 return
 
+            responding_to_name = self._resolve_utterance_speaker_name(event, in_envelope)
+            if responding_to_name:
+                response_text = f"{responding_to_name}: {response_text}"
+
             logger.debug("[UTTERANCE] Response: %s", response_text)
             
             # Construct OpenFloor response event
@@ -247,6 +251,59 @@ class TemplateAgent(BotAgent):
         except Exception as e:
             logger.exception("[EXTRACT_TEXT] Error extracting text")
             return ""
+
+    def _extract_speaker_uri_from_utterance_event(self, event: UtteranceEvent) -> str:
+        try:
+            params = getattr(event, 'parameters', None)
+            if params is None:
+                return ""
+
+            if hasattr(params, 'dialogEvent'):
+                dialog_event = params.dialogEvent
+            elif hasattr(params, '__contains__') and 'dialogEvent' in params:
+                dialog_event = params.get('dialogEvent')
+            elif isinstance(params, dict) and 'dialogEvent' in params:
+                dialog_event = params['dialogEvent']
+            else:
+                dialog_event = params
+
+            if hasattr(dialog_event, 'speakerUri'):
+                return getattr(dialog_event, 'speakerUri', '') or ''
+            if isinstance(dialog_event, dict):
+                return dialog_event.get('speakerUri', '') or ''
+            return ""
+        except Exception:
+            return ""
+
+    def _resolve_utterance_speaker_name(self, event: UtteranceEvent, in_envelope: Envelope) -> str:
+        speaker_uri = self._extract_speaker_uri_from_utterance_event(event)
+        if not speaker_uri:
+            return ""
+        if "assistantclientconvener" in str(speaker_uri).strip().lower():
+            return ""
+
+        conversation = getattr(in_envelope, 'conversation', None)
+        conversants = getattr(conversation, 'conversants', []) if conversation else []
+
+        for conversant in conversants or []:
+            identification = getattr(conversant, 'identification', None)
+            if identification is None and isinstance(conversant, dict):
+                identification = conversant.get('identification', {})
+
+            if identification is None:
+                continue
+
+            if isinstance(identification, dict):
+                conversant_speaker = identification.get('speakerUri')
+                conversational_name = identification.get('conversationalName')
+            else:
+                conversant_speaker = getattr(identification, 'speakerUri', None)
+                conversational_name = getattr(identification, 'conversationalName', None)
+
+            if conversant_speaker and str(conversant_speaker).strip().lower() == str(speaker_uri).strip().lower():
+                return conversational_name or speaker_uri
+
+        return speaker_uri
     
     # =========================================================================
     # CONVERSATION LIFECYCLE EVENTS

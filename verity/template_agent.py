@@ -56,6 +56,7 @@ class TemplateAgent(BotAgent):
         self.doing_invite = False
         self.decision = "factual"
         self.private = True
+        self._conversational_name_cache = {}
 
         self.on_utterance._handlers = []
         self.on_utterance += self._handle_utterance
@@ -89,6 +90,8 @@ class TemplateAgent(BotAgent):
             self.currentConversation = in_envelope.conversation.id
 
         try:
+            self._cache_conversation_conversants(in_envelope)
+
             user_text = self._extract_text_from_utterance_event(event)
             if not user_text:
                 logger.debug("[UTTERANCE] No text found in utterance event")
@@ -103,11 +106,14 @@ class TemplateAgent(BotAgent):
                 logger.info("[UTTERANCE] Suppressing response due to conversant count")
                 return
 
+            sender_name = self._resolve_sender_conversational_name(event, in_envelope)
+            request_prefix = "the request was to verify an utterance: "
+
             applicable = response_dict.get("applicable")
             self.decision = response_dict.get("decision", "factual")
             if applicable == "no":
                 response_text = (
-                    "the request was to verify: "
+                    request_prefix
                     + '"'
                     + user_text
                     + '".'
@@ -116,7 +122,7 @@ class TemplateAgent(BotAgent):
                 )
             else:
                 response_text = (
-                    "the request was to verify: "
+                    request_prefix
                     + '"'
                     + user_text
                     + '".'
@@ -127,6 +133,9 @@ class TemplateAgent(BotAgent):
                     + ". "
                     + response_dict.get("explanation", "")
                 )
+
+            if sender_name:
+                response_text = f"{sender_name}: {response_text}"
 
             should_reply = (not self.is_sentinel)
             if self.is_sentinel and applicable == "yes" and self.decision == "not factual":
@@ -143,6 +152,130 @@ class TemplateAgent(BotAgent):
             logger.exception("[UTTERANCE] Error processing utterance")
             error_text = "I had trouble evaluating that statement."
             self._append_utterance(out_envelope, error_text, in_envelope)
+
+    def _resolve_sender_conversational_name(self, event: UtteranceEvent, in_envelope: Envelope) -> str:
+        utterance_speaker_uri = self._extract_speaker_uri_from_utterance_event(event)
+        if utterance_speaker_uri and "assistantclientconvener" in str(utterance_speaker_uri).strip().lower():
+            return ""
+
+        sender = getattr(in_envelope, "sender", None)
+        if isinstance(sender, dict):
+            sender_speaker_uri = sender.get("speakerUri")
+            sender_service_url = sender.get("serviceUrl")
+        else:
+            sender_speaker_uri = getattr(sender, "speakerUri", None) if sender else None
+            sender_service_url = getattr(sender, "serviceUrl", None) if sender else None
+
+        if sender_speaker_uri and "assistantclientconvener" in str(sender_speaker_uri).strip().lower():
+            return ""
+
+        conversation = getattr(in_envelope, "conversation", None)
+        conversants = getattr(conversation, "conversants", []) if conversation else []
+
+        for conversant in conversants or []:
+            identification = getattr(conversant, "identification", None)
+            if identification is None and isinstance(conversant, dict):
+                identification = conversant.get("identification", {})
+
+            if identification is None:
+                continue
+
+            if isinstance(identification, dict):
+                conversant_speaker_uri = identification.get("speakerUri")
+                conversant_service_url = identification.get("serviceUrl")
+                conversational_name = identification.get("conversationalName")
+            else:
+                conversant_speaker_uri = getattr(identification, "speakerUri", None)
+                conversant_service_url = getattr(identification, "serviceUrl", None)
+                conversational_name = getattr(identification, "conversationalName", None)
+
+            matches_sender = (
+                (utterance_speaker_uri and self._normalize_agent_key(conversant_speaker_uri) == self._normalize_agent_key(utterance_speaker_uri))
+                or (sender_speaker_uri and self._normalize_agent_key(conversant_speaker_uri) == self._normalize_agent_key(sender_speaker_uri))
+                or (sender_service_url and self._normalize_agent_key(conversant_service_url) == self._normalize_agent_key(sender_service_url))
+            )
+            if matches_sender and conversational_name:
+                self._cache_conversational_name(conversational_name, conversant_speaker_uri, conversant_service_url)
+                return conversational_name
+
+        cached_name = self._lookup_cached_conversational_name(
+            utterance_speaker_uri,
+            sender_speaker_uri,
+            sender_service_url,
+        )
+        if cached_name:
+            return cached_name
+
+        if utterance_speaker_uri:
+            return utterance_speaker_uri
+        if sender_speaker_uri:
+            return sender_speaker_uri
+        if sender_service_url:
+            return sender_service_url
+        return "unknown agent"
+
+    def _normalize_agent_key(self, value) -> str:
+        if not value:
+            return ""
+        return str(value).strip().rstrip('/').lower()
+
+    def _cache_conversational_name(self, conversational_name: str, *keys) -> None:
+        if not conversational_name:
+            return
+        for key in keys:
+            normalized = self._normalize_agent_key(key)
+            if normalized:
+                self._conversational_name_cache[normalized] = conversational_name
+
+    def _lookup_cached_conversational_name(self, *keys) -> str:
+        for key in keys:
+            normalized = self._normalize_agent_key(key)
+            if normalized and normalized in self._conversational_name_cache:
+                return self._conversational_name_cache[normalized]
+        return ""
+
+    def _cache_conversation_conversants(self, in_envelope: Envelope) -> None:
+        conversation = getattr(in_envelope, "conversation", None)
+        conversants = getattr(conversation, "conversants", []) if conversation else []
+
+        for conversant in conversants or []:
+            identification = getattr(conversant, "identification", None)
+            if identification is None and isinstance(conversant, dict):
+                identification = conversant.get("identification", {})
+
+            if isinstance(identification, dict):
+                self._cache_conversational_name(
+                    identification.get("conversationalName"),
+                    identification.get("speakerUri"),
+                    identification.get("serviceUrl"),
+                )
+            elif identification is not None:
+                self._cache_conversational_name(
+                    getattr(identification, "conversationalName", None),
+                    getattr(identification, "speakerUri", None),
+                    getattr(identification, "serviceUrl", None),
+                )
+
+    def _extract_speaker_uri_from_utterance_event(self, event: UtteranceEvent) -> str:
+        try:
+            params = getattr(event, "parameters", None)
+            if params is None:
+                return ""
+
+            if hasattr(params, "dialogEvent"):
+                dialog_event = params.dialogEvent
+            elif isinstance(params, dict) and "dialogEvent" in params:
+                dialog_event = params.get("dialogEvent")
+            elif hasattr(params, "get"):
+                dialog_event = params.get("dialogEvent")
+            else:
+                dialog_event = params
+
+            if isinstance(dialog_event, dict):
+                return dialog_event.get("speakerUri", "") or ""
+            return getattr(dialog_event, "speakerUri", "") or ""
+        except Exception:
+            return ""
 
     def _extract_text_from_utterance_event(self, event: UtteranceEvent) -> str:
         try:
@@ -270,12 +403,29 @@ class TemplateAgent(BotAgent):
 
     def _handle_publish_manifests(self, event: PublishManifestsEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
         logger.info("[PUBLISH_MANIFESTS] Received manifests from other agents")
+        params = getattr(event, 'parameters', None)
+        manifests = []
+        if isinstance(params, dict):
+            manifests = params.get('manifests') or params.get('servicingManifests') or []
+        elif params is not None:
+            manifests = getattr(params, 'manifests', None) or getattr(params, 'servicingManifests', None) or []
 
-        if hasattr(event, 'parameters') and hasattr(event.parameters, 'manifests'):
-            manifests = event.parameters.manifests
-            for manifest in manifests:
-                agent_name = manifest.identification.conversationalName if hasattr(manifest, 'identification') else "Unknown"
-                logger.debug("[PUBLISH_MANIFESTS] - %s", agent_name)
+        for manifest in manifests:
+            identification = getattr(manifest, 'identification', None)
+            if identification is None and isinstance(manifest, dict):
+                identification = manifest.get('identification', {})
+
+            if isinstance(identification, dict):
+                agent_name = identification.get('conversationalName') or "Unknown"
+                speaker_uri = identification.get('speakerUri') or identification.get('uri')
+                service_url = identification.get('serviceUrl')
+            else:
+                agent_name = getattr(identification, 'conversationalName', "Unknown") if identification is not None else "Unknown"
+                speaker_uri = getattr(identification, 'speakerUri', None) if identification is not None else None
+                service_url = getattr(identification, 'serviceUrl', None) if identification is not None else None
+
+            self._cache_conversational_name(agent_name, speaker_uri, service_url)
+            logger.debug("[PUBLISH_MANIFESTS] - %s", agent_name)
 
     def _handle_grant_floor(self, event: GrantFloorEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
         logger.info("[GRANT_FLOOR] Floor granted in conversation: %s", in_envelope.conversation.id)

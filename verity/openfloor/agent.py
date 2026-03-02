@@ -59,6 +59,12 @@ class OpenFloorAgent(OpenFloorEvents):
 
     def add_metadata(self, events: List[Event]) -> List[Tuple[Event, Dict[str, bool]]]:
         result = []
+        def normalize_uri(value: Optional[str]) -> Optional[str]:
+            if not value:
+                return value
+            if value.startswith("agent:"):
+                value = value[len("agent:"):]
+            return value.rstrip("/")
         for event in events:
             addressed = False
             try:
@@ -66,30 +72,32 @@ class OpenFloorAgent(OpenFloorEvents):
                 if to is None:
                     addressed = True
                 else:
-                    target_speaker = getattr(to, 'speakerUri', None)
-                    if target_speaker and target_speaker == self._manifest.identification.speakerUri:
-                        addressed = True
+                    target_speaker = normalize_uri(getattr(to, 'speakerUri', None))
+                    manifest_speaker = normalize_uri(self._manifest.identification.speakerUri)
+                    target_service = normalize_uri(getattr(to, 'serviceUrl', None))
+                    manifest_service = normalize_uri(self._manifest.identification.serviceUrl)
 
-                    target_service = getattr(to, 'serviceUrl', None)
-                    manifest_service = self._manifest.identification.serviceUrl
-                    print(f"DEBUG: target_service={target_service}, manifest_service={manifest_service}", flush=True)
-                    if target_service and manifest_service:
-                        target_normalized = target_service.rstrip('/')
-                        manifest_normalized = manifest_service.rstrip('/')
-                        print(f"DEBUG: target_normalized={target_normalized}, manifest_normalized={manifest_normalized}", flush=True)
-                        if target_normalized == manifest_normalized:
-                            addressed = True
-                            print("DEBUG: URLs match after normalization!", flush=True)
-                    if target_service and not addressed:
-                        try:
-                            parsed_target = urlparse(target_service)
-                            parsed_manifest = urlparse(manifest_service or "")
-                            if parsed_target.hostname in ("localhost", "127.0.0.1"):
+                    if target_speaker:
+                        addressed = target_speaker == manifest_speaker
+                    else:
+                        if target_service and manifest_service:
+                            if target_service == manifest_service:
                                 addressed = True
-                            elif parsed_target.hostname and parsed_manifest.hostname and parsed_target.hostname == parsed_manifest.hostname:
+                            elif target_service.rstrip('/') == manifest_service.rstrip('/'):
                                 addressed = True
-                        except Exception:
-                            pass
+                            else:
+                                try:
+                                    parsed_target = urlparse(target_service)
+                                    parsed_manifest = urlparse(manifest_service)
+                                    if (
+                                        parsed_target.hostname
+                                        and parsed_manifest.hostname
+                                        and parsed_target.hostname == parsed_manifest.hostname
+                                        and (parsed_target.port or 80) == (parsed_manifest.port or 80)
+                                    ):
+                                        addressed = True
+                                except Exception:
+                                    addressed = False
             except Exception:
                 addressed = False
 

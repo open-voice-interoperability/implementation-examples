@@ -260,6 +260,11 @@ def create_main_window():
     root.geometry("900x1180")
     root.minsize(900, 1180)
     apply_app_icon(root)
+    # Bring window to front
+    root.lift()
+    root.attributes('-topmost', True)
+    root.after(100, lambda: root.attributes('-topmost', False))
+    print(f"Window created at size 900x1180")
     return root
 
 
@@ -423,7 +428,7 @@ def create_agent_textbox_ui(agents_frame, agent_info, agent_url,
         uninvite_callback: Function to call when uninviting
         
     Returns:
-        tuple: (agent_frame, url_textbox, name_textbox, uninvite_btn, floor_btn, checkbox)
+        tuple: (agent_frame, url_textbox, name_textbox, uninvite_btn, floor_btn, checkbox, status_dot)
     """
     # Create a frame to hold both button and textbox
     agent_frame = CTkFrame(agents_frame)
@@ -446,6 +451,10 @@ def create_agent_textbox_ui(agents_frame, agent_info, agent_url,
     uninvite_btn = CTkButton(agent_frame, text="Uninvite", width=80, height=25,
                             command=uninvite_callback, text_color=BUTTON_TEXT_COLOR)
     uninvite_btn.pack(side="left", padx=(0,5), pady=5)
+
+    # Status indicator dot (state managed by assistantClient)
+    status_dot = CTkLabel(agent_frame, text="●", width=18, text_color="blue")
+    status_dot.pack(side="left", padx=(0, 6), pady=5)
     
     # Extract conversational name and URL from agent_info
     if isinstance(agent_info, dict):
@@ -487,7 +496,7 @@ def create_agent_textbox_ui(agents_frame, agent_info, agent_url,
     agent_checkbox = CTkCheckBox(agent_frame, text="", width=30)
     agent_checkbox.pack(side="left", padx=(0,5), pady=5)
     
-    return agent_frame, url_textbox, name_textbox, uninvite_btn, floor_btn, agent_checkbox
+    return agent_frame, url_textbox, name_textbox, uninvite_btn, floor_btn, agent_checkbox, status_dot
 
 
 def update_agent_textbox_ui(textbox, new_info):
@@ -496,19 +505,6 @@ def update_agent_textbox_ui(textbox, new_info):
     textbox.delete(0, 'end')
     textbox.insert(0, new_info)
     textbox.configure(state="disabled")
-
-
-def display_response_json(root, response_data, assistant_name, assistant_url):
-    """Display JSON response in a new window."""
-    response_window = CTkToplevel(root)
-    title = f"Assistant Response from {assistant_name} at {assistant_url}"
-    response_window.title(title)
-    response_window.geometry("600x400")
-    apply_app_icon(response_window)
-    response_text = CTkTextbox(response_window, wrap="word", width=600, height=400)
-    response_text.insert("0.0", json.dumps(response_data, indent=2))
-    response_text.configure(state="disabled")
-    response_text.pack(padx=10, pady=10)
 
 
 def display_incoming_envelope_json(root, envelope_data, assistant_name, assistant_url):

@@ -301,6 +301,7 @@ assistantClient/
 ├── event_handlers.py        # Event processing (broadcast/process/forward)
 ├── floor.py                 # Floor management
 ├── known_agents.py          # Agent discovery
+├── archive/legacy/         # Legacy/experimental scripts (not used by main app)
 ├── openfloor/              # OpenFloor protocol classes
 │   ├── agent.py
 │   ├── envelope.py
@@ -310,6 +311,13 @@ assistantClient/
 ├── assets/                 # App icon sources + generated Windows .ico
 └── README.md               # This file
 ```
+
+Legacy scripts archived under `archive/legacy/`:
+- `assistantClientLib.py`
+- `assistantClient-Pegasus.py`
+- `known_agents-Pegasus.py`
+- `cards-Pegasus.html`
+- `testbrowser.py`
 
 ## Related Components
 

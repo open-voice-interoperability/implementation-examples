@@ -24,6 +24,12 @@ python flask_server.py
 
 Default server URL is printed on startup.
 
+## PythonAnywhere Update
+
+```bash
+pip install -r ~/implementation-examples/verity/requirements.txt
+```
+
 ## Endpoints
 
 - `POST /` - OpenFloor envelope endpoint

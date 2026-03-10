@@ -2,6 +2,8 @@ Flask==2.3.3,<3.0
 flask-cors==6.0.0
 gunicorn
 jsonpath-ng==1.5.3
+--extra-index-url https://test.pypi.org/simple/
+openfloor==0.1.4
 openai==1.29.0
 requests==2.32.4
 httpx==0.24.1

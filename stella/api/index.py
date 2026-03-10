@@ -12,7 +12,7 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-# Your agent imports
+# Agent imports
 from stella_agent import load_manifest_from_config, StellaAgent
 from openfloor.envelope import Envelope
 

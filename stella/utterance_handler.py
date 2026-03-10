@@ -7,6 +7,7 @@ Custom conversation logic for the Stella space assistant.
 
 import json
 import os
+import re
 from typing import Dict, List, Optional
 from urllib.parse import quote_plus
 
@@ -106,11 +107,29 @@ def _is_space_question(text: str) -> bool:
 
 
 def _extract_nasa_search_query(text: str) -> str:
-    lowered = text.lower().strip()
-    for prefix in ("pictures of ", "picture of ", "images of ", "image of ", "photos of ", "photo of "):
-        if lowered.startswith(prefix):
-            return lowered[len(prefix):].strip() or lowered
-    return lowered
+    query = re.sub(r"\s+", " ", text.lower().strip())
+    query = re.sub(r"[.!?]+$", "", query).strip()
+
+    # Remove common conversational lead-ins repeatedly until stable.
+    lead_ins = [
+        r"^(please\s+)?(?:can|could|would|will)\s+you\s+",
+        r"^(please\s+)?(?:show|find|get|give)\s+me\s+",
+        r"^i\s+(?:want|need|would\s+like)\s+(?:to\s+see\s+)?",
+        r"^do\s+you\s+have\s+",
+        r"^let\s+me\s+see\s+",
+    ]
+    previous = None
+    while previous != query:
+        previous = query
+        for pattern in lead_ins:
+            query = re.sub(pattern, "", query).strip()
+
+    # Remove image-request scaffolding and articles to keep the core topic.
+    query = re.sub(r"^(?:nasa\s+)?(?:pictures?|images?|photos?)\s+of\s+", "", query).strip()
+    query = re.sub(r"^(?:a|an|the|some)\s+", "", query).strip()
+    query = re.sub(r"^(?:pictures?|images?|photos?)\s+", "", query).strip()
+
+    return query or text.lower().strip()
 
 
 def _format_nasa_search_results(nasa_data: dict) -> str:

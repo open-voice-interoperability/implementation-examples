@@ -67,7 +67,7 @@ def generate_openai_response(prompt):
     """Call OpenAI's API to generate a response based on the prompt."""
     try:
         # Build the message history from conversation_state, if available
-        message_history = [{"role": "system", "content": "You are a helpful assistant named stella"}]
+        message_history = [{"role": "system", "content": "You are a helpful assistant named stella that knows about space and astronomy."}]
 
         # Add prior context/messages from the conversation state
         if "messages" in conversation_state:

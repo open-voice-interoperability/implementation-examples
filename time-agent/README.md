@@ -37,6 +37,8 @@ São Paulo, Buenos Aires, Rio de Janeiro, Lima, Santiago
 1. **Install dependencies:**
 ```bash
 pip install flask pytz
+pip install events==0.5
+pip install --index-url https://test.pypi.org/simple/ --no-deps openfloor==0.1.4
 ```
 
 2. **Run the agent:**
@@ -120,7 +122,7 @@ python assistantClient.py
 
 - **Flask**: HTTP server framework
 - **pytz**: Timezone database and conversions
-- **openfloor**: OpenFloor protocol library (vendored in openfloor/ directory)
+- **openfloor**: OpenFloor protocol library (install from TestPyPI)
 
 ## OpenFloor Compliance
 

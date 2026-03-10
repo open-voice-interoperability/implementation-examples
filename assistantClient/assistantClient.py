@@ -11,7 +11,7 @@ from datetime import datetime
 import socket
 import traceback
 
-from openfloor import DialogEvent, Conversation
+from openfloor import DialogEvent, Conversation, TextFeature, Token
 from openfloor import UtteranceEvent, UninviteEvent, RevokeFloorEvent, GrantFloorEvent
 from openfloor import Envelope, Sender, To, Conversant
 from openfloor.manifest import Identification
@@ -831,7 +831,9 @@ def add_conversant_to_global(agent_url):
         identification=Identification(
             speakerUri=f"agent:{agent_url}",
             serviceUrl=agent_url,
-            conversationalName=conversational_name
+            organization="Unknown",
+            conversationalName=conversational_name,
+            synopsis=f"Conversant endpoint at {agent_url}"
         )
     )
     global_conversation.conversants.append(conversant)
@@ -1247,10 +1249,10 @@ def _send_events_broadcast(event_types, user_input, target_urls, new_invite_urls
             dialog = DialogEvent(
                 speakerUri=client_uri,
                 features={
-                    "text": {
-                        "mimeType": "text/plain",
-                        "tokens": [{"value": user_input}]
-                    }
+                    "text": TextFeature(
+                        mimeType="text/plain",
+                        tokens=[Token(value=user_input)],
+                    )
                 }
             )
             if addressed_agent and addressed_agent.get("speaker_uri"):
@@ -1459,10 +1461,10 @@ def _send_events_direct(event_types, user_input, target_urls, addressed_agent, u
                 dialog = DialogEvent(
                     speakerUri=client_uri,
                     features={
-                        "text": {
-                            "mimeType": "text/plain",
-                            "tokens": [{"value": user_input}]
-                        }
+                        "text": TextFeature(
+                            mimeType="text/plain",
+                            tokens=[Token(value=user_input)],
+                        )
                     }
                 )
                 if addressed_agent and addressed_agent.get("speaker_uri"):

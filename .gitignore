@@ -82,3 +82,20 @@ gemini-agent/.venv/
 .vscode/
 assistantClient/test.cpp
 stella/failure.json
+agent-template/openfloor-old/agent.py
+agent-template/openfloor-old/dialog_event.py
+agent-template/openfloor-old/__init__.py
+agent-template/openfloor-old/agent-Pegasus.py
+agent-template/openfloor-old/envelope.py
+agent-template/openfloor-old/events.py
+agent-template/openfloor-old/from .py
+agent-template/openfloor-old/json_serializable.py
+agent-template/openfloor-old/manifest.py
+assistantClient/openfloor-old/manifest.py
+assistantClient/openfloor/agent.py
+assistantClient/openfloor/__init__.py
+/implementation-examples-ios
+/stella/openfloor-old
+/time-agent/openfloor-old
+/verity/openfloor-old
+/agent-template/openfloor

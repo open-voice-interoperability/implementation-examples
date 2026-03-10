@@ -79,7 +79,15 @@ cp -r agent-template my-agent
 cd my-agent
 ```
 
-### 2. Configure Your Agent
+### 2. Install Dependencies
+
+```bash
+pip install flask jsonpath-ng
+pip install events==0.5
+pip install --index-url https://test.pypi.org/simple/ --no-deps openfloor==0.1.4
+```
+
+### 3. Configure Your Agent
 
 Edit `agent_config.json`:
 
@@ -104,7 +112,7 @@ Edit `agent_config.json`:
 }
 ```
 
-### 3. Implement Your Logic
+### 4. Implement Your Logic
 
 Edit `utterance_handler.py` to implement your agent's behavior.
 
@@ -118,7 +126,7 @@ def process_utterance(user_text: str, agent_name: str = "Agent") -> str:
 
 All OpenFloor event parsing and envelope construction happens in `template_agent.py`.
 
-### 4. Run the Server
+### 5. Run the Server
 
 ```bash
 python flask_server.py

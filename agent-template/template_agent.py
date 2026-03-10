@@ -24,15 +24,14 @@ Architecture:
 import json
 import logging
 import os
+from typing import Any, Callable, Dict, List
 
 # Import OpenFloor components
-from openfloor.agent import BotAgent
-from openfloor.envelope import Envelope, Parameters
+from openfloor.envelope import Envelope, Parameters, Conversation, Sender
 from openfloor.events import (
-    UtteranceEvent, InviteEvent, UninviteEvent, DeclineInviteEvent,
+    Event, UtteranceEvent, InviteEvent, UninviteEvent, DeclineInviteEvent,
     ByeEvent, GetManifestsEvent, PublishManifestsEvent,
     RequestFloorEvent, GrantFloorEvent, RevokeFloorEvent, YieldFloorEvent,
-    ContextEvent
 )
 from openfloor.manifest import Manifest, Identification, Capability, SupportedLayers
 from openfloor.dialog_event import DialogEvent, TextFeature
@@ -42,6 +41,117 @@ import envelope_handler
 
 # Import the utterance handler (custom logic)
 import utterance_handler
+
+
+class _EventHook:
+    def __init__(self):
+        self._handlers: List[Callable[..., None]] = []
+
+    def __iadd__(self, handler: Callable[..., None]):
+        self._handlers.append(handler)
+        return self
+
+    def __isub__(self, handler: Callable[..., None]):
+        self._handlers = [existing for existing in self._handlers if existing != handler]
+        return self
+
+    def __call__(self, *args, **kwargs):
+        for handler in list(self._handlers):
+            handler(*args, **kwargs)
+
+
+class BotAgent:
+    def __init__(self, manifest: Manifest):
+        self._manifest = manifest
+        self.on_envelope = _EventHook()
+        self.on_utterance = _EventHook()
+        self.on_invite = _EventHook()
+        self.on_uninvite = _EventHook()
+        self.on_accept_invite = _EventHook()
+        self.on_decline_invite = _EventHook()
+        self.on_bye = _EventHook()
+        self.on_get_manifests = _EventHook()
+        self.on_publish_manifests = _EventHook()
+        self.on_request_floor = _EventHook()
+        self.on_grant_floor = _EventHook()
+        self.on_revoke_floor = _EventHook()
+        self.on_yield_floor = _EventHook()
+
+        self._event_type_to_handler: Dict[str, _EventHook] = {
+            "invite": self.on_invite,
+            "utterance": self.on_utterance,
+            "uninvite": self.on_uninvite,
+            "acceptInvite": self.on_accept_invite,
+            "declineInvite": self.on_decline_invite,
+            "bye": self.on_bye,
+            "getManifests": self.on_get_manifests,
+            "publishManifests": self.on_publish_manifests,
+            "requestFloor": self.on_request_floor,
+            "grantFloor": self.on_grant_floor,
+            "revokeFloor": self.on_revoke_floor,
+            "yieldFloor": self.on_yield_floor,
+        }
+
+        self.on_envelope += self.bot_on_envelope
+        self.on_utterance += self.bot_on_utterance
+        self.on_get_manifests += self.bot_on_get_manifests
+
+    @property
+    def speakerUri(self) -> str:
+        return self._manifest.identification.speakerUri
+
+    @property
+    def serviceUrl(self) -> str:
+        return self._manifest.identification.serviceUrl
+
+    def process_envelope(self, in_envelope: Envelope) -> Envelope:
+        conversation_id = getattr(getattr(in_envelope, "conversation", None), "id", None)
+        out_envelope = Envelope(
+            conversation=Conversation(id=conversation_id),
+            sender=Sender(speakerUri=self.speakerUri, serviceUrl=self.serviceUrl),
+        )
+        self.on_envelope(in_envelope, out_envelope)
+        return out_envelope
+
+    def _is_addressed_to_me(self, event: Any) -> bool:
+        to_value = getattr(event, "to", None)
+        if to_value is None:
+            return True
+
+        if isinstance(to_value, dict):
+            to_speaker = to_value.get("speakerUri")
+            to_service = to_value.get("serviceUrl")
+        else:
+            to_speaker = getattr(to_value, "speakerUri", None)
+            to_service = getattr(to_value, "serviceUrl", None)
+
+        if to_speaker and to_speaker == self.speakerUri:
+            return True
+        if to_service and to_service == self.serviceUrl:
+            return True
+        return False
+
+    def bot_on_envelope(self, in_envelope: Envelope, out_envelope: Envelope) -> None:
+        for event in getattr(in_envelope, "events", []) or []:
+            if not self._is_addressed_to_me(event):
+                continue
+            event_type = getattr(event, "eventType", None)
+            if not event_type and isinstance(event, dict):
+                event_type = event.get("eventType")
+            handler = self._event_type_to_handler.get(event_type)
+            if handler is not None:
+                handler(event, in_envelope, out_envelope)
+
+    def bot_on_utterance(self, event: UtteranceEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
+        return
+
+    def bot_on_get_manifests(self, event: GetManifestsEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
+        out_envelope.events.append(
+            PublishManifestsEvent(parameters=Parameters({
+                "servicingManifests": [self._manifest],
+                "discoveryManifests": []
+            }))
+        )
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +192,9 @@ class TemplateAgent(BotAgent):
         self.on_grant_floor += self._handle_grant_floor
         self.on_revoke_floor += self._handle_revoke_floor
         self.on_yield_floor += self._handle_yield_floor
-        self.on_context += self._handle_context
+        context_handler = getattr(self, "on_context", None)
+        if context_handler is not None:
+            context_handler += self._handle_context
     
     # =========================================================================
     # UTTERANCE EVENT - Delegated to utterance_handler.py
@@ -488,7 +600,7 @@ class TemplateAgent(BotAgent):
     # CONTEXT EVENT
     # =========================================================================
     
-    def _handle_context(self, event: ContextEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
+    def _handle_context(self, event: Event, in_envelope: Envelope, out_envelope: Envelope) -> None:
         """
         Handle context event - contextual information provided.
         

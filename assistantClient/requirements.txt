@@ -1,0 +1,8 @@
+customtkinter
+requests
+pillow
+
+# OpenFloor is published on TestPyPI.
+# Install it explicitly to avoid a broken TestPyPI dependency build:
+#   pip install events==0.5
+#   pip install --index-url https://test.pypi.org/simple/ --no-deps openfloor==0.1.4

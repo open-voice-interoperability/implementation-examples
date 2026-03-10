@@ -1,6 +1,18 @@
 # implementation-examples
 Examples of implementations of OVON interoperability specifications.
 
+## OpenFloor installation note
+`openfloor` is published on TestPyPI (not PyPI).
+
+If you need to run code that imports `openfloor`, install it with:
+
+```bash
+pip install events==0.5
+pip install --index-url https://test.pypi.org/simple/ --no-deps openfloor==0.1.4
+```
+
+See [assistantClient setup](./assistantClient/README.md#installation) for full local setup steps.
+
 ## Agents and Templates
 - [erin](./erin/README.md) - Hallucination demo agent that intentionally includes at least one incorrect claim.
 - [stella](./stella/README.md) - Space and astronomy assistant backed by NASA APIs.

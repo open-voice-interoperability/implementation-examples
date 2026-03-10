@@ -73,7 +73,13 @@ The application uses a modular architecture with three main components:
 
 **Install dependencies:**
 ```bash
-pip install customtkinter requests pillow
+pip install -r requirements.txt
+```
+
+**Install OpenFloor from TestPyPI:**
+```bash
+pip install events==0.5
+pip install --index-url https://test.pypi.org/simple/ --no-deps openfloor==0.1.4
 ```
 
 **Run the application:**

@@ -1,0 +1,7 @@
+TIME_GETMANIFESTS_OK=True STATUS=200 TYPES=publishManifests
+TIME_MANIFEST_NAME=TimeAgent SPEAKER=http://localhost:8081
+TIME_INVITE_OK=True STATUS=200 TYPES=utterance
+TIME_UTTERANCE_OK=True STATUS=200 TYPES=utterance
+TIME_UTTERANCE_TEXT=The current time in Tokyo is Friday, March 06, 2026 at 07:46 AM JST
+TIME_DIRECTED_OK=True STATUS=200 TYPES=utterance
+TIME_DIRECTED_TEXT=The current time in Paris is Thursday, March 05, 2026 at 11:46 PM CET

@@ -395,10 +395,9 @@ class TemplateAgent(BotAgent):
         farewell = f"Goodbye! {agent_name} is leaving the conversation."
         dialog = DialogEvent(
             speakerUri=self._manifest.identification.speakerUri,
-            features=[TextFeature.from_text(farewell)],
+            features={"text": TextFeature(values=[farewell])},
         )
-        utterance_event = UtteranceEvent.create(dialog)
-        out_envelope.events.append(utterance_event)
+        out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
         self.joinedFloor = False
         self.grantedFloor = False
         self.currentConversation = None

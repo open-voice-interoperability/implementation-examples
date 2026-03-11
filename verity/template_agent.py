@@ -591,8 +591,8 @@ def load_manifest_from_config(config_path: str = "agent_config.json") -> Manifes
 
     ident_data = manifest_data.get('identification', {})
     identification = Identification(
-        speakerUri=ident_data.get('speakerUri', ident_data.get('serviceEndpoint', 'http://localhost:8768/verity')),
-        serviceUrl=ident_data.get('serviceUrl', ident_data.get('serviceEndpoint', 'http://localhost:8768/verity')),
+        speakerUri=ident_data.get('speakerUri', ident_data.get('serviceEndpoint', 'http://localhost:8768/verity/')),
+        serviceUrl=ident_data.get('serviceUrl', ident_data.get('serviceEndpoint', 'http://localhost:8768/verity/')),
         conversationalName=ident_data.get('conversationalName', 'Verity'),
         organization=ident_data.get('organization', 'BeaconForge'),
         role=ident_data.get('role', 'detect and mitigate hallucinations'),

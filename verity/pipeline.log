@@ -6732,3 +6732,49 @@ SyntaxError: unterminated string literal (detected at line 1)
 2026-03-04 17:45:05,589 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0.1, 'explanation': 'The statement is not factual because Mars is not larger than Earth; Earth has a diameter of about 7,917 miles, while Mars has a diameter of about 4,212 miles. Additionally, Jupiter is the largest planet in our solar system, not Mars.', 'suppress': False}.
 2026-03-04 17:45:05,594 - INFO - Returning response for conversation conv:0e36fba3-7fe3-44f5-8780-51ebc2d80146
 2026-03-04 17:45:05,595 - INFO - 127.0.0.1 - - [04/Mar/2026 17:45:05] "POST /verity/ HTTP/1.1" 200 -
+2026-03-11 14:35:53,198 - INFO - Loading agent configuration...
+2026-03-11 14:35:53,322 - INFO - Agent initialized: Verity
+2026-03-11 14:35:53,322 - INFO - Service URL: http://localhost:8768/verity
+2026-03-11 14:35:53,343 - INFO - ============================================================
+2026-03-11 14:35:53,344 - INFO - Verity OpenFloor Agent Server
+2026-03-11 14:35:53,344 - INFO - ============================================================
+2026-03-11 14:35:53,344 - INFO - Agent: Verity
+2026-03-11 14:35:53,344 - INFO - Service URL: http://localhost:8768/verity
+2026-03-11 14:35:53,344 - INFO - Speaker URI: openFloor:verity
+2026-03-11 14:35:53,344 - INFO - Server starting on http://0.0.0.0:8768
+2026-03-11 14:35:53,344 - INFO - ============================================================
+2026-03-11 14:35:53,344 - INFO - Endpoints:
+2026-03-11 14:35:53,344 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-03-11 14:35:53,344 - INFO -   POST /        - OpenFloor envelope processing
+2026-03-11 14:35:53,344 - INFO -   GET  /health  - Health check
+2026-03-11 14:35:53,344 - INFO -   POST /manifest - Agent manifest
+2026-03-11 14:35:53,344 - INFO - ============================================================
+2026-03-11 14:35:53,366 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-03-11 14:35:53,366 - INFO - [33mPress CTRL+C to quit[0m
+2026-03-11 14:52:15,494 - INFO - 127.0.0.1 - - [11/Mar/2026 14:52:15] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2026-03-11 14:52:19,311 - INFO - 127.0.0.1 - - [11/Mar/2026 14:52:19] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2026-03-11 14:52:58,347 - INFO - 127.0.0.1 - - [11/Mar/2026 14:52:58] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2026-03-11 14:53:26,563 - INFO - 127.0.0.1 - - [11/Mar/2026 14:53:26] "[32mPOST /verity HTTP/1.1[0m" 308 -
+2026-03-11 14:57:42,681 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "047465b9-6d40-4f06-af28-16979d08970a", "conversants": []}, "s...
+2026-03-11 14:57:42,681 - INFO - Processing conversation 047465b9-6d40-4f06-af28-16979d08970a from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-11 14:57:42,681 - INFO - Returning response for conversation 047465b9-6d40-4f06-af28-16979d08970a
+2026-03-11 14:57:42,681 - INFO - 127.0.0.1 - - [11/Mar/2026 14:57:42] "POST /verity/ HTTP/1.1" 200 -
+2026-03-11 14:57:47,364 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "047465b9-6d40-4f06-af28-16979d08970a", "conversants": [{"iden...
+2026-03-11 14:57:47,366 - INFO - Processing conversation 047465b9-6d40-4f06-af28-16979d08970a from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-11 14:57:47,367 - INFO - Returning response for conversation 047465b9-6d40-4f06-af28-16979d08970a
+2026-03-11 14:57:47,370 - INFO - 127.0.0.1 - - [11/Mar/2026 14:57:47] "POST /verity/ HTTP/1.1" 200 -
+2026-03-11 15:02:03,668 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "047465b9-6d40-4f06-af28-16979d08970a", "conversants": [{"iden...
+2026-03-11 15:02:03,673 - INFO - Processing conversation 047465b9-6d40-4f06-af28-16979d08970a from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-11 15:02:03,675 - INFO - Returning response for conversation 047465b9-6d40-4f06-af28-16979d08970a
+2026-03-11 15:02:03,678 - INFO - 127.0.0.1 - - [11/Mar/2026 15:02:03] "POST /verity/ HTTP/1.1" 200 -
+2026-03-11 15:02:41,228 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "047465b9-6d40-4f06-af28-16979d08970a", "conversants": [{"iden...
+2026-03-11 15:02:41,229 - INFO - Processing conversation 047465b9-6d40-4f06-af28-16979d08970a from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-11 15:02:41,230 - INFO - Returning response for conversation 047465b9-6d40-4f06-af28-16979d08970a
+2026-03-11 15:02:41,232 - INFO - 127.0.0.1 - - [11/Mar/2026 15:02:41] "POST /verity/ HTTP/1.1" 200 -
+2026-03-11 15:04:26,473 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "047465b9-6d40-4f06-af28-16979d08970a", "conversants": [{"iden...
+2026-03-11 15:04:26,474 - INFO - Processing conversation 047465b9-6d40-4f06-af28-16979d08970a from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-11 15:04:26,475 - INFO - Returning response for conversation 047465b9-6d40-4f06-af28-16979d08970a
+2026-03-11 15:04:26,476 - INFO - 127.0.0.1 - - [11/Mar/2026 15:04:26] "POST /verity/ HTTP/1.1" 200 -

@@ -24,7 +24,7 @@ import event_handlers
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 if not openai.api_key:
-    raise ValueError("Please set the OPENAI_API_KEY environment variable.")
+    print("WARNING: OPENAI_API_KEY is not set. Stella will run with limited capabilities.", flush=True)
 
 
 def is_html_string(text: str) -> bool:
@@ -114,7 +114,18 @@ class StellaAgent(BotAgent):
 
 
     def __init__(self, manifest: Manifest):
-        super().__init__(manifest)
+        self._manifest = manifest
+        self._active_conversation: Optional[Conversation] = None
+        self._current_context: List[EnvelopeEvent] = []
+        self._event_type_to_handler = {
+            "invite": self.bot_on_invite,
+            "utterance": self.bot_on_utterance,
+            "getManifests": self.bot_on_get_manifests,
+            "grantFloor": self.bot_on_grant_floor,
+            "declineInvite": self.bot_on_decline_invite,
+            "uninvite": self.bot_on_uninvite,
+            "revokeFloor": self.bot_on_revoke_floor,
+        }
         # Load assistant config (if present) and intent concepts
         self._config = None
         try:
@@ -293,10 +304,28 @@ class StellaAgent(BotAgent):
     utteranceInQueue: str = ""
     hasFloor: bool = False
     grantedFloor: bool = False
+
+    def process_envelope(self, in_envelope: Envelope) -> Envelope:
+        out_envelope = Envelope(
+            conversation=in_envelope.conversation,
+            sender=Sender(
+                speakerUri=self._manifest.identification.speakerUri,
+                serviceUrl=self._manifest.identification.serviceUrl,
+            ),
+        )
+
+        for event in (in_envelope.events or []):
+            event_type = getattr(event, "eventType", None)
+            handler = self._event_type_to_handler.get(event_type)
+            if handler is not None:
+                handler(event, in_envelope, out_envelope)
+
+        return out_envelope
     
     def bot_on_invite(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
-        # Call parent class behavior first
-        super().bot_on_invite(event, in_envelope, out_envelope)
+        self._active_conversation = in_envelope.conversation
+        self.isInConversation = True
+        self.grantedFloor = True
         # Delegate to event_handlers module
         event_handlers.bot_on_invite(self, event, in_envelope, out_envelope)
 
@@ -355,7 +384,7 @@ class StellaAgent(BotAgent):
         This leaves the base behavior (returning a full Envelope) intact via
         `process_envelope` but is handy when callers only want the events.
         """
-        out_env = super().process_envelope(in_envelope)
+        out_env = self.process_envelope(in_envelope)
         return out_env.events
 
     def payload_for_envelope(self, in_envelope: Envelope, as_payload: bool = True) -> str:
@@ -364,7 +393,7 @@ class StellaAgent(BotAgent):
         If `as_payload` is True (default) the returned JSON is the OpenFloor wrapper
         matching what clients expect from the HTTP endpoint.
         """
-        out_env = super().process_envelope(in_envelope)
+        out_env = self.process_envelope(in_envelope)
         return out_env.to_json(as_payload=as_payload)
 
     # Backwards-compatibility API ------------------------------------------------

@@ -19,22 +19,43 @@ from openfloor.envelope import Envelope
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Load agent once
-manifest = load_manifest_from_config()
-agent = StellaAgent(manifest)
+manifest = None
+agent = None
+startup_error = None
+
+
+def _get_agent():
+    global manifest, agent, startup_error
+    if agent is not None:
+        return agent, None
+    if startup_error is not None:
+        return None, startup_error
+
+    try:
+        manifest = load_manifest_from_config()
+        agent = StellaAgent(manifest)
+        return agent, None
+    except Exception as exc:
+        startup_error = str(exc)
+        print(f"ERROR server.py: Agent startup failed: {startup_error}", flush=True)
+        return None, startup_error
 
 @app.route("/", methods=["POST"])
 @app.route("/api", methods=["POST"])
 @app.route("/api/", methods=["POST"])
 def handle_request():
     payload_text = request.get_data(as_text=True)
+
+    current_agent, init_error = _get_agent()
+    if init_error:
+        return Response(f"Agent startup error: {init_error}", status=500)
     
     # Dynamically update the manifest serviceUrl
     host = request.headers.get("Host")
     print(f"DEBUG server.py: Host header={host}", flush=True)
     if host:
-        agent._manifest.identification.serviceUrl = f"https://{host}"
-        print(f"DEBUG server.py: Updated serviceUrl to {agent._manifest.identification.serviceUrl}", flush=True)
+        current_agent._manifest.identification.serviceUrl = f"https://{host}"
+        print(f"DEBUG server.py: Updated serviceUrl to {current_agent._manifest.identification.serviceUrl}", flush=True)
 
     # Parse incoming envelope
     try:
@@ -46,7 +67,7 @@ def handle_request():
             return Response(f"Invalid OpenFloor payload: {e}", status=400)
 
     # Process and serialize response
-    out_envelope = agent.process_envelope(in_envelope)
+    out_envelope = current_agent.process_envelope(in_envelope)
     payload_str = out_envelope.to_json(as_payload=True)
 
     return Response(payload_str, mimetype="application/json")

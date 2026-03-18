@@ -6778,3 +6778,218 @@ SyntaxError: unterminated string literal (detected at line 1)
 2026-03-11 15:04:26,474 - INFO - Processing conversation 047465b9-6d40-4f06-af28-16979d08970a from openFloor://localhost/AssistantClientConvenerWeb
 2026-03-11 15:04:26,475 - INFO - Returning response for conversation 047465b9-6d40-4f06-af28-16979d08970a
 2026-03-11 15:04:26,476 - INFO - 127.0.0.1 - - [11/Mar/2026 15:04:26] "POST /verity/ HTTP/1.1" 200 -
+2026-03-16 16:35:38,311 - INFO - Loading agent configuration...
+2026-03-16 16:35:38,396 - INFO - Agent initialized: Verity
+2026-03-16 16:35:38,396 - INFO - Service URL: http://localhost:8768/verity/
+2026-03-16 16:35:38,417 - INFO - ============================================================
+2026-03-16 16:35:38,418 - INFO - Verity OpenFloor Agent Server
+2026-03-16 16:35:38,419 - INFO - ============================================================
+2026-03-16 16:35:38,419 - INFO - Agent: Verity
+2026-03-16 16:35:38,420 - INFO - Service URL: http://localhost:8768/verity/
+2026-03-16 16:35:38,421 - INFO - Speaker URI: openFloor:verity
+2026-03-16 16:35:38,422 - INFO - Server starting on http://0.0.0.0:8768
+2026-03-16 16:35:38,423 - INFO - ============================================================
+2026-03-16 16:35:38,423 - INFO - Endpoints:
+2026-03-16 16:35:38,424 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-03-16 16:35:38,425 - INFO -   POST /        - OpenFloor envelope processing
+2026-03-16 16:35:38,425 - INFO -   GET  /health  - Health check
+2026-03-16 16:35:38,426 - INFO -   POST /manifest - Agent manifest
+2026-03-16 16:35:38,427 - INFO - ============================================================
+2026-03-16 16:35:38,450 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-03-16 16:35:38,451 - INFO - [33mPress CTRL+C to quit[0m
+2026-03-17 16:37:50,546 - INFO - Loading agent configuration...
+2026-03-17 16:37:50,660 - INFO - Agent initialized: Verity
+2026-03-17 16:37:50,661 - INFO - Service URL: http://localhost:8768/verity/
+2026-03-17 16:37:50,668 - INFO - ============================================================
+2026-03-17 16:37:50,668 - INFO - Verity OpenFloor Agent Server
+2026-03-17 16:37:50,669 - INFO - ============================================================
+2026-03-17 16:37:50,669 - INFO - Agent: Verity
+2026-03-17 16:37:50,670 - INFO - Service URL: http://localhost:8768/verity/
+2026-03-17 16:37:50,670 - INFO - Speaker URI: openFloor:verity
+2026-03-17 16:37:50,671 - INFO - Server starting on http://0.0.0.0:8768
+2026-03-17 16:37:50,671 - INFO - ============================================================
+2026-03-17 16:37:50,672 - INFO - Endpoints:
+2026-03-17 16:37:50,672 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-03-17 16:37:50,673 - INFO -   POST /        - OpenFloor envelope processing
+2026-03-17 16:37:50,674 - INFO -   GET  /health  - Health check
+2026-03-17 16:37:50,675 - INFO -   POST /manifest - Agent manifest
+2026-03-17 16:37:50,675 - INFO - ============================================================
+2026-03-17 16:37:50,728 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-03-17 16:37:50,729 - INFO - [33mPress CTRL+C to quit[0m
+2026-03-17 16:38:25,145 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "0a0e0ae9-57e6-4cf4-a999-238921122535", "conversants": [{"iden...
+2026-03-17 16:38:25,146 - INFO - Processing conversation 0a0e0ae9-57e6-4cf4-a999-238921122535 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-17 16:38:25,146 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-03-17 16:38:25,151 - INFO - Returning response for conversation 0a0e0ae9-57e6-4cf4-a999-238921122535
+2026-03-17 16:38:25,153 - INFO - 127.0.0.1 - - [17/Mar/2026 16:38:25] "POST /verity/ HTTP/1.1" 200 -
+2026-03-17 16:38:48,725 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "0a0e0ae9-57e6-4cf4-a999-238921122535", "conversants": [{"iden...
+2026-03-17 16:38:48,726 - INFO - Processing conversation 0a0e0ae9-57e6-4cf4-a999-238921122535 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-17 16:38:48,728 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-03-17 16:38:48,735 - INFO - Returning response for conversation 0a0e0ae9-57e6-4cf4-a999-238921122535
+2026-03-17 16:38:48,738 - INFO - 127.0.0.1 - - [17/Mar/2026 16:38:48] "POST /verity/ HTTP/1.1" 200 -
+2026-03-17 16:38:52,342 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "0a0e0ae9-57e6-4cf4-a999-238921122535", "conversants": [{"iden...
+2026-03-17 16:38:52,343 - INFO - Processing conversation 0a0e0ae9-57e6-4cf4-a999-238921122535 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-17 16:38:52,344 - INFO - [INVITE] Received invitation to conversation: 0a0e0ae9-57e6-4cf4-a999-238921122535
+2026-03-17 16:38:52,345 - INFO - Returning response for conversation 0a0e0ae9-57e6-4cf4-a999-238921122535
+2026-03-17 16:38:52,347 - INFO - 127.0.0.1 - - [17/Mar/2026 16:38:52] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 14:57:27,872 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "2b0dcb95-7e97-4274-965b-5e79e30c27a9", "conversants": []}, "s...
+2026-03-18 14:57:28,621 - INFO - Processing conversation 2b0dcb95-7e97-4274-965b-5e79e30c27a9 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 14:57:28,818 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-03-18 14:57:29,350 - INFO - Returning response for conversation 2b0dcb95-7e97-4274-965b-5e79e30c27a9
+2026-03-18 14:57:29,458 - INFO - 127.0.0.1 - - [18/Mar/2026 14:57:29] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 15:56:39,786 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "8c738455-fbfe-488d-a0ef-a969c1ff84e7", "conversants": [{"iden...
+2026-03-18 15:56:39,801 - INFO - Processing conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 15:56:39,826 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-03-18 15:56:39,892 - INFO - Returning response for conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 15:56:39,894 - INFO - 127.0.0.1 - - [18/Mar/2026 15:56:39] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 15:56:47,372 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "8c738455-fbfe-488d-a0ef-a969c1ff84e7", "conversants": [{"iden...
+2026-03-18 15:56:47,373 - INFO - Processing conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 15:56:47,410 - INFO - [INVITE] Received invitation to conversation: 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 15:56:47,524 - INFO - Returning response for conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 15:56:47,793 - INFO - 127.0.0.1 - - [18/Mar/2026 15:56:47] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 15:58:31,600 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "8c738455-fbfe-488d-a0ef-a969c1ff84e7", "conversants": [{"iden...
+2026-03-18 15:58:31,601 - INFO - Processing conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 15:58:31,711 - INFO - [UTTERANCE] Handling utterance event
+2026-03-18 15:58:54,412 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "8c738455-fbfe-488d-a0ef-a969c1ff84e7", "conversants": [{"iden...
+2026-03-18 15:58:54,464 - INFO - Processing conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 15:58:54,704 - INFO - [UTTERANCE] Handling utterance event
+2026-03-18 15:59:24,527 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "8c738455-fbfe-488d-a0ef-a969c1ff84e7", "conversants": [{"iden...
+2026-03-18 15:59:24,528 - INFO - Processing conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 15:59:24,529 - INFO - [UTTERANCE] Handling utterance event
+2026-03-18 15:59:29,865 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-18 15:59:29,904 - INFO - Reviewer generated a response.
+2026-03-18 15:59:29,906 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-18 15:59:29,907 - INFO - generated {
+    "applicable": "no",
+    "decision": "factuality doesn't apply",
+    "factual_likelihood": 0,
+    "explanation": "The utterance is a question asking for current information, which is unknowable without real-time data. Factuality does not apply to questions."
+}.
+2026-03-18 15:59:29,909 - INFO - Reviewer generated a response.
+2026-03-18 15:59:29,909 - INFO - generated {'applicable': 'no', 'decision': "factuality doesn't apply", 'factual_likelihood': 0, 'explanation': 'The utterance is a question asking for current information, which is unknowable without real-time data. Factuality does not apply to questions.', 'suppress': True}.
+2026-03-18 15:59:29,910 - INFO - [UTTERANCE] Suppressing response due to conversant count
+2026-03-18 15:59:29,910 - INFO - generated {
+    "applicable": "no",
+    "decision": "factuality doesn't apply",
+    "factual_likelihood": 0,
+    "explanation": "The utterance is a question asking for current information, which is unknowable without real-time data. Factuality does not apply to questions."
+}.
+2026-03-18 15:59:29,911 - INFO - Returning response for conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 15:59:29,911 - INFO - generated {'applicable': 'no', 'decision': "factuality doesn't apply", 'factual_likelihood': 0, 'explanation': 'The utterance is a question asking for current information, which is unknowable without real-time data. Factuality does not apply to questions.', 'suppress': True}.
+2026-03-18 15:59:29,913 - INFO - 127.0.0.1 - - [18/Mar/2026 15:59:29] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 15:59:29,913 - INFO - [UTTERANCE] Suppressing response due to conversant count
+2026-03-18 15:59:29,915 - INFO - Returning response for conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 15:59:29,916 - INFO - 127.0.0.1 - - [18/Mar/2026 15:59:29] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 15:59:30,895 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-18 15:59:30,895 - INFO - Reviewer generated a response.
+2026-03-18 15:59:30,895 - INFO - generated {
+    "applicable": "no",
+    "decision": "factuality doesn't apply",
+    "factual_likelihood": 0,
+    "explanation": "The utterance is a question asking for current information, which is unknowable without real-time data. Factuality does not apply to questions."
+}.
+2026-03-18 15:59:30,895 - INFO - generated {'applicable': 'no', 'decision': "factuality doesn't apply", 'factual_likelihood': 0, 'explanation': 'The utterance is a question asking for current information, which is unknowable without real-time data. Factuality does not apply to questions.', 'suppress': True}.
+2026-03-18 15:59:30,895 - INFO - [UTTERANCE] Suppressing response due to conversant count
+2026-03-18 15:59:30,895 - INFO - Returning response for conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 15:59:30,910 - INFO - 127.0.0.1 - - [18/Mar/2026 15:59:30] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 15:59:57,709 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "8c738455-fbfe-488d-a0ef-a969c1ff84e7", "conversants": [{"iden...
+2026-03-18 15:59:57,711 - INFO - Processing conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 15:59:57,712 - INFO - [UTTERANCE] Handling utterance event
+2026-03-18 15:59:59,653 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-18 15:59:59,663 - INFO - Reviewer generated a response.
+2026-03-18 15:59:59,664 - INFO - generated {
+    "applicable": "no",
+    "decision": "factuality doesn't apply",
+    "factual_likelihood": 0,
+    "explanation": "The utterance is a question asking for current information, which is unknowable at this moment. Factuality does not apply to questions."
+}.
+2026-03-18 15:59:59,665 - INFO - generated {'applicable': 'no', 'decision': "factuality doesn't apply", 'factual_likelihood': 0, 'explanation': 'The utterance is a question asking for current information, which is unknowable at this moment. Factuality does not apply to questions.', 'suppress': True}.
+2026-03-18 15:59:59,666 - INFO - [UTTERANCE] Suppressing response due to conversant count
+2026-03-18 15:59:59,667 - INFO - Returning response for conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 15:59:59,669 - INFO - 127.0.0.1 - - [18/Mar/2026 15:59:59] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 16:00:19,027 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "8c738455-fbfe-488d-a0ef-a969c1ff84e7", "conversants": [{"iden...
+2026-03-18 16:00:19,028 - INFO - Processing conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 16:00:19,029 - INFO - [UNINVITE] Received uninvite from conversation: 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 16:00:19,030 - INFO - Returning response for conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 16:00:19,032 - INFO - 127.0.0.1 - - [18/Mar/2026 16:00:19] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 16:00:29,677 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "8c738455-fbfe-488d-a0ef-a969c1ff84e7", "conversants": [{"iden...
+2026-03-18 16:00:29,677 - INFO - Processing conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 16:00:29,677 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-03-18 16:00:29,677 - INFO - Returning response for conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 16:00:29,677 - INFO - 127.0.0.1 - - [18/Mar/2026 16:00:29] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 16:00:35,868 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "8c738455-fbfe-488d-a0ef-a969c1ff84e7", "conversants": [{"iden...
+2026-03-18 16:00:35,870 - INFO - Processing conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 16:00:35,871 - INFO - [INVITE] Received invitation to conversation: 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 16:00:35,957 - INFO - [UTTERANCE] Handling utterance event
+2026-03-18 16:00:37,729 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-18 16:00:37,733 - INFO - Reviewer generated a response.
+2026-03-18 16:00:37,734 - INFO - generated {
+    "applicable": "no",
+    "decision": "factuality doesn't apply",
+    "factual_likelihood": 0,
+    "explanation": "The utterance is a question asking for current information, which is unknowable without real-time data. Factuality does not apply to questions."
+}.
+2026-03-18 16:00:37,735 - INFO - generated {'applicable': 'no', 'decision': "factuality doesn't apply", 'factual_likelihood': 0, 'explanation': 'The utterance is a question asking for current information, which is unknowable without real-time data. Factuality does not apply to questions.', 'suppress': True}.
+2026-03-18 16:00:37,735 - INFO - [UTTERANCE] Suppressing response due to conversant count
+2026-03-18 16:00:37,737 - INFO - Returning response for conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 16:00:37,738 - INFO - 127.0.0.1 - - [18/Mar/2026 16:00:37] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 16:01:03,209 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "8c738455-fbfe-488d-a0ef-a969c1ff84e7", "conversants": [{"iden...
+2026-03-18 16:01:03,211 - INFO - Processing conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 16:01:03,211 - INFO - [UTTERANCE] Handling utterance event
+2026-03-18 16:01:05,092 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-18 16:01:05,097 - INFO - Reviewer generated a response.
+2026-03-18 16:01:05,098 - INFO - generated {
+    "applicable": "yes",
+    "decision": "factual",
+    "factual_likelihood": 1,
+    "explanation": "The time zone for Chicago is Central Standard Time (CST), which is UTC-6, and Central Daylight Time (CDT), which is UTC-5 during daylight saving time. This information is factual and verifiable."
+}.
+2026-03-18 16:01:05,100 - INFO - generated {'applicable': 'yes', 'decision': 'factual', 'factual_likelihood': 1, 'explanation': 'The time zone for Chicago is Central Standard Time (CST), which is UTC-6, and Central Daylight Time (CDT), which is UTC-5 during daylight saving time. This information is factual and verifiable.', 'suppress': True}.
+2026-03-18 16:01:05,102 - INFO - [UTTERANCE] Suppressing response due to conversant count
+2026-03-18 16:01:05,103 - INFO - Returning response for conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 16:01:05,106 - INFO - 127.0.0.1 - - [18/Mar/2026 16:01:05] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 16:01:27,401 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "8c738455-fbfe-488d-a0ef-a969c1ff84e7", "conversants": [{"iden...
+2026-03-18 16:01:27,404 - INFO - Processing conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 16:01:27,405 - INFO - [UNINVITE] Received uninvite from conversation: 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 16:01:27,409 - INFO - Returning response for conversation 8c738455-fbfe-488d-a0ef-a969c1ff84e7
+2026-03-18 16:01:27,411 - INFO - 127.0.0.1 - - [18/Mar/2026 16:01:27] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 17:24:20,391 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "94349b55-6352-40fc-8871-9183835ea7cb", "conversants": [{"iden...
+2026-03-18 17:24:20,396 - INFO - Processing conversation 94349b55-6352-40fc-8871-9183835ea7cb from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 17:24:20,397 - INFO - [GET_MANIFESTS] Manifest requested, publishing capabilities
+2026-03-18 17:24:20,404 - INFO - Returning response for conversation 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:24:20,408 - INFO - 127.0.0.1 - - [18/Mar/2026 17:24:20] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 17:24:24,383 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "94349b55-6352-40fc-8871-9183835ea7cb", "conversants": [{"iden...
+2026-03-18 17:24:24,386 - INFO - Processing conversation 94349b55-6352-40fc-8871-9183835ea7cb from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 17:24:24,387 - INFO - [INVITE] Received invitation to conversation: 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:24:24,392 - INFO - [UTTERANCE] Handling utterance event
+2026-03-18 17:24:27,096 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-18 17:24:27,103 - INFO - Reviewer generated a response.
+2026-03-18 17:24:27,104 - INFO - generated {
+    "applicable": "no",
+    "decision": "factuality doesn't apply",
+    "factual_likelihood": 0,
+    "explanation": "The request is a command asking for a visual representation, which cannot be factual. Additionally, it presupposes that a picture can be provided, which is not possible in this text-based format."
+}.
+2026-03-18 17:24:27,105 - INFO - generated {'applicable': 'no', 'decision': "factuality doesn't apply", 'factual_likelihood': 0, 'explanation': 'The request is a command asking for a visual representation, which cannot be factual. Additionally, it presupposes that a picture can be provided, which is not possible in this text-based format.', 'suppress': True}.
+2026-03-18 17:24:27,106 - INFO - [UTTERANCE] Suppressing response due to conversant count
+2026-03-18 17:24:27,108 - INFO - Returning response for conversation 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:24:27,109 - INFO - 127.0.0.1 - - [18/Mar/2026 17:24:27] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 17:24:48,077 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "94349b55-6352-40fc-8871-9183835ea7cb", "conversants": [{"iden...
+2026-03-18 17:24:48,130 - INFO - Processing conversation 94349b55-6352-40fc-8871-9183835ea7cb from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 17:24:48,130 - INFO - [UTTERANCE] Handling utterance event
+2026-03-18 17:24:50,467 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-18 17:24:50,471 - INFO - Reviewer generated a response.
+2026-03-18 17:24:50,472 - INFO - generated {
+    "applicable": "yes",
+    "decision": "not factual",
+    "factual_likelihood": 0.1,
+    "explanation": "As of October 2023, Jupiter has 80 known moons. The statement underestimates the number of moons significantly, making it not factual."
+}.
+2026-03-18 17:24:50,473 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0.1, 'explanation': 'As of October 2023, Jupiter has 80 known moons. The statement underestimates the number of moons significantly, making it not factual.', 'suppress': False}.
+2026-03-18 17:24:50,476 - INFO - Returning response for conversation 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:24:50,477 - INFO - 127.0.0.1 - - [18/Mar/2026 17:24:50] "POST /verity/ HTTP/1.1" 200 -

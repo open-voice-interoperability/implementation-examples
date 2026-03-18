@@ -94,6 +94,15 @@ class BotAgent:
         self.on_envelope(in_envelope, out_envelope)
         return out_envelope
 
+    @staticmethod
+    def _normalize_endpoint_id(value: Any) -> str:
+        if value is None:
+            return ""
+        normalized = str(value).strip().lower()
+        if normalized.startswith("agent:"):
+            normalized = normalized[6:]
+        return normalized.rstrip("/")
+
     def _is_addressed_to_me(self, event: Any) -> bool:
         to_value = getattr(event, "to", None)
         if to_value is None:
@@ -106,9 +115,14 @@ class BotAgent:
             to_speaker = getattr(to_value, "speakerUri", None)
             to_service = getattr(to_value, "serviceUrl", None)
 
-        if to_speaker and to_speaker == self.speakerUri:
+        to_speaker_normalized = self._normalize_endpoint_id(to_speaker)
+        to_service_normalized = self._normalize_endpoint_id(to_service)
+        my_speaker_normalized = self._normalize_endpoint_id(self.speakerUri)
+        my_service_normalized = self._normalize_endpoint_id(self.serviceUrl)
+
+        if to_speaker_normalized and to_speaker_normalized == my_speaker_normalized:
             return True
-        if to_service and to_service == self.serviceUrl:
+        if to_service_normalized and to_service_normalized == my_service_normalized:
             return True
         return False
 
@@ -204,6 +218,70 @@ class GeminiAgent(BotAgent):
 
     def _extract_text_from_utterance_event(self, event: UtteranceEvent) -> str:
         try:
+            def _tokens_to_text(tokens) -> str:
+                if not tokens:
+                    return ""
+                text_parts = []
+                for token in tokens:
+                    if hasattr(token, "value"):
+                        value = getattr(token, "value", "")
+                    elif isinstance(token, dict):
+                        value = token.get("value", "")
+                    else:
+                        value = str(token)
+                    if value is not None:
+                        text_parts.append(str(value))
+                return " ".join(part for part in text_parts if part).strip()
+
+            def _values_to_text(values) -> str:
+                if not values:
+                    return ""
+                text_parts = []
+                for value in values:
+                    if isinstance(value, dict):
+                        value = value.get("value", "")
+                    if value is not None:
+                        text_parts.append(str(value))
+                return " ".join(part for part in text_parts if part).strip()
+
+            def _extract_from_text_feature(text_feature) -> str:
+                if text_feature is None:
+                    return ""
+
+                if isinstance(text_feature, dict):
+                    text = _values_to_text(text_feature.get("values"))
+                    if text:
+                        return text
+
+                    text = _tokens_to_text(text_feature.get("tokens"))
+                    if text:
+                        return text
+
+                    nested = text_feature.get("textFeature")
+                    if nested is not None:
+                        return _extract_from_text_feature(nested)
+
+                else:
+                    values_attr = getattr(text_feature, "values", None) if hasattr(text_feature, "values") else None
+                    if values_attr is not None and not callable(values_attr):
+                        text = _values_to_text(values_attr)
+                        if text:
+                            return text
+
+                    tokens_attr = getattr(text_feature, "tokens", None) if hasattr(text_feature, "tokens") else None
+                    if tokens_attr is not None and not callable(tokens_attr):
+                        text = _tokens_to_text(tokens_attr)
+                        if text:
+                            return text
+
+                    nested_attr = getattr(text_feature, "textFeature", None) if hasattr(text_feature, "textFeature") else None
+                    if nested_attr is not None:
+                        text = _extract_from_text_feature(nested_attr)
+                        if text:
+                            return text
+
+                return ""
+
             dialog_event = None
 
             if hasattr(event, "dialogEvent") and event.dialogEvent is not None:
@@ -231,31 +309,15 @@ class GeminiAgent(BotAgent):
 
             if isinstance(features, dict) and "text" in features:
                 text_feature = features["text"]
-                if isinstance(text_feature, dict):
-                    if "tokens" in text_feature:
-                        return " ".join(
-                            str(t.get("value", "")) for t in text_feature["tokens"] if "value" in t
-                        )
-                    if "values" in text_feature:
-                        return " ".join(str(value) for value in text_feature["values"])
-                if hasattr(text_feature, "tokens"):
-                    return " ".join(
-                        str(token.value) for token in text_feature.tokens if hasattr(token, "value")
-                    )
-                values_attr = getattr(text_feature, "values", None)
-                if values_attr is not None and not callable(values_attr):
-                    return " ".join(str(value) for value in values_attr)
+                text = _extract_from_text_feature(text_feature)
+                if text:
+                    return text
 
             if hasattr(features, "__iter__"):
                 for feature in features:
-                    if hasattr(feature, "mimeType") and "text" in feature.mimeType:
-                        if hasattr(feature, "tokens"):
-                            return " ".join(
-                                str(token.value) for token in feature.tokens if hasattr(token, "value")
-                            )
-                        values_attr = getattr(feature, "values", None)
-                        if values_attr is not None and not callable(values_attr):
-                            return " ".join(str(value) for value in values_attr)
+                    text = _extract_from_text_feature(feature)
+                    if text:
+                        return text
 
             return ""
         except Exception:

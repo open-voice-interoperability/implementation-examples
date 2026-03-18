@@ -113,6 +113,15 @@ class BotAgent:
         self.on_envelope(in_envelope, out_envelope)
         return out_envelope
 
+    @staticmethod
+    def _normalize_endpoint_id(value: Any) -> str:
+        if value is None:
+            return ""
+        normalized = str(value).strip().lower()
+        if normalized.startswith("agent:"):
+            normalized = normalized[6:]
+        return normalized.rstrip("/")
+
     def _is_addressed_to_me(self, event: Any) -> bool:
         to_value = getattr(event, "to", None)
         if to_value is None:
@@ -125,9 +134,14 @@ class BotAgent:
             to_speaker = getattr(to_value, "speakerUri", None)
             to_service = getattr(to_value, "serviceUrl", None)
 
-        if to_speaker and to_speaker == self.speakerUri:
+        to_speaker_normalized = self._normalize_endpoint_id(to_speaker)
+        to_service_normalized = self._normalize_endpoint_id(to_service)
+        my_speaker_normalized = self._normalize_endpoint_id(self.speakerUri)
+        my_service_normalized = self._normalize_endpoint_id(self.serviceUrl)
+
+        if to_speaker_normalized and to_speaker_normalized == my_speaker_normalized:
             return True
-        if to_service and to_service == self.serviceUrl:
+        if to_service_normalized and to_service_normalized == my_service_normalized:
             return True
         return False
 
@@ -286,76 +300,113 @@ class TemplateAgent(BotAgent):
             Extracted text string, or empty string if not found
         """
         try:
-            logger.info("[EXTRACT] event type: %s", type(event))
-            logger.info("[EXTRACT] hasattr parameters: %s", hasattr(event, 'parameters'))
-            # Get dialog event from parameters
+            def _tokens_to_text(tokens) -> str:
+                if not tokens:
+                    return ""
+                text_parts = []
+                for token in tokens:
+                    if hasattr(token, 'value'):
+                        value = getattr(token, 'value', '')
+                    elif isinstance(token, dict):
+                        value = token.get('value', '')
+                    else:
+                        value = str(token)
+                    if value is not None:
+                        text_parts.append(str(value))
+                return ' '.join(part for part in text_parts if part).strip()
+
+            def _values_to_text(values) -> str:
+                if not values:
+                    return ""
+                text_parts = []
+                for value in values:
+                    if isinstance(value, dict):
+                        value = value.get('value', '')
+                    if value is not None:
+                        text_parts.append(str(value))
+                return ' '.join(part for part in text_parts if part).strip()
+
+            def _extract_from_text_feature(text_feature) -> str:
+                if text_feature is None:
+                    return ""
+
+                if isinstance(text_feature, dict):
+                    text = _values_to_text(text_feature.get('values'))
+                    if text:
+                        return text
+
+                    text = _tokens_to_text(text_feature.get('tokens'))
+                    if text:
+                        return text
+
+                    nested = text_feature.get('textFeature')
+                    if nested is not None:
+                        return _extract_from_text_feature(nested)
+
+                else:
+                    values_attr = getattr(text_feature, 'values', None) if hasattr(text_feature, 'values') else None
+                    if values_attr is not None and not callable(values_attr):
+                        text = _values_to_text(values_attr)
+                        if text:
+                            return text
+
+                    tokens_attr = getattr(text_feature, 'tokens', None) if hasattr(text_feature, 'tokens') else None
+                    if tokens_attr is not None and not callable(tokens_attr):
+                        text = _tokens_to_text(tokens_attr)
+                        if text:
+                            return text
+
+                    nested_attr = getattr(text_feature, 'textFeature', None) if hasattr(text_feature, 'textFeature') else None
+                    if nested_attr is not None:
+                        text = _extract_from_text_feature(nested_attr)
+                        if text:
+                            return text
+
+                return ""
+
             if hasattr(event, 'parameters'):
                 params = event.parameters
-                logger.info("[EXTRACT] params type: %s", type(params))
-                logger.info("[EXTRACT] params value: %s", params)
-                logger.info("[EXTRACT] dir(params): %s", [x for x in dir(params) if not x.startswith('_')])
-                
-                logger.info("[EXTRACT] params type: %s", type(params))
-                logger.info("[EXTRACT] params value: %s", params)
-                
-                # Parameters class has dict-like interface (has 'get' method)
-                # Try dict-style access first
-                try:
-                    if 'dialogEvent' in params:
-                        dialog_event = params['dialogEvent']
-                        logger.info("[EXTRACT] Found dialogEvent via dict key access")
-                    else:
-                        dialog_event = params
-                        logger.info("[EXTRACT] No dialogEvent key, using params as dialog_event")
-                except (TypeError, KeyError):
-                    # Fallback if dict access doesn't work
-                    dialog_event = params
-                    logger.info("[EXTRACT] Dict access failed, using params as dialog_event")
-                
-                logger.info("[EXTRACT] dialog_event type: %s", type(dialog_event))
-                logger.info("[EXTRACT] dialog_event: %s", dialog_event)
-                
-                # Extract features
-                if hasattr(dialog_event, 'features'):
-                    features = dialog_event.features
-                    logger.info("[EXTRACT] Found features via hasattr")
-                elif isinstance(dialog_event, dict) and 'features' in dialog_event:
-                    features = dialog_event['features']
-                    logger.info("[EXTRACT] Found features via dict")
+            elif isinstance(event, dict):
+                params = event.get('parameters')
+            else:
+                params = None
+
+            if params is None:
+                return ""
+
+            try:
+                if 'dialogEvent' in params:
+                    dialog_event = params['dialogEvent']
                 else:
-                    logger.info("[EXTRACT] No features found!")
-                    return ""
-                
-                logger.info("[EXTRACT] features type: %s", type(features))
-                logger.info("[EXTRACT] features: %s", features)
-                
-                # Handle dict-based features (common format)
-                if isinstance(features, dict):
-                    if 'text' in features:
-                        text_feature = features['text']
-                        if hasattr(text_feature, 'tokens'):
-                            tokens = text_feature.tokens
-                            text_parts = []
-                            for token in tokens:
-                                if hasattr(token, 'value'):
-                                    text_parts.append(str(token.value))
-                                elif isinstance(token, dict) and 'value' in token:
-                                    text_parts.append(str(token['value']))
-                            return ' '.join(text_parts)
-                        elif isinstance(text_feature, dict) and 'tokens' in text_feature:
-                            tokens = text_feature['tokens']
-                            text_parts = [str(t.get('value', '')) for t in tokens if 'value' in t]
-                            return ' '.join(text_parts)
-                
-                # Handle list-based features
-                elif hasattr(features, '__iter__'):
-                    for feature in features:
-                        if hasattr(feature, 'mimeType') and 'text' in feature.mimeType:
-                            if hasattr(feature, 'tokens'):
-                                tokens = feature.tokens
-                                text_parts = [str(token.value) for token in tokens if hasattr(token, 'value')]
-                                return ' '.join(text_parts)
-            
+                    dialog_event = params
+            except (TypeError, KeyError):
+                dialog_event = params
+
+            if hasattr(dialog_event, 'features'):
+                features = dialog_event.features
+            elif isinstance(dialog_event, dict) and 'features' in dialog_event:
+                features = dialog_event['features']
+            else:
+                return ""
+
+            if isinstance(features, dict):
+                if 'text' in features:
+                    text = _extract_from_text_feature(features.get('text'))
+                    if text:
+                        return text
+
+                for key, feature in features.items():
+                    if isinstance(key, str) and 'text' in key.lower():
+                        text = _extract_from_text_feature(feature)
+                        if text:
+                            return text
+
+            elif hasattr(features, '__iter__'):
+                for feature in features:
+                    text = _extract_from_text_feature(feature)
+                    if text:
+                        return text
+
             return ""
             
         except Exception as e:

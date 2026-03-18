@@ -45,6 +45,11 @@ def run_local_intent_tests():
                 "input": "what timezone is san francisco in?",
                 "expect_contains": "San Francisco is in the America/Los_Angeles time zone",
             },
+            {
+                "name": "Timezone query with trailing quote should trigger",
+                "input": "what is the time zone for chicago'",
+                "expect_contains": "Chicago is in the America/Chicago time zone",
+            },
         ]
 
         for case in test_cases:

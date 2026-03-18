@@ -239,6 +239,70 @@ class TemplateAgent(BotAgent):
 
     def _extract_text_from_utterance_event(self, event: UtteranceEvent) -> str:
         try:
+            def _tokens_to_text(tokens) -> str:
+                if not tokens:
+                    return ""
+                text_parts = []
+                for token in tokens:
+                    if hasattr(token, "value"):
+                        value = getattr(token, "value", "")
+                    elif isinstance(token, dict):
+                        value = token.get("value", "")
+                    else:
+                        value = str(token)
+                    if value is not None:
+                        text_parts.append(str(value))
+                return " ".join(part for part in text_parts if part).strip()
+
+            def _values_to_text(values) -> str:
+                if not values:
+                    return ""
+                text_parts = []
+                for value in values:
+                    if isinstance(value, dict):
+                        value = value.get("value", "")
+                    if value is not None:
+                        text_parts.append(str(value))
+                return " ".join(part for part in text_parts if part).strip()
+
+            def _extract_from_text_feature(text_feature) -> str:
+                if text_feature is None:
+                    return ""
+
+                if isinstance(text_feature, dict):
+                    text = _values_to_text(text_feature.get("values"))
+                    if text:
+                        return text
+
+                    text = _tokens_to_text(text_feature.get("tokens"))
+                    if text:
+                        return text
+
+                    nested = text_feature.get("textFeature")
+                    if nested is not None:
+                        return _extract_from_text_feature(nested)
+
+                else:
+                    values_attr = getattr(text_feature, "values", None) if hasattr(text_feature, "values") else None
+                    if values_attr is not None and not callable(values_attr):
+                        text = _values_to_text(values_attr)
+                        if text:
+                            return text
+
+                    tokens_attr = getattr(text_feature, "tokens", None) if hasattr(text_feature, "tokens") else None
+                    if tokens_attr is not None and not callable(tokens_attr):
+                        text = _tokens_to_text(tokens_attr)
+                        if text:
+                            return text
+
+                    nested_attr = getattr(text_feature, "textFeature", None) if hasattr(text_feature, "textFeature") else None
+                    if nested_attr is not None:
+                        text = _extract_from_text_feature(nested_attr)
+                        if text:
+                            return text
+
+                return ""
+
             params = None
             if hasattr(event, "parameters"):
                 params = event.parameters
@@ -269,31 +333,15 @@ class TemplateAgent(BotAgent):
                 if text_feature is None:
                     return ""
 
-                if hasattr(text_feature, "tokens"):
-                    tokens = text_feature.tokens
-                    text_parts = []
-                    for token in tokens:
-                        if hasattr(token, "value"):
-                            text_parts.append(str(token.value))
-                        elif isinstance(token, dict) and "value" in token:
-                            text_parts.append(str(token["value"]))
-                    return " ".join(text_parts)
-                if isinstance(text_feature, dict):
-                    if "tokens" in text_feature:
-                        tokens = text_feature["tokens"]
-                        text_parts = [str(t.get("value", "")) for t in tokens if "value" in t]
-                        return " ".join(text_parts)
-                    if "values" in text_feature:
-                        values = text_feature["values"]
-                        return " ".join(str(v) for v in values)
+                text = _extract_from_text_feature(text_feature)
+                if text:
+                    return text
 
             elif hasattr(features, "__iter__"):
                 for feature in features:
-                    if hasattr(feature, "mimeType") and "text" in feature.mimeType:
-                        if hasattr(feature, "tokens"):
-                            tokens = feature.tokens
-                            text_parts = [str(token.value) for token in tokens if hasattr(token, "value")]
-                            return " ".join(text_parts)
+                    text = _extract_from_text_feature(feature)
+                    if text:
+                        return text
 
             return ""
         except Exception:

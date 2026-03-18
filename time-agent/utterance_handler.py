@@ -105,11 +105,12 @@ def process_utterance(user_text: str, agent_name: str = "TimeAgent") -> str:
         response_text: The response message with time information, or None if query is not time-related
     """
     user_text_lower = user_text.lower().strip()
+    normalized_text = _normalize_query_text(user_text_lower)
 
     # Check if query is time-related with explicit request intent
-    has_time_intent = _has_time_intent(user_text_lower)
-    has_help_keyword = any(word in user_text_lower for word in ["help", "what can you do", "capabilities"])
-    has_list_keyword = any(phrase in user_text_lower for phrase in ["list cities", "which cities", "what cities", "available cities"])
+    has_time_intent = _has_time_intent(normalized_text)
+    has_help_keyword = any(word in normalized_text for word in ["help", "what can you do", "capabilities"])
+    has_list_keyword = any(phrase in normalized_text for phrase in ["list cities", "which cities", "what cities", "available cities"])
 
     # If query is not time-related, suppress response for multi-agent floors.
     if not (has_time_intent or has_help_keyword or has_list_keyword):
@@ -126,16 +127,16 @@ def process_utterance(user_text: str, agent_name: str = "TimeAgent") -> str:
         return _list_available_cities()
     
     # Try to extract city name from the query (only when time intent is present)
-    city = _extract_city_from_query(user_text_lower) if has_time_intent else ""
+    city = _extract_city_from_query(normalized_text) if has_time_intent else ""
     
     if city:
-        if "timezone" in user_text_lower or "time zone" in user_text_lower:
+        if "timezone" in normalized_text or "time zone" in normalized_text:
             return _get_timezone_for_city(city)
         return _get_time_for_city(city)
     
     # If no specific city found, check for general time request
     if has_time_intent:
-        if "timezone" in user_text_lower or "time zone" in user_text_lower:
+        if "timezone" in normalized_text or "time zone" in normalized_text:
             return "I can tell you the timezone for major cities. Which city are you interested in?"
         return "I can tell you the current time in major cities worldwide. Which city are you interested in? (Or ask 'list cities' to see available cities)"
     
@@ -161,6 +162,8 @@ def _has_time_intent(user_text: str) -> bool:
 
     intent_patterns = [
         r"\bwhat(?:'s| is)?\s+(?:the\s+)?time\b",
+        r"\bwhat(?:'s| is)?\s+(?:the\s+)?time\s*zone\s+(?:in|for)\b",
+        r"\bwhat(?:'s| is)?\s+(?:the\s+)?timezone\s+(?:in|for)\b",
         r"\bwhen\s+is\s+it\b",
         r"\b(?:tell|show|give)\s+me\s+(?:the\s+)?(?:current\s+)?time\b",
         r"\bcan\s+you\s+(?:tell|show|give)\s+me\s+(?:the\s+)?time\b",
@@ -175,6 +178,14 @@ def _has_time_intent(user_text: str) -> bool:
     has_request_context = any(word in user_text for word in request_words)
 
     return matches_intent_pattern or has_question_form or (has_timezone_term and has_request_context)
+
+
+def _normalize_query_text(user_text: str) -> str:
+    """Normalize punctuation/quotes to improve intent and city extraction robustness."""
+    normalized = user_text.replace("\u2019", "'").replace("\u2018", "'")
+    normalized = re.sub(r"[\"']+", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized
 
 def _extract_city_from_query(user_text: str) -> str:
     """

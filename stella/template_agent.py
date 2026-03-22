@@ -102,40 +102,51 @@ class BotAgent:
             return normalized.rstrip("/").lower()
 
         to_value = getattr(event, "to", None)
+        if to_value is None and isinstance(event, dict):
+            to_value = event.get("to")
         if to_value is None:
             return True
 
-        if isinstance(to_value, dict):
-            to_speaker = to_value.get("speakerUri")
-            to_service = to_value.get("serviceUrl")
-        else:
-            to_speaker = getattr(to_value, "speakerUri", None)
-            to_service = getattr(to_value, "serviceUrl", None)
-
         my_speaker = normalize_uri(self.speakerUri)
         my_service = normalize_uri(self.serviceUrl)
-        target_speaker = normalize_uri(to_speaker)
-        target_service = normalize_uri(to_service)
 
-        if target_speaker:
-            return target_speaker == my_speaker
+        recipients = to_value if isinstance(to_value, (list, tuple, set)) else [to_value]
+        if not recipients:
+            return True
 
-        if target_service and my_service:
-            if target_service == my_service:
+        for recipient in recipients:
+            if isinstance(recipient, dict):
+                to_speaker = recipient.get("speakerUri")
+                to_service = recipient.get("serviceUrl")
+            elif isinstance(recipient, str):
+                to_speaker = recipient
+                to_service = recipient
+            else:
+                to_speaker = getattr(recipient, "speakerUri", None)
+                to_service = getattr(recipient, "serviceUrl", None)
+
+            target_speaker = normalize_uri(to_speaker)
+            target_service = normalize_uri(to_service)
+
+            if target_speaker and target_speaker == my_speaker:
                 return True
 
-            try:
-                parsed_target = urlparse(target_service)
-                parsed_me = urlparse(my_service)
-                if (
-                    parsed_target.hostname
-                    and parsed_me.hostname
-                    and parsed_target.hostname == parsed_me.hostname
-                    and (parsed_target.port or 80) == (parsed_me.port or 80)
-                ):
+            if target_service and my_service:
+                if target_service == my_service:
                     return True
-            except Exception:
-                return False
+
+                try:
+                    parsed_target = urlparse(target_service)
+                    parsed_me = urlparse(my_service)
+                    if (
+                        parsed_target.hostname
+                        and parsed_me.hostname
+                        and parsed_target.hostname == parsed_me.hostname
+                        and (parsed_target.port or 80) == (parsed_me.port or 80)
+                    ):
+                        return True
+                except Exception:
+                    continue
 
         return False
 

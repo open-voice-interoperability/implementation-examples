@@ -124,40 +124,51 @@ class BotAgent:
             return normalized.rstrip("/").lower()
 
         to_value = getattr(event, "to", None)
+        if to_value is None and isinstance(event, dict):
+            to_value = event.get("to")
         if to_value is None:
             return True
 
-        if isinstance(to_value, dict):
-            to_speaker = to_value.get("speakerUri")
-            to_service = to_value.get("serviceUrl")
-        else:
-            to_speaker = getattr(to_value, "speakerUri", None)
-            to_service = getattr(to_value, "serviceUrl", None)
+        recipients = to_value if isinstance(to_value, (list, tuple, set)) else [to_value]
+        if not recipients:
+            return True
 
         my_speaker = normalize_uri(self.speakerUri)
         my_service = normalize_uri(self.serviceUrl)
-        target_speaker = normalize_uri(to_speaker)
-        target_service = normalize_uri(to_service)
 
-        if target_speaker:
-            return target_speaker == my_speaker
+        for recipient in recipients:
+            if isinstance(recipient, dict):
+                to_speaker = recipient.get("speakerUri")
+                to_service = recipient.get("serviceUrl")
+            elif isinstance(recipient, str):
+                to_speaker = recipient
+                to_service = recipient
+            else:
+                to_speaker = getattr(recipient, "speakerUri", None)
+                to_service = getattr(recipient, "serviceUrl", None)
 
-        if target_service and my_service:
-            if target_service == my_service:
+            target_speaker = normalize_uri(to_speaker)
+            target_service = normalize_uri(to_service)
+
+            if target_speaker and target_speaker == my_speaker:
                 return True
 
-            try:
-                parsed_target = urlparse(target_service)
-                parsed_me = urlparse(my_service)
-                if (
-                    parsed_target.hostname
-                    and parsed_me.hostname
-                    and parsed_target.hostname == parsed_me.hostname
-                    and (parsed_target.port or 80) == (parsed_me.port or 80)
-                ):
+            if target_service and my_service:
+                if target_service == my_service:
                     return True
-            except Exception:
-                return False
+
+                try:
+                    parsed_target = urlparse(target_service)
+                    parsed_me = urlparse(my_service)
+                    if (
+                        parsed_target.hostname
+                        and parsed_me.hostname
+                        and parsed_target.hostname == parsed_me.hostname
+                        and (parsed_target.port or 80) == (parsed_me.port or 80)
+                    ):
+                        return True
+                except Exception:
+                    continue
 
         return False
 
@@ -228,21 +239,35 @@ class TemplateAgent(BotAgent):
 
     def _is_invite_addressed_to_me(self, event: InviteEvent) -> bool:
         """Return True if the invite is broadcast or explicitly addressed to this agent."""
-        if event.to is None:
+        to_value = getattr(event, "to", None)
+        if to_value is None:
             return True
 
-        to_speaker = getattr(event.to, "speakerUri", None)
-        to_service = getattr(event.to, "serviceUrl", None)
-        if not to_speaker and not to_service:
+        recipients = to_value if isinstance(to_value, (list, tuple, set)) else [to_value]
+        if not recipients:
             return True
 
         my_speaker = self._manifest.identification.speakerUri
         my_service = self._manifest.identification.serviceUrl
 
-        if to_speaker and my_speaker and to_speaker.strip().lower() == my_speaker.strip().lower():
-            return True
-        if to_service and my_service and to_service.rstrip("/").lower() == my_service.rstrip("/").lower():
-            return True
+        for recipient in recipients:
+            if isinstance(recipient, dict):
+                to_speaker = recipient.get("speakerUri")
+                to_service = recipient.get("serviceUrl")
+            elif isinstance(recipient, str):
+                to_speaker = recipient
+                to_service = recipient
+            else:
+                to_speaker = getattr(recipient, "speakerUri", None)
+                to_service = getattr(recipient, "serviceUrl", None)
+
+            if not to_speaker and not to_service:
+                return True
+
+            if to_speaker and my_speaker and to_speaker.strip().lower() == my_speaker.strip().lower():
+                return True
+            if to_service and my_service and to_service.rstrip("/").lower() == my_service.rstrip("/").lower():
+                return True
 
         return False
     

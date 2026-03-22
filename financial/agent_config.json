@@ -1,0 +1,36 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Finn",
+      "speakerUri": "http://localhost:8083",
+      "serviceUrl": "http://localhost:8083",
+      "organization": "OpenVoiceNetwork",
+      "role": "assistant",
+      "synopsis": "A financial agent that provides real-time stock data powered by Finnhub"
+    },
+    "capabilities": {
+      "keyphrases": [
+        "stock",
+        "price",
+        "quote",
+        "earnings",
+        "market",
+        "shares",
+        "ticker",
+        "financial",
+        "invest"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Provides real-time stock quotes and earnings data via Finnhub",
+        "Supports lookups for major US equities by ticker symbol or company name"
+      ],
+      "supportedLayers": [
+        "text",
+        "html"
+      ]
+    }
+  }
+}

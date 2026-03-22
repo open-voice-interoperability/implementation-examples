@@ -101,25 +101,37 @@ class BotAgent:
 
     def _is_addressed_to_me(self, event: Any) -> bool:
         to_value = getattr(event, "to", None)
+        if to_value is None and isinstance(event, dict):
+            to_value = event.get("to")
         if to_value is None:
             return True
 
-        if isinstance(to_value, dict):
-            to_speaker = to_value.get("speakerUri")
-            to_service = to_value.get("serviceUrl")
-        else:
-            to_speaker = getattr(to_value, "speakerUri", None)
-            to_service = getattr(to_value, "serviceUrl", None)
-
-        to_speaker_normalized = self._normalize_endpoint_id(to_speaker)
-        to_service_normalized = self._normalize_endpoint_id(to_service)
         my_speaker_normalized = self._normalize_endpoint_id(self.speakerUri)
         my_service_normalized = self._normalize_endpoint_id(self.serviceUrl)
 
-        if to_speaker_normalized and to_speaker_normalized == my_speaker_normalized:
+        recipients = to_value if isinstance(to_value, (list, tuple, set)) else [to_value]
+        if not recipients:
             return True
-        if to_service_normalized and to_service_normalized == my_service_normalized:
-            return True
+
+        for recipient in recipients:
+            if isinstance(recipient, dict):
+                to_speaker = recipient.get("speakerUri")
+                to_service = recipient.get("serviceUrl")
+            elif isinstance(recipient, str):
+                to_speaker = recipient
+                to_service = recipient
+            else:
+                to_speaker = getattr(recipient, "speakerUri", None)
+                to_service = getattr(recipient, "serviceUrl", None)
+
+            to_speaker_normalized = self._normalize_endpoint_id(to_speaker)
+            to_service_normalized = self._normalize_endpoint_id(to_service)
+
+            if to_speaker_normalized and to_speaker_normalized == my_speaker_normalized:
+                return True
+            if to_service_normalized and to_service_normalized == my_service_normalized:
+                return True
+
         return False
 
     def bot_on_envelope(self, in_envelope: Envelope, out_envelope: Envelope) -> None:

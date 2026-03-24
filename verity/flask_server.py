@@ -131,6 +131,9 @@ def get_manifest():
             mimetype='application/json'
         )
 
+@app.errorhandler(404)
+def not_found(e):
+    return {"error": "Not found"}, 404
 
 if __name__ == '__main__':
     host = os.environ.get('HOST', '0.0.0.0')

@@ -2,8 +2,8 @@
   "manifest": {
     "identification": {
       "conversationalName": "TimeAgent",
-      "speakerUri": "http://localhost:8081",
-      "serviceUrl": "http://localhost:8081",
+      "speakerUri": "https://openvoice-time-agent.vercel.app/",
+      "serviceUrl": "https://openvoice-time-agent.vercel.app/",
       "organization": "Open Voice Network",
       "role": "assistant",
       "synopsis": "A world time information agent providing current time in major cities"

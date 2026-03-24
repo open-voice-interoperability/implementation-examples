@@ -68,7 +68,7 @@ def _generate_openai_response(prompt: str) -> str:
         model=agent_config.get("model", "gpt-4o-mini"),
         messages=message_history,
         max_tokens=200,
-        temperature=0.7,
+        temperature=0.0,
     )
 
     if response and response.choices:

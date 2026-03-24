@@ -63,6 +63,26 @@
             "cwd": "${workspaceFolder}/time-agent",
             "justMyCode": false,
             "python": "${workspaceFolder}/gemini-agent/.venv/Scripts/python.exe"
+        },
+        {
+            "name": "Python: financial Flask server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/financial/flask_server.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/financial",
+            "justMyCode": false,
+            "python": "${workspaceFolder}/gemini-agent/.venv/Scripts/python.exe"
+        },
+        {
+            "name": "Python: financial MCP server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/financial/mcp_server.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/financial",
+            "justMyCode": false,
+            "python": "${workspaceFolder}/gemini-agent/.venv/Scripts/python.exe"
         }
     ],
     "compounds": [
@@ -73,7 +93,15 @@
                 "Python: gemini-agent Flask server",
                 "Python: erin Flask server",
                 "Python: verity Flask server",
-                "Python: time-agent Flask server"
+                "Python: time-agent Flask server",
+                "Python: financial Flask server"
+            ]
+        },
+        {
+            "name": "Python: financial Flask + MCP",
+            "configurations": [
+                "Python: financial MCP server",
+                "Python: financial Flask server"
             ]
         }
     ]

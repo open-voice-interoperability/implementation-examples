@@ -128,7 +128,24 @@ def _call_mcp_tool(tool: str, arguments: dict) -> dict:
             json={"tool": tool, "arguments": arguments},
             timeout=10
         )
-        response.raise_for_status()
+        if not response.ok:
+            try:
+                error_payload = response.json()
+                if isinstance(error_payload, dict):
+                    error_message = error_payload.get("error") or str(error_payload)
+                else:
+                    error_message = str(error_payload)
+            except ValueError:
+                error_message = response.text or f"HTTP {response.status_code}"
+
+            logger.error(
+                "MCP server returned %s for tool %s: %s",
+                response.status_code,
+                tool,
+                error_message
+            )
+            return {"error": f"MCP error ({response.status_code}): {error_message}"}
+
         payload = response.json()
         return payload.get("result", payload)
     except requests.exceptions.ConnectionError:

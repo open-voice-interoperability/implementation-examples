@@ -13,7 +13,7 @@
             "conversationalName": "Stella",
             "serviceName": "space assistant",
             "organization": "BeaconForge",
-            "serviceEndpoint": "http://localhost:8767",
+            "serviceEndpoint": "https://openvoice-stella.vercel.app/",
             "role": "shows astronomical images",
             "synopsis": "sends images from NASA's image libraries"
         },

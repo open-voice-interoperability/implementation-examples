@@ -6993,3 +6993,113 @@ SyntaxError: unterminated string literal (detected at line 1)
 2026-03-18 17:24:50,473 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0.1, 'explanation': 'As of October 2023, Jupiter has 80 known moons. The statement underestimates the number of moons significantly, making it not factual.', 'suppress': False}.
 2026-03-18 17:24:50,476 - INFO - Returning response for conversation 94349b55-6352-40fc-8871-9183835ea7cb
 2026-03-18 17:24:50,477 - INFO - 127.0.0.1 - - [18/Mar/2026 17:24:50] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 17:37:26,018 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "94349b55-6352-40fc-8871-9183835ea7cb", "conversants": [{"iden...
+2026-03-18 17:37:26,018 - INFO - Processing conversation 94349b55-6352-40fc-8871-9183835ea7cb from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 17:37:26,021 - INFO - Returning response for conversation 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:37:26,022 - INFO - 127.0.0.1 - - [18/Mar/2026 17:37:26] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 17:38:08,775 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "94349b55-6352-40fc-8871-9183835ea7cb", "conversants": [{"iden...
+2026-03-18 17:38:08,776 - INFO - Processing conversation 94349b55-6352-40fc-8871-9183835ea7cb from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 17:38:08,776 - INFO - [INVITE] Received invitation to conversation: 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:38:08,780 - INFO - Returning response for conversation 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:38:08,783 - INFO - 127.0.0.1 - - [18/Mar/2026 17:38:08] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 17:38:28,129 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "94349b55-6352-40fc-8871-9183835ea7cb", "conversants": [{"iden...
+2026-03-18 17:38:28,130 - INFO - Processing conversation 94349b55-6352-40fc-8871-9183835ea7cb from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 17:38:28,131 - INFO - [INVITE] Received invitation to conversation: 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:38:28,133 - INFO - Returning response for conversation 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:38:28,135 - INFO - 127.0.0.1 - - [18/Mar/2026 17:38:28] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 17:38:53,160 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "94349b55-6352-40fc-8871-9183835ea7cb", "conversants": [{"iden...
+2026-03-18 17:38:53,162 - INFO - Processing conversation 94349b55-6352-40fc-8871-9183835ea7cb from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 17:38:53,163 - INFO - [INVITE] Received invitation to conversation: 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:38:53,165 - INFO - Returning response for conversation 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:38:53,166 - INFO - 127.0.0.1 - - [18/Mar/2026 17:38:53] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 17:39:53,412 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "94349b55-6352-40fc-8871-9183835ea7cb", "conversants": [{"iden...
+2026-03-18 17:39:53,413 - INFO - Processing conversation 94349b55-6352-40fc-8871-9183835ea7cb from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 17:39:53,414 - INFO - Returning response for conversation 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:39:53,415 - INFO - 127.0.0.1 - - [18/Mar/2026 17:39:53] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 17:40:13,417 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "94349b55-6352-40fc-8871-9183835ea7cb", "conversants": [{"iden...
+2026-03-18 17:40:13,418 - INFO - Processing conversation 94349b55-6352-40fc-8871-9183835ea7cb from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 17:40:13,419 - INFO - Returning response for conversation 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:40:13,420 - INFO - 127.0.0.1 - - [18/Mar/2026 17:40:13] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 17:40:33,756 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "94349b55-6352-40fc-8871-9183835ea7cb", "conversants": [{"iden...
+2026-03-18 17:40:33,757 - INFO - Processing conversation 94349b55-6352-40fc-8871-9183835ea7cb from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 17:40:33,758 - INFO - [UTTERANCE] Handling utterance event
+2026-03-18 17:40:35,757 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-18 17:40:35,760 - INFO - Reviewer generated a response.
+2026-03-18 17:40:35,761 - INFO - generated {
+    "applicable": "yes",
+    "decision": "not factual",
+    "factual_likelihood": 0.1,
+    "explanation": "The statement is not factual because it contradicts established scientific understanding. The Sun is the center of the solar system, with planets, including Earth, orbiting around it. This heliocentric model is supported by extensive astronomical evidence."
+}.
+2026-03-18 17:40:35,762 - INFO - generated {'applicable': 'yes', 'decision': 'not factual', 'factual_likelihood': 0.1, 'explanation': 'The statement is not factual because it contradicts established scientific understanding. The Sun is the center of the solar system, with planets, including Earth, orbiting around it. This heliocentric model is supported by extensive astronomical evidence.', 'suppress': False}.
+2026-03-18 17:40:35,764 - INFO - Returning response for conversation 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:40:35,765 - INFO - 127.0.0.1 - - [18/Mar/2026 17:40:35] "POST /verity/ HTTP/1.1" 200 -
+2026-03-18 17:57:12,464 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "94349b55-6352-40fc-8871-9183835ea7cb", "conversants": [{"iden...
+2026-03-18 17:57:12,465 - INFO - Processing conversation 94349b55-6352-40fc-8871-9183835ea7cb from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-18 17:57:12,466 - INFO - [UNINVITE] Received uninvite from conversation: 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:57:12,468 - INFO - Returning response for conversation 94349b55-6352-40fc-8871-9183835ea7cb
+2026-03-18 17:57:12,469 - INFO - 127.0.0.1 - - [18/Mar/2026 17:57:12] "POST /verity/ HTTP/1.1" 200 -
+2026-03-24 10:42:23,060 - INFO - Loading agent configuration...
+2026-03-24 10:42:23,249 - INFO - Agent initialized: Verity
+2026-03-24 10:42:23,251 - INFO - Service URL: https://secondAssistant.pythonanywhere.com/verity/
+2026-03-24 10:42:23,278 - INFO - ============================================================
+2026-03-24 10:42:23,279 - INFO - Verity OpenFloor Agent Server
+2026-03-24 10:42:23,280 - INFO - ============================================================
+2026-03-24 10:42:23,282 - INFO - Agent: Verity
+2026-03-24 10:42:23,283 - INFO - Service URL: https://secondAssistant.pythonanywhere.com/verity/
+2026-03-24 10:42:23,284 - INFO - Speaker URI: openFloor:verity
+2026-03-24 10:42:23,285 - INFO - Server starting on http://0.0.0.0:8768
+2026-03-24 10:42:23,287 - INFO - ============================================================
+2026-03-24 10:42:23,288 - INFO - Endpoints:
+2026-03-24 10:42:23,289 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-03-24 10:42:23,290 - INFO -   POST /        - OpenFloor envelope processing
+2026-03-24 10:42:23,292 - INFO -   GET  /health  - Health check
+2026-03-24 10:42:23,293 - INFO -   POST /manifest - Agent manifest
+2026-03-24 10:42:23,294 - INFO - ============================================================
+2026-03-24 10:42:23,438 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-03-24 10:42:23,439 - INFO - [33mPress CTRL+C to quit[0m
+2026-03-25 13:35:55,453 - INFO - Loading agent configuration...
+2026-03-25 13:35:56,327 - INFO - Agent initialized: Verity
+2026-03-25 13:35:56,327 - INFO - Service URL: https://secondAssistant.pythonanywhere.com/verity/
+2026-03-25 13:35:56,345 - INFO - ============================================================
+2026-03-25 13:35:56,346 - INFO - Verity OpenFloor Agent Server
+2026-03-25 13:35:56,346 - INFO - ============================================================
+2026-03-25 13:35:56,347 - INFO - Agent: Verity
+2026-03-25 13:35:56,347 - INFO - Service URL: https://secondAssistant.pythonanywhere.com/verity/
+2026-03-25 13:35:56,348 - INFO - Speaker URI: openFloor:verity
+2026-03-25 13:35:56,349 - INFO - Server starting on http://0.0.0.0:8768
+2026-03-25 13:35:56,350 - INFO - ============================================================
+2026-03-25 13:35:56,351 - INFO - Endpoints:
+2026-03-25 13:35:56,351 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-03-25 13:35:56,352 - INFO -   POST /        - OpenFloor envelope processing
+2026-03-25 13:35:56,353 - INFO -   GET  /health  - Health check
+2026-03-25 13:35:56,356 - INFO -   POST /manifest - Agent manifest
+2026-03-25 13:35:56,357 - INFO - ============================================================
+2026-03-25 13:35:56,391 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-03-25 13:35:56,393 - INFO - [33mPress CTRL+C to quit[0m
+2026-03-25 13:58:00,116 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "73cd7102-1847-4250-871a-f32d20f59124", "conversants": [{"iden...
+2026-03-25 13:58:00,118 - INFO - Processing conversation 73cd7102-1847-4250-871a-f32d20f59124 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-25 13:58:00,123 - INFO - Returning response for conversation 73cd7102-1847-4250-871a-f32d20f59124
+2026-03-25 13:58:00,129 - INFO - 127.0.0.1 - - [25/Mar/2026 13:58:00] "POST /verity/ HTTP/1.1" 200 -
+2026-03-25 13:58:01,913 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "73cd7102-1847-4250-871a-f32d20f59124", "conversants": [{"iden...
+2026-03-25 13:58:01,915 - INFO - Processing conversation 73cd7102-1847-4250-871a-f32d20f59124 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-25 13:58:01,917 - INFO - Returning response for conversation 73cd7102-1847-4250-871a-f32d20f59124
+2026-03-25 13:58:01,918 - INFO - 127.0.0.1 - - [25/Mar/2026 13:58:01] "POST /verity/ HTTP/1.1" 200 -
+2026-03-25 13:58:13,921 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "73cd7102-1847-4250-871a-f32d20f59124", "conversants": [{"iden...
+2026-03-25 13:58:13,923 - INFO - Processing conversation 73cd7102-1847-4250-871a-f32d20f59124 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-25 13:58:13,924 - INFO - Returning response for conversation 73cd7102-1847-4250-871a-f32d20f59124
+2026-03-25 13:58:13,926 - INFO - 127.0.0.1 - - [25/Mar/2026 13:58:13] "POST /verity/ HTTP/1.1" 200 -
+2026-03-25 13:58:48,284 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "73cd7102-1847-4250-871a-f32d20f59124", "conversants": [{"iden...
+2026-03-25 13:58:48,285 - INFO - Processing conversation 73cd7102-1847-4250-871a-f32d20f59124 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-25 13:58:48,287 - INFO - Returning response for conversation 73cd7102-1847-4250-871a-f32d20f59124
+2026-03-25 13:58:48,288 - INFO - 127.0.0.1 - - [25/Mar/2026 13:58:48] "POST /verity/ HTTP/1.1" 200 -
+2026-03-25 13:59:10,400 - INFO - Received envelope: {"openFloor": {"conversation": {"id": "73cd7102-1847-4250-871a-f32d20f59124", "conversants": [{"iden...
+2026-03-25 13:59:10,401 - INFO - Processing conversation 73cd7102-1847-4250-871a-f32d20f59124 from openFloor://localhost/AssistantClientConvenerWeb
+2026-03-25 13:59:10,403 - INFO - Returning response for conversation 73cd7102-1847-4250-871a-f32d20f59124
+2026-03-25 13:59:10,404 - INFO - 127.0.0.1 - - [25/Mar/2026 13:59:10] "POST /verity/ HTTP/1.1" 200 -

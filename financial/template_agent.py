@@ -532,10 +532,10 @@ class TemplateAgent(BotAgent):
         
         dialog = DialogEvent(
             speakerUri=self._manifest.identification.speakerUri,
-            features=[TextFeature.from_text(farewell)]
+            features={"text": TextFeature(values=[farewell])}
         )
         
-        utterance_event = UtteranceEvent.create(dialog)
+        utterance_event = UtteranceEvent(dialogEvent=dialog)
         out_envelope.events.append(utterance_event)
         
         # Clean up state

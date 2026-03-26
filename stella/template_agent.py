@@ -198,6 +198,13 @@ class TemplateAgent(BotAgent):
     def bot_on_utterance(self, event: UtteranceEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
         self._handle_utterance(event, in_envelope, out_envelope)
 
+    def _append_text_utterance(self, out_envelope: Envelope, message: str) -> None:
+        dialog = DialogEvent(
+            speakerUri=self._manifest.identification.speakerUri,
+            features={"text": TextFeature(values=[message])},
+        )
+        out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
+
     def _handle_utterance(self, event: UtteranceEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
         if not self.grantedFloor and self.joinedFloor:
             logger.debug("[UTTERANCE] Floor not granted, ignoring utterance")
@@ -206,7 +213,11 @@ class TemplateAgent(BotAgent):
         try:
             user_text = self._extract_text_from_utterance_event(event)
             if not user_text:
-                logger.debug("[UTTERANCE] No text found in utterance event")
+                logger.warning("[UTTERANCE] No text found in utterance event")
+                self._append_text_utterance(
+                    out_envelope,
+                    "I couldn't read that message. Please try sending it again.",
+                )
                 return
 
             response_text = utterance_handler.process_utterance(
@@ -214,7 +225,11 @@ class TemplateAgent(BotAgent):
                 agent_name=self._manifest.identification.conversationalName,
             )
             if not response_text:
-                logger.debug("[UTTERANCE] No response generated")
+                logger.warning("[UTTERANCE] No response generated for text: %s", user_text)
+                self._append_text_utterance(
+                    out_envelope,
+                    "I couldn't generate a response for that request.",
+                )
                 return
 
             responding_to_name = self._resolve_utterance_speaker_name(event, in_envelope)
@@ -241,12 +256,10 @@ class TemplateAgent(BotAgent):
             out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
         except Exception:
             logger.exception("[UTTERANCE] Error processing utterance")
-            error_msg = "I'm sorry, I encountered an error processing your message."
-            dialog = DialogEvent(
-                speakerUri=self._manifest.identification.speakerUri,
-                features={"text": TextFeature(values=[error_msg])},
+            self._append_text_utterance(
+                out_envelope,
+                "I'm sorry, I encountered an error processing your message.",
             )
-            out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
 
     def _extract_text_from_utterance_event(self, event: UtteranceEvent) -> str:
         try:
@@ -314,22 +327,26 @@ class TemplateAgent(BotAgent):
 
                 return ""
 
-            params = None
-            if hasattr(event, "parameters"):
-                params = event.parameters
-            elif isinstance(event, dict):
-                params = event.get("parameters")
-
             dialog_event = None
-            if hasattr(params, "dialogEvent"):
-                dialog_event = params.dialogEvent
-            elif hasattr(params, "__contains__") and hasattr(params, "get") and "dialogEvent" in params:
-                dialog_event = params.get("dialogEvent")
-            elif isinstance(params, dict) and "dialogEvent" in params:
-                dialog_event = params["dialogEvent"]
+            if hasattr(event, "dialogEvent"):
+                dialog_event = getattr(event, "dialogEvent", None)
             elif isinstance(event, dict) and "dialogEvent" in event:
-                dialog_event = event["dialogEvent"]
-            else:
+                dialog_event = event.get("dialogEvent")
+
+            params = None
+            if dialog_event is None:
+                if hasattr(event, "parameters"):
+                    params = event.parameters
+                elif isinstance(event, dict):
+                    params = event.get("parameters")
+
+            if dialog_event is None and hasattr(params, "dialogEvent"):
+                dialog_event = params.dialogEvent
+            elif dialog_event is None and hasattr(params, "__contains__") and hasattr(params, "get") and "dialogEvent" in params:
+                dialog_event = params.get("dialogEvent")
+            elif dialog_event is None and isinstance(params, dict) and "dialogEvent" in params:
+                dialog_event = params["dialogEvent"]
+            elif dialog_event is None:
                 dialog_event = params
 
             if hasattr(dialog_event, "features"):

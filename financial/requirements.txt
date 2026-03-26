@@ -1,4 +1,7 @@
 flask>=2.3.3
 requests>=2.31.0
 python-dotenv>=1.0.0
-openfloor
+spacy>=3.7.0
+dateparser>=1.2.0
+websockets>=12.0
+openfloor @ https://test-files.pythonhosted.org/packages/a3/5d/f3a73f9c62640eb17e877e5d8bae00529705b3582225c45dafaeb98eaefd/openfloor-0.1.4-py3-none-any.whl#sha256=83048e661d73ea1ac9276b8899617c22f6aef7681442fe9f0504dbe19c40231d

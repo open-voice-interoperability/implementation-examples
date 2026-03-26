@@ -1329,9 +1329,22 @@ def _send_events_broadcast(event_types, user_input, target_urls, new_invite_urls
 def _process_direct_response_events(response_data, target_url, assistant_url, addressed_agent=None):
     global assistantConversationalName, assistant_uri
 
-    incoming_events = response_data.get("openFloor", {}).get("events", [])
+    envelope = {}
+    if isinstance(response_data, dict):
+        for key in ("openFloor", "ovon", "openfloor"):
+            candidate = response_data.get(key)
+            if isinstance(candidate, dict):
+                envelope = candidate
+                break
+        if not envelope and isinstance(response_data.get("events"), list):
+            envelope = response_data
+
+    incoming_events = envelope.get("events", []) if isinstance(envelope, dict) else []
+    if not isinstance(incoming_events, list):
+        incoming_events = []
+
     for event in incoming_events:
-        if event.get("eventType") == "publishManifests":
+        if event.get("eventType") in ("publishManifests", "publishManifest"):
             manifests = event.get("parameters", {}).get("servicingManifests", [])
             if manifests:
                 manifest = manifests[0]

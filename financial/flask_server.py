@@ -180,7 +180,7 @@ if __name__ == '__main__':
     logger.info(f"Service URL: {manifest.identification.serviceUrl}")
     logger.info(f"Speaker URI: {manifest.identification.speakerUri}")
     logger.info(f"Server starting on http://{host}:{port}")
-    logger.info("MCP server (Finnhub) expected at http://127.0.0.1:8000")
+    logger.info("MCP server (Finnhub) expected at ws://127.0.0.1:8765")
     logger.info("=" * 60)
     logger.info("Endpoints:")
     logger.info(f"  POST /        - OpenFloor envelope processing")

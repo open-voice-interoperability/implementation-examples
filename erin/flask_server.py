@@ -16,7 +16,11 @@ Configure host and port via environment variables:
 import os
 import sys
 import logging
+from pathlib import Path
+from dotenv import load_dotenv
 from flask import Flask, request, Response, jsonify
+
+load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
 
 # Import our agent components
 from template_agent import TemplateAgent, load_manifest_from_config

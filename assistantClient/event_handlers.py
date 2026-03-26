@@ -176,6 +176,32 @@ def _post_with_optional_ui_pump(target_url, payload_obj, *, headers=None, timeou
     return result["response"]
 
 
+def _extract_response_envelope(response_data):
+    if not isinstance(response_data, dict):
+        return {}
+
+    for key in ("openFloor", "ovon", "openfloor"):
+        candidate = response_data.get(key)
+        if isinstance(candidate, dict):
+            return candidate
+
+    if isinstance(response_data.get("events"), list):
+        return response_data
+
+    return {}
+
+
+def _extract_events_and_sender(response_data):
+    envelope = _extract_response_envelope(response_data)
+    incoming_events = envelope.get("events", [])
+    if not isinstance(incoming_events, list):
+        incoming_events = []
+    original_sender = envelope.get("sender", {})
+    if not isinstance(original_sender, dict):
+        original_sender = {}
+    return incoming_events, original_sender
+
+
 def send_broadcast_to_agents(payload_obj, urls_to_send, status_callback=None, ui_pump_callback=None):
     """Phase 1: Send broadcast to all agents and collect their responses.
     
@@ -284,8 +310,7 @@ def send_broadcast_to_agents(payload_obj, urls_to_send, status_callback=None, ui
                 pass
             
         print("Response JSON:", json.dumps(response_data, indent=2))
-        incoming_events = response_data.get("openFloor", {}).get("events", [])
-        original_sender = response_data.get("openFloor", {}).get("sender", {})
+        incoming_events, original_sender = _extract_events_and_sender(response_data)
         
         # Store response for Phase 2 processing
         all_responses.append((target_url, response_data, original_sender, incoming_events))
@@ -320,7 +345,7 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
         assistant_url = target_url
         
         for event in incoming_events:
-            if event.get("eventType") == "publishManifests":
+            if event.get("eventType") in ("publishManifests", "publishManifest"):
                 manifests = event.get("parameters", {}).get("servicingManifests", [])
                 if manifests:
                     manifest = manifests[0]

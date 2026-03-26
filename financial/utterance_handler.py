@@ -3,105 +3,274 @@
 Utterance Handler - Financial Agent
 
 Processes natural language queries about stock prices and earnings.
-Routes requests to the Finnhub MCP server running on port 8000.
+Routes parsed requests to the Finnhub MCP websocket server.
 
 MCP server must be running:
-    python mcp_server.py   (starts on http://127.0.0.1:8000)
+    python mcp_server.py   (starts on ws://127.0.0.1:8765)
 """
 
 import re
 import logging
-import requests
+import asyncio
+import json
+import importlib
+from datetime import datetime, timedelta
+import websockets
 
 logger = logging.getLogger(__name__)
 
-MCP_URL = "http://127.0.0.1:8000/call_tool"
+MCP_WS_URL = "ws://127.0.0.1:8765"
 
-# Map of company names / aliases → ticker symbols
-COMPANY_TO_TICKER = {
-    "nvidia": "NVDA",
-    "nvda": "NVDA",
-    "apple": "AAPL",
-    "aapl": "AAPL",
-    "google": "GOOGL",
-    "alphabet": "GOOGL",
-    "googl": "GOOGL",
-    "goog": "GOOG",
-    "amazon": "AMZN",
-    "amzn": "AMZN",
-    "microsoft": "MSFT",
-    "msft": "MSFT",
-    "tesla": "TSLA",
-    "tsla": "TSLA",
-    "meta": "META",
-    "facebook": "META",
-    "netflix": "NFLX",
-    "nflx": "NFLX",
-    "intel": "INTC",
-    "intc": "INTC",
-    "amd": "AMD",
-    "advanced micro": "AMD",
-    "jpmorgan": "JPM",
-    "jp morgan": "JPM",
-    "jpm": "JPM",
-    "bank of america": "BAC",
-    "bac": "BAC",
-    "disney": "DIS",
-    "dis": "DIS",
-    "salesforce": "CRM",
-    "crm": "CRM",
-    "oracle": "ORCL",
-    "orcl": "ORCL",
-    "ibm": "IBM",
-    "qualcomm": "QCOM",
-    "qcom": "QCOM",
-    "broadcom": "AVGO",
-    "avgo": "AVGO",
-    "paypal": "PYPL",
-    "pypl": "PYPL",
-    "uber": "UBER",
-    "lyft": "LYFT",
-    "shopify": "SHOP",
-    "shop": "SHOP",
-    "palantir": "PLTR",
-    "pltr": "PLTR",
-    "coinbase": "COIN",
-    "coin": "COIN",
-    "visa": "V",
-    "mastercard": "MA",
-    "goldman": "GS",
-    "goldman sachs": "GS",
-    "gs": "GS",
-    "s&p": "SPY",
-    "spy": "SPY",
-    "sp500": "SPY",
+
+# ---------------------------
+# NLP extraction (shared with mcp_server)
+# ---------------------------
+FORTUNE_100_STOCKS = {
+    "WMT": "Walmart",
+    "AMZN": "Amazon",
+    "AAPL": "Apple",
+    "UNH": "UnitedHealth Group",
+    "BRK.B": "Berkshire Hathaway",
+    "CVS": "CVS Health",
+    "XOM": "Exxon Mobil",
+    "GOOGL": "Alphabet",
+    "MCK": "McKesson",
+    "COR": "Cencora",
+    "COST": "Costco Wholesale",
+    "JPM": "JPMorgan Chase",
+    "MSFT": "Microsoft",
+    "CAH": "Cardinal Health",
+    "CVX": "Chevron",
+    "CI": "Cigna",
+    "F": "Ford Motor",
+    "BAC": "Bank of America",
+    "GM": "General Motors",
+    "ELV": "Elevance Health",
+    "C": "Citigroup",
+    "CNC": "Centene",
+    "KR": "Kroger",
+    "HD": "Home Depot",
+    "MPC": "Marathon Petroleum",
+    "WBA": "Walgreens Boots Alliance",
+    "FNMA": "Fannie Mae",
+    "CMCSA": "Comcast",
+    "T": "AT&T",
+    "META": "Meta Platforms",
+    "VZ": "Verizon Communications",
+    "VLO": "Valero Energy",
+    "DELL": "Dell Technologies",
+    "PSX": "Phillips 66",
+    "TGT": "Target",
+    "BA": "Boeing",
+    "ADM": "Archer Daniels Midland",
+    "FMCC": "Freddie Mac",
+    "TSLA": "Tesla",
+    "PG": "Procter & Gamble",
+    "PEP": "PepsiCo",
+    "JNJ": "Johnson & Johnson",
+    "TSN": "Tyson Foods",
+    "INTC": "Intel",
+    "MET": "MetLife",
+    "PRU": "Prudential Financial",
+    "ACI": "Albertsons",
+    "SYY": "Sysco",
+    "FDX": "FedEx",
+    "HUM": "Humana",
+    "ET": "Energy Transfer",
+    "CAT": "Caterpillar",
+    "CSCO": "Cisco Systems",
+    "PFE": "Pfizer",
+    "LMT": "Lockheed Martin",
+    "HCA": "HCA Healthcare",
+    "GS": "Goldman Sachs",
+    "MS": "Morgan Stanley",
+    "AXP": "American Express",
+    "NKE": "Nike",
+    "BBY": "Best Buy",
+    "CHTR": "Charter Communications",
+    "MRK": "Merck",
+    "UPS": "United Parcel Service",
+    "ORCL": "Oracle",
+    "WFC": "Wells Fargo",
+    "MOH": "Molina Healthcare",
+    "TJX": "TJX Companies",
+    "GD": "General Dynamics",
+    "DE": "Deere & Company",
+    "PGR": "Progressive",
+    "RTX": "RTX",
+    "IP": "International Paper",
+    "HON": "Honeywell",
+    "COP": "ConocoPhillips",
+    "EXC": "Exelon",
+    "DG": "Dollar General",
+    "TRV": "Travelers",
+    "MMM": "3M",
+    "NFLX": "Netflix",
+    "QCOM": "Qualcomm",
+    "USFD": "US Foods",
+    "MDLZ": "Mondelez International",
+    "MU": "Micron Technology",
+    "NVDA": "NVIDIA",
+    "ABBV": "AbbVie",
+    "LLY": "Eli Lilly",
+    "CRM": "Salesforce",
+    "ADBE": "Adobe",
+    "PYPL": "PayPal",
+    "UBER": "Uber Technologies",
+    "ABNB": "Airbnb",
+    "KO": "Coca-Cola",
+    "DIS": "Walt Disney",
+    "IBM": "IBM",
+    "MA": "Mastercard",
+    "V": "Visa",
+    "BMY": "Bristol Myers Squibb",
+    "GILD": "Gilead Sciences",
+    "CL": "Colgate-Palmolive",
 }
 
-# Standalone capital-letter ticker pattern (2–5 uppercase letters)
-TICKER_RE = re.compile(r'\b([A-Z]{2,5})\b')
+COMPANY_SYNONYMS = {
+    "Google": "GOOGL",
+    "Facebook": "META",
+    "Berkshire": "BRK.B",
+    "Berkshire Hathaway": "BRK.B",
+    "UnitedHealth": "UNH",
+    "United Health": "UNH",
+    "J and J": "JNJ",
+    "J&J": "JNJ",
+    "Johnson and Johnson": "JNJ",
+    "P and G": "PG",
+    "P&G": "PG",
+    "Coke": "KO",
+    "Coca Cola": "KO",
+    "AT&T": "T",
+    "ATT": "T",
+    "Disney": "DIS",
+    "Home Depot": "HD",
+    "Boeing": "BA",
+    "Nvidia": "NVDA",
+    "JP Morgan": "JPM",
+    "JPMorgan": "JPM",
+    "Bank of America": "BAC",
+    "MasterCard": "MA",
+    "Walgreens": "WBA",
+    "Costco": "COST",
+    "Ford": "F",
+    "GM": "GM",
+}
+
+TICKER_LOOKUP = {v.lower(): k for k, v in FORTUNE_100_STOCKS.items()}
+TICKER_LOOKUP.update({alias.lower(): ticker for alias, ticker in COMPANY_SYNONYMS.items()})
+
+_NLP_CONTEXT = None
 
 
-def _extract_ticker(text: str) -> str | None:
-    """
-    Attempt to extract a stock ticker from natural-language text.
+def _get_nlp_context():
+    global _NLP_CONTEXT
+    if _NLP_CONTEXT is not None:
+        return _NLP_CONTEXT
 
-    Checks company name aliases first, then looks for all-caps tokens.
-    Returns the best matching ticker or None.
-    """
-    lower = text.lower()
+    spacy = importlib.import_module("spacy")
+    matcher_module = importlib.import_module("spacy.matcher")
+    Matcher = matcher_module.Matcher
 
-    # Company name matching (longest match first so "goldman sachs" beats "goldman")
-    for alias in sorted(COMPANY_TO_TICKER, key=len, reverse=True):
-        if alias in lower:
-            return COMPANY_TO_TICKER[alias]
+    nlp = spacy.load("en_core_web_sm")
+    ruler = nlp.add_pipe("entity_ruler", before="ner", config={"phrase_matcher_attr": "LOWER"})
+    ruler_patterns = []
+    for ticker, name in FORTUNE_100_STOCKS.items():
+        ruler_patterns.append({"label": "STOCK", "pattern": ticker})
+        ruler_patterns.append({"label": "STOCK", "pattern": name})
+    for alias in COMPANY_SYNONYMS:
+        ruler_patterns.append({"label": "STOCK", "pattern": alias})
+    ruler.add_patterns(ruler_patterns)
 
-    # Explicit all-caps token that looks like a ticker
-    for match in TICKER_RE.finditer(text):
-        candidate = match.group(1)
-        if candidate in {v for v in COMPANY_TO_TICKER.values()}:
-            return candidate
+    matcher = Matcher(nlp.vocab)
+    stock_entity = [{"ENT_TYPE": "STOCK"}]
 
-    return None
+    matcher.add("PRICE_QUERY", [
+        [{"LOWER": {"IN": ["price", "quote", "trading"]}}, {"LOWER": {"IN": ["of", "for"]}, "OP": "?"}] + stock_entity,
+        [{"LOWER": {"IN": ["get", "show", "fetch", "give"]}}, {"LOWER": "me", "OP": "?"}, {"LOWER": {"IN": ["current", "latest"]}, "OP": "*"}, {"LOWER": {"IN": ["price", "quote"]}}, {"LOWER": {"IN": ["of", "for"]}, "OP": "?"}] + stock_entity,
+    ])
+    matcher.add("PROFILE_QUERY", [
+        [{"LOWER": {"IN": ["company", "corporate"]}}, {"LOWER": {"IN": ["profile", "overview", "details"]}}] + stock_entity,
+        [{"LOWER": {"IN": ["tell", "show", "give"]}}, {"LOWER": "me", "OP": "?"}, {"LOWER": {"IN": ["about", "details"]}}] + stock_entity,
+    ])
+    matcher.add("FINANCIAL_QUERY", [
+        [{"LOWER": {"IN": ["financial", "financials"]}}, {"LOWER": {"IN": ["statements", "data", "reports"]}}] + stock_entity,
+        [{"LOWER": {"IN": ["balance", "income", "cash"]}}, {"LOWER": {"IN": ["sheet", "statement", "flow"]}}] + stock_entity,
+    ])
+    matcher.add("NEWS_QUERY", [
+        [{"LOWER": {"IN": ["news", "headlines", "articles"]}}, {"LOWER": {"IN": ["for", "about"]}, "OP": "?"}] + stock_entity,
+        [{"LOWER": {"IN": ["recent", "latest"]}, "OP": "*"}, {"LOWER": {"IN": ["news", "updates"]}}, {"LOWER": {"IN": ["on", "for"]}, "OP": "?"}] + stock_entity,
+    ])
+    matcher.add("EARNINGS_QUERY", [
+        [{"LOWER": "earnings"}, {"LOWER": {"IN": ["history", "reports", "data"]}}] + stock_entity,
+        [{"LOWER": {"IN": ["show", "get"]}}, {"LOWER": "earnings"}] + stock_entity,
+    ])
+    matcher.add("HISTORY_QUERY", [
+        [{"LOWER": {"IN": ["financial", "revenue", "profit"]}}, {"LOWER": {"IN": ["history", "performance", "trend"]}}] + stock_entity,
+    ])
+
+    _NLP_CONTEXT = {
+        "nlp": nlp,
+        "matcher": matcher,
+    }
+    return _NLP_CONTEXT
+
+TIME_PHRASE_RE = re.compile(r"(from .+ to .+|last \d+ (days|months|years)|this month|this year|yesterday|today|on [a-z0-9,\-/ ]+)", re.IGNORECASE)
+
+
+def parse_query(text: str) -> dict:
+    context = _get_nlp_context()
+    nlp = context["nlp"]
+    matcher = context["matcher"]
+
+    doc = nlp(text)
+    matches = matcher(doc)
+    result = {"intent": None, "stock": None}
+
+    for ent in doc.ents:
+        if ent.label_ == "STOCK":
+            ent_text = ent.text.strip()
+            mapped_symbol = TICKER_LOOKUP.get(ent_text.lower())
+            result["stock"] = mapped_symbol or ent_text.upper()
+
+    if matches:
+        match_id, _start, _end = matches[0]
+        result["intent"] = nlp.vocab.strings[match_id]
+
+    return result
+
+
+def parse_time_range(text: str) -> tuple[int, int]:
+    dateparser = importlib.import_module("dateparser")
+    now = datetime.utcnow()
+    default_from = now.replace(year=now.year - 1)
+    default_to = now
+
+    if text.lower().startswith("on "):
+        specific_date = dateparser.parse(text[3:].strip(), settings={"RELATIVE_BASE": now})
+        if specific_date:
+            day_start = datetime(specific_date.year, specific_date.month, specific_date.day)
+            day_end = day_start + timedelta(days=1) - timedelta(seconds=1)
+            return int(day_start.timestamp()), int(day_end.timestamp())
+
+    if "from" in text.lower() and "to" in text.lower():
+        parts = text.lower().split("to")
+        start = dateparser.parse(parts[0].replace("from", "").strip())
+        end = dateparser.parse(parts[1].strip())
+        if start and end:
+            return int(start.timestamp()), int(end.timestamp())
+
+    relative = dateparser.parse(text, settings={"RELATIVE_BASE": now})
+    if relative:
+        return int(relative.timestamp()), int(now.timestamp())
+
+    return int(default_from.timestamp()), int(default_to.timestamp())
+
+
+def extract_time_text(text: str) -> str | None:
+    match = TIME_PHRASE_RE.search(text)
+    return match.group(0) if match else None
 
 
 def _has_earnings_intent(text: str) -> bool:
@@ -111,63 +280,36 @@ def _has_earnings_intent(text: str) -> bool:
     return any(kw in lower for kw in keywords)
 
 
-def _call_mcp_tool(tool: str, arguments: dict) -> dict:
-    """
-    Call a tool on the Finnhub MCP server.
-
-    Args:
-        tool: Tool name ("get_stock_quote" or "get_earnings")
-        arguments: Dict of arguments (e.g. {"symbol": "NVDA"})
-
-    Returns:
-        Result dict from MCP server, or dict with "error" key on failure.
-    """
+async def _call_mcp_server_async(payload: dict) -> dict:
     try:
-        response = requests.post(
-            MCP_URL,
-            json={"tool": tool, "arguments": arguments},
-            timeout=10
-        )
-        if not response.ok:
-            try:
-                error_payload = response.json()
-                if isinstance(error_payload, dict):
-                    error_message = error_payload.get("error") or str(error_payload)
-                else:
-                    error_message = str(error_payload)
-            except ValueError:
-                error_message = response.text or f"HTTP {response.status_code}"
-
-            logger.error(
-                "MCP server returned %s for tool %s: %s",
-                response.status_code,
-                tool,
-                error_message
-            )
-            return {"error": f"MCP error ({response.status_code}): {error_message}"}
-
-        payload = response.json()
-        return payload.get("result", payload)
-    except requests.exceptions.ConnectionError:
-        logger.error("Cannot reach MCP server at %s", MCP_URL)
+        async with websockets.connect(MCP_WS_URL) as websocket:
+            await websocket.send(json.dumps(payload))
+            response = await websocket.recv()
+            return json.loads(response)
+    except ConnectionRefusedError:
+        logger.error("Cannot reach MCP websocket server at %s", MCP_WS_URL)
         return {"error": "MCP server is not running. Please start mcp_server.py first."}
-    except requests.exceptions.Timeout:
-        logger.error("MCP server request timed out")
-        return {"error": "The data request timed out. Please try again."}
+    except OSError:
+        logger.error("Cannot reach MCP websocket server at %s", MCP_WS_URL)
+        return {"error": "MCP server is not running. Please start mcp_server.py first."}
     except Exception as e:
-        logger.exception("Unexpected error calling MCP tool %s", tool)
+        logger.exception("Unexpected error calling MCP websocket server")
         return {"error": str(e)}
 
 
-def _format_quote_response(result: dict) -> str:
+def _call_mcp_server(payload: dict) -> dict:
+    return asyncio.run(_call_mcp_server_async(payload))
+
+
+def _format_quote_response(result: dict, symbol: str = "?") -> str:
     if "error" in result:
         return f"Sorry, I couldn't retrieve the stock data: {result['error']}"
 
-    symbol = result.get("symbol", "?")
-    price = result.get("current_price")
-    change = result.get("change_percent")
+    # Finnhub /quote fields: c=current price, dp=percent change
+    price = result.get("c")
+    change = result.get("dp")
 
-    if price is None:
+    if not price:
         return f"I retrieved data for {symbol}, but the price wasn't available."
 
     price_str = f"${price:,.2f}"
@@ -180,24 +322,144 @@ def _format_quote_response(result: dict) -> str:
         return f"{symbol} is currently trading at {price_str}."
 
 
-def _format_earnings_response(result: dict) -> str:
-    if "error" in result:
+def _format_history_response(result: dict, symbol: str = "?", time_text: str | None = None) -> str:
+    if isinstance(result, dict) and "error" in result:
+        return f"Sorry, I couldn't retrieve historical stock data: {result['error']}"
+
+    if not isinstance(result, dict):
+        return f"I couldn't understand the historical price response for {symbol}."
+
+    closes = result.get("c") or []
+    timestamps = result.get("t") or []
+    status = result.get("s")
+
+    if status != "ok" or not closes or not timestamps:
+        if time_text:
+            return f"I couldn't find historical price data for {symbol} {time_text}."
+        return f"I couldn't find historical price data for {symbol}."
+
+    close_price = closes[-1]
+    ts = timestamps[-1]
+    date_str = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+
+    if time_text:
+        return f"{symbol} closed at ${close_price:,.2f} on {date_str} ({time_text})."
+    return f"{symbol} closed at ${close_price:,.2f} on {date_str}."
+
+
+def _format_profile_response(result: dict, symbol: str = "?") -> str:
+    if isinstance(result, dict) and "error" in result:
+        return f"Sorry, I couldn't retrieve company profile data: {result['error']}"
+
+    if not isinstance(result, dict) or not result:
+        return f"I couldn't find profile data for {symbol}."
+
+    name = result.get("name") or symbol
+    ticker = result.get("ticker") or symbol
+    industry = result.get("finnhubIndustry")
+    country = result.get("country")
+    exchange = result.get("exchange")
+    ipo = result.get("ipo")
+
+    parts = [f"{name} ({ticker})"]
+    if industry:
+        parts.append(f"is in the {industry} industry")
+    if country:
+        parts.append(f"based in {country}")
+    if exchange:
+        parts.append(f"listed on {exchange}")
+    if ipo:
+        parts.append(f"with IPO date {ipo}")
+
+    if len(parts) == 1:
+        return f"I found profile data for {symbol}, but it had limited details."
+
+    return " ".join(parts) + "."
+
+
+def _format_financial_response(result: dict, symbol: str = "?") -> str:
+    if isinstance(result, dict) and "error" in result:
+        return f"Sorry, I couldn't retrieve financial report data: {result['error']}"
+
+    if not isinstance(result, dict):
+        return f"I couldn't understand the financial report data for {symbol}."
+
+    reports = result.get("data") or []
+    if not reports:
+        return f"No recent financial reports were found for {symbol}."
+
+    latest = reports[0]
+    year = latest.get("year")
+    quarter = latest.get("quarter")
+    report = latest.get("report") or {}
+
+    revenue = None
+    net_income = None
+
+    income_items = report.get("ic") or []
+    for item in income_items:
+        concept = str(item.get("concept", "")).lower()
+        if revenue is None and ("revenue" in concept or concept == "us-gaap_revenues"):
+            revenue = item.get("value")
+        if net_income is None and ("netincome" in concept or "netincomeloss" in concept):
+            net_income = item.get("value")
+
+    period_label = f"Q{quarter} {year}" if quarter and year else "the latest period"
+    parts = [f"For {symbol} in {period_label}:"]
+
+    if revenue is not None:
+        parts.append(f"revenue was ${revenue:,.0f}")
+    if net_income is not None:
+        parts.append(f"net income was ${net_income:,.0f}")
+
+    if len(parts) == 1:
+        return f"I found a financial report for {symbol} in {period_label}, but key figures weren't available."
+
+    return " ".join(parts) + "."
+
+
+def _format_news_response(result, symbol: str = "?") -> str:
+    if isinstance(result, dict) and "error" in result:
+        return f"Sorry, I couldn't retrieve news for {symbol}: {result['error']}"
+
+    articles = result if isinstance(result, list) else []
+    if not articles:
+        return f"I couldn't find recent news for {symbol}."
+
+    top = articles[:3]
+    lines = [f"Top recent news for {symbol}:"]
+    for article in top:
+        headline = article.get("headline") or "(no headline)"
+        source = article.get("source") or "Unknown source"
+        lines.append(f"- {headline} ({source})")
+
+    return "\n".join(lines)
+
+
+def _format_earnings_response(result, symbol: str = "?") -> str:
+    # Finnhub /stock/earnings returns a list of records
+    if isinstance(result, dict) and "error" in result:
         return f"Sorry, I couldn't retrieve earnings data: {result['error']}"
 
-    if not result:
+    records = result if isinstance(result, list) else []
+    if not records:
         return "No earnings data was found for that ticker."
 
-    symbol = result.get("symbol", "?")
-    eps = result.get("eps")
-    growth = result.get("revenue_growth")
+    latest = records[0]
+    actual = latest.get("actual")
+    estimate = latest.get("estimate")
+    period = latest.get("period", "recent period")
+    surprise_pct = latest.get("surprisePercent")
 
-    parts = [f"Latest earnings for {symbol}:"]
+    parts = [f"Latest earnings for {symbol} ({period}):"]
 
-    if eps is not None:
-        parts.append(f"EPS of ${eps:.2f}")
-    if growth is not None:
-        pct = growth * 100 if abs(growth) < 10 else growth
-        parts.append(f"revenue growth of {pct:.1f}%")
+    if actual is not None:
+        parts.append(f"EPS of ${actual:.2f}")
+    if estimate is not None:
+        parts.append(f"vs estimate of ${estimate:.2f}")
+    if surprise_pct is not None:
+        direction = "beat" if surprise_pct >= 0 else "missed"
+        parts.append(f"{direction} estimates by {abs(surprise_pct):.2f}%")
 
     if len(parts) == 1:
         return f"Earnings data for {symbol} is available but contained no figures."
@@ -232,19 +494,50 @@ def process_utterance(user_text: str, agent_name: str = "FinancialAgent") -> str
     if any(w in lower for w in ["help", "hello", "hi ", "hey", "what can you"]):
         return _HELP_TEXT
 
-    ticker = _extract_ticker(user_text)
+    parsed = parse_query(user_text)
+    intent = parsed.get("intent")
+    stock = parsed.get("stock")
+    time_text = extract_time_text(user_text)
 
-    if ticker is None:
+    if not stock:
         return (
             "I'm not sure which stock you're asking about. "
             "Please include a ticker symbol (like NVDA or AAPL) or a company name."
         )
 
-    if _has_earnings_intent(user_text):
-        logger.info("Fetching earnings for %s", ticker)
-        result = _call_mcp_tool("get_earnings", {"symbol": ticker})
-        return _format_earnings_response(result)
-    else:
-        logger.info("Fetching stock quote for %s", ticker)
-        result = _call_mcp_tool("get_stock_quote", {"symbol": ticker})
-        return _format_quote_response(result)
+    if not intent:
+        intent = "EARNINGS_QUERY" if _has_earnings_intent(user_text) else "PRICE_QUERY"
+
+    lower_text = user_text.lower()
+    if intent == "PRICE_QUERY" and time_text and any(word in lower_text for word in ["was", "on", "historical", "history", "closed"]):
+        intent = "HISTORY_QUERY"
+
+    mcp_payload = {
+        "intent": intent,
+        "stock": stock,
+        "time_text": time_text,
+        "text": user_text,
+    }
+
+    logger.info("Parsed query intent=%s stock=%s", intent, stock)
+    mcp_response = _call_mcp_server(mcp_payload)
+
+    if "error" in mcp_response:
+        return f"Sorry, I couldn't retrieve stock data: {mcp_response['error']}"
+
+    symbol = mcp_response.get("stock", stock)
+    result = mcp_response.get("data")
+    if result is None:
+        return "I couldn't understand the stock response from the data service."
+
+    if intent == "EARNINGS_QUERY":
+        return _format_earnings_response(result, symbol=symbol)
+    if intent == "HISTORY_QUERY":
+        return _format_history_response(result, symbol=symbol, time_text=time_text)
+    if intent == "PROFILE_QUERY":
+        return _format_profile_response(result, symbol=symbol)
+    if intent == "FINANCIAL_QUERY":
+        return _format_financial_response(result, symbol=symbol)
+    if intent == "NEWS_QUERY":
+        return _format_news_response(result, symbol=symbol)
+    return _format_quote_response(result, symbol=symbol)

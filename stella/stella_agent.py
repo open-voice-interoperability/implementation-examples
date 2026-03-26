@@ -1,6 +1,10 @@
 import json
 import os
+from pathlib import Path
 from typing import Optional, List
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
 
 import openfloor
 from openfloor.manifest import Manifest, Identification, Capability, SupportedLayers

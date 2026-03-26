@@ -1,0 +1,119 @@
+import spacy
+from spacy.pipeline import EntityRuler
+from spacy.matcher import Matcher
+
+# ---------------------------
+# 1. Load model
+# ---------------------------
+nlp = spacy.load("en_core_web_sm")
+
+# ---------------------------
+# 2. Fortune 100 stock list (subset shown)
+# ---------------------------
+FORTUNE_100_STOCKS = {
+    "AAPL": "Apple",
+    "MSFT": "Microsoft",
+    "AMZN": "Amazon",
+    "GOOGL": "Alphabet",
+    "META": "Meta",
+    "BRK.B": "Berkshire Hathaway",
+    "UNH": "UnitedHealth",
+    "XOM": "Exxon Mobil",
+    "JNJ": "Johnson & Johnson",
+    "JPM": "JPMorgan Chase",
+    "V": "Visa",
+    "PG": "Procter & Gamble",
+    "NVDA": "NVIDIA",
+    "HD": "Home Depot",
+    "CVX": "Chevron",
+    "LLY": "Eli Lilly",
+    "ABBV": "AbbVie",
+    "PEP": "PepsiCo",
+    "KO": "Coca-Cola",
+    "MRK": "Merck",
+}
+
+# ---------------------------
+# 3. EntityRuler (stocks)
+# ---------------------------
+ruler = nlp.add_pipe("entity_ruler", before="ner")
+
+patterns = []
+for ticker, name in FORTUNE_100_STOCKS.items():
+    patterns.append({"label": "STOCK", "pattern": ticker})
+    patterns.append({"label": "STOCK", "pattern": name})
+
+ruler.add_patterns(patterns)
+
+# ---------------------------
+# 4. Single Matcher
+# ---------------------------
+matcher = Matcher(nlp.vocab)
+
+STOCK = [{"ENT_TYPE": "STOCK"}]
+
+# ---------------------------
+# 5. Add ALL intent patterns
+# ---------------------------
+
+# PRICE
+matcher.add("PRICE_QUERY", [
+    [{"LOWER": {"IN": ["price", "quote", "trading"]}}, {"LOWER": {"IN": ["of", "for"]}, "OP": "?"}] + STOCK,
+    [{"LOWER": {"IN": ["get", "show", "fetch", "give"]}}, {"LOWER": "me", "OP": "?"}, {"LOWER": {"IN": ["current", "latest"]}, "OP": "*"}, {"LOWER": {"IN": ["price", "quote"]}}, {"LOWER": {"IN": ["of", "for"]}, "OP": "?"}] + STOCK,
+    [{"LOWER": {"IN": ["what", "whats", "what's"]}}, {"LOWER": {"IN": ["the", "is"]}, "OP": "*"}, {"LOWER": {"IN": ["price", "trading"]}}, {"LOWER": {"IN": ["of", "for"]}, "OP": "?"}] + STOCK,
+])
+
+# PROFILE
+matcher.add("PROFILE_QUERY", [
+    [{"LOWER": {"IN": ["company", "corporate"]}}, {"LOWER": {"IN": ["profile", "overview", "details"]}}] + STOCK,
+    [{"LOWER": {"IN": ["tell", "show", "give"]}}, {"LOWER": "me", "OP": "?"}, {"LOWER": {"IN": ["about", "details"]}}] + STOCK,
+])
+
+# FINANCIALS
+matcher.add("FINANCIAL_QUERY", [
+    [{"LOWER": {"IN": ["financial", "financials"]}}, {"LOWER": {"IN": ["statements", "data", "reports"]}}] + STOCK,
+    [{"LOWER": {"IN": ["balance", "income", "cash"]}}, {"LOWER": {"IN": ["sheet", "statement", "flow"]}}] + STOCK,
+])
+
+# NEWS
+matcher.add("NEWS_QUERY", [
+    [{"LOWER": {"IN": ["news", "headlines", "articles"]}}, {"LOWER": {"IN": ["for", "about"]}, "OP": "?"}] + STOCK,
+    [{"LOWER": {"IN": ["recent", "latest"]}, "OP": "*"}, {"LOWER": {"IN": ["news", "updates"]}}, {"LOWER": {"IN": ["on", "for"]}, "OP": "?"}] + STOCK,
+])
+
+# EARNINGS
+matcher.add("EARNINGS_QUERY", [
+    [{"LOWER": "earnings"}, {"LOWER": {"IN": ["history", "reports", "data"]}}] + STOCK,
+    [{"LOWER": {"IN": ["show", "get"]}}, {"LOWER": "earnings"}] + STOCK,
+])
+
+# HISTORY
+matcher.add("HISTORY_QUERY", [
+    [{"LOWER": {"IN": ["financial", "revenue", "profit"]}}, {"LOWER": {"IN": ["history", "performance", "trend"]}}] + STOCK,
+])
+
+# ---------------------------
+# 6. Parser function
+# ---------------------------
+TICKER_LOOKUP = {v: k for k, v in FORTUNE_100_STOCKS.items()}
+
+def parse_query(text):
+    doc = nlp(text)
+    matches = matcher(doc)
+
+    result = {
+        "intent": None,
+        "stock": None
+    }
+
+    # Extract stock
+    for ent in doc.ents:
+        if ent.label_ == "STOCK":
+            result["stock"] = TICKER_LOOKUP.get(ent.text, ent.text)
+
+    # Extract intent (first match)
+    if matches:
+        match_id, start, end = matches[0]
+        result["intent"] = nlp.vocab.strings[match_id]
+
+    return result

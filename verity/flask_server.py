@@ -23,9 +23,32 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+
+def _runtime_base_url() -> str:
+    configured = (os.environ.get('SERVICE_URL') or os.environ.get('PUBLIC_SERVICE_URL') or '').strip()
+    if configured:
+        return configured.rstrip('/')
+
+    host = os.environ.get('HOST', '0.0.0.0').strip() or '0.0.0.0'
+    port = int(os.environ.get('PORT', 8768))
+    public_host = 'localhost' if host in {'0.0.0.0', '127.0.0.1'} else host
+    return f'http://{public_host}:{port}'
+
+
+def _apply_runtime_identity(base_url: str) -> None:
+    normalized = (base_url or '').rstrip('/')
+    if not normalized:
+        return
+
+    manifest.identification.serviceUrl = normalized
+    current_speaker_uri = getattr(manifest.identification, 'speakerUri', '') or ''
+    if current_speaker_uri.startswith('http://') or current_speaker_uri.startswith('https://'):
+        manifest.identification.speakerUri = normalized
+
 try:
     logger.info("Loading agent configuration...")
     manifest = load_manifest_from_config()
+    _apply_runtime_identity(_runtime_base_url())
     agent = TemplateAgent(manifest)
     logger.info("Agent initialized: %s", manifest.identification.conversationalName)
     logger.info("Service URL: %s", manifest.identification.serviceUrl)
@@ -44,6 +67,9 @@ def _handle_openfloor_request() -> Response:
                 status=400,
                 mimetype='application/json'
             )
+
+        request_base_url = request.host_url.rstrip('/')
+        _apply_runtime_identity(request_base_url)
 
         logger.info("Received envelope: %s...", json_payload[:100])
 

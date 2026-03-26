@@ -1,10 +1,14 @@
 import os
 import json
+from pathlib import Path
 import pandas as pd
 import logging
 
 import openai
 from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
 
 
 # Configure Logging
@@ -16,6 +20,9 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
+# Prevent httpx/openai from logging request headers (which include the API key)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
 
 # Instantiate OpenAI client
 # client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))

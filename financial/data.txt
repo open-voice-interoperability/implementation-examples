@@ -1,0 +1,116 @@
+get the latest price for <stock>
+what is the current trading price of <stock>
+show me the live price of <stock>
+can you fetch the latest quote for <stock>
+i need the current stock price for <stock>
+what’s <stock> trading at right now
+give me the latest market price for <stock>
+show current valuation of <stock>
+what is the real-time price of <stock>
+pull the most recent price for <stock>
+
+i want the company profile for <stock>
+show me details about the company <stock>
+give me background information on <stock>
+what does <stock> do as a company
+display company overview for <stock>
+tell me about the business behind <stock>
+show corporate profile of <stock>
+who owns and operates <stock>
+give me company fundamentals for <stock>
+describe the company <stock>
+
+show financial statements for <stock>
+get the latest financial reports for <stock>
+display balance sheet for <stock>
+i want income statement for <stock>
+show cash flow statement for <stock>
+give me financial data for <stock>
+pull recent filings for <stock>
+show quarterly financials for <stock>
+get annual financial reports for <stock>
+display financial breakdown of <stock>
+
+is there any news about <stock>
+show recent news for <stock>
+get latest headlines on <stock>
+what’s the news sentiment for <stock>
+find recent articles about <stock>
+show media coverage of <stock>
+any updates regarding <stock>
+what’s happening with <stock> in the news
+display current news stories about <stock>
+summarize recent news for <stock>
+
+show earnings history for <stock>
+get past earnings for <stock>
+display earnings reports for <stock>
+what are recent earnings of <stock>
+give me quarterly earnings history for <stock>
+show earnings performance of <stock>
+pull earnings data for <stock>
+what did <stock> report last quarter
+show historical earnings for <stock>
+list earnings results for <stock>
+
+show recent financial history for <stock>
+get financial trends for <stock>
+display financial performance over time for <stock>
+how has <stock> performed financially
+give me historical financial data for <stock>
+show revenue history for <stock>
+display profit trends for <stock>
+track financial metrics for <stock>
+show long-term financial performance of <stock>
+give me financial timeline for <stock>
+
+Mixed / more natural variants
+
+can you show me how <stock> has been doing financially
+what’s the latest update on <stock>
+i want to know more about <stock> as a company
+give me everything important about <stock>
+how is <stock> performing right now
+what’s the latest data available for <stock>
+can you pull recent stats for <stock>
+show me key information about <stock>
+what are the latest developments for <stock>
+how is <stock> trending
+
+what’s the price movement for <stock> today
+show me intraday price for <stock>
+give me today’s performance of <stock>
+how did <stock> close today
+what’s the opening price of <stock>
+show price history for <stock>
+display trading data for <stock>
+how volatile is <stock> right now
+what’s the daily range for <stock>
+show price chart for <stock>
+
+Slightly more complex / conversational
+
+can you get me the latest financial and pricing info for <stock>
+i want a quick overview of <stock> including price and news
+show me everything important about <stock> right now
+give me a snapshot of <stock> performance
+what should i know about <stock> today
+can you summarize <stock> for me
+i need recent data on <stock>
+what’s the current situation with <stock>
+give me an update on <stock> performance and news
+show me key metrics and news for <stock>
+
+Question-style variants
+
+what is the current price of <stock>?
+what does <stock> do?
+what are the latest earnings of <stock>?
+what financial data is available for <stock>?
+what is the latest news on <stock>?
+how has <stock> performed recently?
+what are the fundamentals of <stock>?
+what is the company profile of <stock>?
+what are the recent financial results for <stock>?
+what is the earnings trend for <stock>?
+

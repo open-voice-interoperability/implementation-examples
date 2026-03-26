@@ -4,5 +4,5 @@ gunicorn
 jsonpath-ng==1.5.3
 openfloor @ https://test-files.pythonhosted.org/packages/a3/5d/f3a73f9c62640eb17e877e5d8bae00529705b3582225c45dafaeb98eaefd/openfloor-0.1.4-py3-none-any.whl#sha256=83048e661d73ea1ac9276b8899617c22f6aef7681442fe9f0504dbe19c40231d
 openai @ https://files.pythonhosted.org/packages/1d/f8/e36df35b6c3f5fd73cdc655a717931a1d035b441685bc8f7b4aa6076a780/openai-1.29.0-py3-none-any.whl#sha256=c61cd12376c84362d406341f9e2f9a9d6b81c082b133b44484dc0f43954496b1
-requests==2.32.4
+requests==2.33.0
 httpx==0.24.1

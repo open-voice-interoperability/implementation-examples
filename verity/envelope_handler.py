@@ -62,6 +62,13 @@ def create_response_envelope(in_envelope: Envelope, agent_manifest: Manifest) ->
 
 def serialize_envelope(envelope: Envelope) -> str:
     try:
+        # Do not echo incoming conversants back to clients.
+        if envelope and getattr(envelope, "conversation", None) is not None:
+            try:
+                setattr(envelope.conversation, "conversants", None)
+            except Exception:
+                pass
+
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("[SERIALIZE] Envelope has %d events", len(envelope.events))
             for i, event in enumerate(envelope.events):

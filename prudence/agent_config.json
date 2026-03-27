@@ -1,0 +1,35 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Prudence",
+      "speakerUri": "http://localhost:8084",
+      "serviceUrl": "http://localhost:8084",
+      "organization": "OpenVoiceNetwork",
+      "role": "assistant",
+      "synopsis": "A conservative financial guidance agent that delegates live market data questions to Finn"
+    },
+    "capabilities": {
+      "keyphrases": [
+        "conservative",
+        "risk",
+        "portfolio",
+        "allocation",
+        "diversification",
+        "retirement",
+        "savings",
+        "financial planning"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Provides conservative, risk-aware financial suggestions",
+        "Uses OpenAI for NLP and guidance, and asks Finn for current company market data when needed"
+      ],
+      "supportedLayers": [
+        "text",
+        "html"
+      ]
+    }
+  }
+}

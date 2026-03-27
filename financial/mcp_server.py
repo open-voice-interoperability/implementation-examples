@@ -48,6 +48,8 @@ def query_finnhub(intent, stock, time_text=None):
         url = f"{base_url}/company-news?symbol={stock}&from={datetime.utcfromtimestamp(from_ts).strftime('%Y-%m-%d')}&to={datetime.utcfromtimestamp(to_ts).strftime('%Y-%m-%d')}&token={FINNHUB_API_KEY}"
     elif intent == "EARNINGS_QUERY":
         url = f"{base_url}/stock/earnings?symbol={stock}&token={FINNHUB_API_KEY}"
+    elif intent == "DIVIDEND_QUERY":
+        url = f"{base_url}/stock/dividend?symbol={stock}&token={FINNHUB_API_KEY}"
     elif intent == "HISTORY_QUERY":
         url = f"{base_url}/stock/candle?symbol={stock}&resolution=D&from={from_ts}&to={to_ts}&token={FINNHUB_API_KEY}"
 

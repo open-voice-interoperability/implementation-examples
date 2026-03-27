@@ -231,6 +231,11 @@ class TemplateAgent(BotAgent):
             self._cache_conversation_conversants(in_envelope)
 
             user_text = self._extract_text_from_utterance_event(event)
+            incoming_speaker_uri = (self._extract_speaker_uri_from_utterance_event(event) or "").strip().lower()
+            self_speaker_uri = str(self._manifest.identification.speakerUri or "").strip().lower()
+            if incoming_speaker_uri and self_speaker_uri and incoming_speaker_uri == self_speaker_uri:
+                logger.debug("[UTTERANCE] Ignoring self-originated utterance")
+                return
             if not user_text:
                 logger.debug("[UTTERANCE] No text found in utterance event")
                 return

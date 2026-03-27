@@ -249,6 +249,13 @@ class TemplateAgent(BotAgent):
         try:
             # Extract user text from the OpenFloor event
             user_text = self._extract_text_from_utterance_event(event)
+            incoming_speaker_uri = (self._extract_speaker_uri_from_utterance_event(event) or "").strip().lower()
+            self_speaker_uri = str(self._manifest.identification.speakerUri or "").strip().lower()
+            responding_to_name = self._resolve_utterance_speaker_name(event, in_envelope)
+
+            if incoming_speaker_uri and self_speaker_uri and incoming_speaker_uri == self_speaker_uri:
+                logger.debug("[UTTERANCE] Ignoring self-originated utterance")
+                return
             
             if not user_text:
                 logger.debug("[UTTERANCE] No text found in utterance event")
@@ -256,17 +263,17 @@ class TemplateAgent(BotAgent):
 
             logger.debug("[UTTERANCE] Received: %s", user_text)
             
-            # Call utterance handler with just text + plain context - returns text response
+            # Call utterance handler with text, agent name, and speaker name for multi-agent reactions
             response_text = utterance_handler.process_utterance(
                 user_text,
                 agent_name=self._manifest.identification.conversationalName,
+                speaker_name=responding_to_name,
             )
             
             if not response_text:
                 logger.debug("[UTTERANCE] No response generated")
                 return
 
-            responding_to_name = self._resolve_utterance_speaker_name(event, in_envelope)
             if responding_to_name:
                 response_text = f"{responding_to_name}: {response_text}"
 
@@ -532,7 +539,7 @@ class TemplateAgent(BotAgent):
         
         dialog = DialogEvent(
             speakerUri=self._manifest.identification.speakerUri,
-            features=[TextFeature.from_text(farewell)]
+            features={"text": TextFeature(values=[farewell])}
         )
         
         utterance_event = UtteranceEvent(dialogEvent=dialog)

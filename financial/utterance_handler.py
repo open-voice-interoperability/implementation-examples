@@ -139,6 +139,7 @@ COMPANY_SYNONYMS = {
     "J&J": "JNJ",
     "Johnson and Johnson": "JNJ",
     "P and G": "PG",
+    "Procter and Gamble": "PG",
     "P&G": "PG",
     "Coke": "KO",
     "Coca Cola": "KO",
@@ -158,8 +159,63 @@ COMPANY_SYNONYMS = {
     "GM": "GM",
 }
 
+MARKET_INDICES = {
+    "^DJI": "Dow Jones Industrial Average",
+    "^IXIC": "Nasdaq Composite",
+    "^GSPC": "S&P 500",
+    "^RUT": "Russell 2000",
+    "^VIX": "CBOE Volatility Index",
+}
+
+INDEX_SYNONYMS = {
+    "Dow": "^DJI",
+    "Dow Jones": "^DJI",
+    "Dow Jones Industrial Average": "^DJI",
+    "Nasdaq": "^IXIC",
+    "Nasdaq Composite": "^IXIC",
+    "S&P 500": "^GSPC",
+    "S and P 500": "^GSPC",
+    "SP500": "^GSPC",
+    "Russell 2000": "^RUT",
+    "VIX": "^VIX",
+}
+
+INDEX_TRACKING_ETFS = {
+    "SPY": "SPDR S&P 500 ETF Trust",
+    "QQQ": "Invesco QQQ Trust",
+    "DIA": "SPDR Dow Jones Industrial Average ETF Trust",
+    "IWM": "iShares Russell 2000 ETF",
+}
+
+INDEX_ETF_SYNONYMS = {
+    "Nasdaq 100": "QQQ",
+    "Nasdaq-100": "QQQ",
+    "Dow ETF": "DIA",
+    "S&P ETF": "SPY",
+    "SP 500 ETF": "SPY",
+    "Russell 2000 ETF": "IWM",
+}
+
+INDEX_PROXY_INFO = {
+    "DIA": {"index_name": "Dow", "multiplier": 100.0},
+    "SPY": {"index_name": "S&P 500", "multiplier": 10.0},
+    "QQQ": {"index_name": "Nasdaq-100", "multiplier": 40.0},
+    "IWM": {"index_name": "Russell 2000", "multiplier": 10.0},
+}
+
+INDEX_SYMBOL_TO_PROXY_ETF = {
+    "^DJI": "DIA",
+    "^GSPC": "SPY",
+    "^IXIC": "QQQ",
+    "^RUT": "IWM",
+}
+
 TICKER_LOOKUP = {v.lower(): k for k, v in FORTUNE_100_STOCKS.items()}
 TICKER_LOOKUP.update({alias.lower(): ticker for alias, ticker in COMPANY_SYNONYMS.items()})
+TICKER_LOOKUP.update({v.lower(): k for k, v in MARKET_INDICES.items()})
+TICKER_LOOKUP.update({alias.lower(): ticker for alias, ticker in INDEX_SYNONYMS.items()})
+TICKER_LOOKUP.update({v.lower(): k for k, v in INDEX_TRACKING_ETFS.items()})
+TICKER_LOOKUP.update({alias.lower(): ticker for alias, ticker in INDEX_ETF_SYNONYMS.items()})
 
 _NLP_CONTEXT = None
 
@@ -179,7 +235,17 @@ def _get_nlp_context():
     for ticker, name in FORTUNE_100_STOCKS.items():
         ruler_patterns.append({"label": "STOCK", "pattern": ticker})
         ruler_patterns.append({"label": "STOCK", "pattern": name})
+    for ticker, name in MARKET_INDICES.items():
+        ruler_patterns.append({"label": "STOCK", "pattern": ticker})
+        ruler_patterns.append({"label": "STOCK", "pattern": name})
+    for ticker, name in INDEX_TRACKING_ETFS.items():
+        ruler_patterns.append({"label": "STOCK", "pattern": ticker})
+        ruler_patterns.append({"label": "STOCK", "pattern": name})
     for alias in COMPANY_SYNONYMS:
+        ruler_patterns.append({"label": "STOCK", "pattern": alias})
+    for alias in INDEX_SYNONYMS:
+        ruler_patterns.append({"label": "STOCK", "pattern": alias})
+    for alias in INDEX_ETF_SYNONYMS:
         ruler_patterns.append({"label": "STOCK", "pattern": alias})
     ruler.add_patterns(ruler_patterns)
 
@@ -205,6 +271,10 @@ def _get_nlp_context():
     matcher.add("EARNINGS_QUERY", [
         [{"LOWER": "earnings"}, {"LOWER": {"IN": ["history", "reports", "data"]}}] + stock_entity,
         [{"LOWER": {"IN": ["show", "get"]}}, {"LOWER": "earnings"}] + stock_entity,
+    ])
+    matcher.add("DIVIDEND_QUERY", [
+        [{"LOWER": {"IN": ["dividend", "dividends", "yield", "payout"]}}, {"LOWER": {"IN": ["for", "of"]}, "OP": "?"}] + stock_entity,
+        [{"LOWER": {"IN": ["show", "get", "what"]}}, {"LOWER": "me", "OP": "?"}, {"LOWER": {"IN": ["latest", "current"]}, "OP": "*"}, {"LOWER": {"IN": ["dividend", "yield"]}}, {"LOWER": {"IN": ["for", "of"]}, "OP": "?"}] + stock_entity,
     ])
     matcher.add("HISTORY_QUERY", [
         [{"LOWER": {"IN": ["financial", "revenue", "profit"]}}, {"LOWER": {"IN": ["history", "performance", "trend"]}}] + stock_entity,
@@ -280,6 +350,13 @@ def _has_earnings_intent(text: str) -> bool:
     return any(kw in lower for kw in keywords)
 
 
+def _has_dividend_intent(text: str) -> bool:
+    """Return True if the query appears to be about dividends or yield."""
+    keywords = ["dividend", "yield", "payout", "ex-dividend", "ex dividend", "distribution"]
+    lower = text.lower()
+    return any(kw in lower for kw in keywords)
+
+
 async def _call_mcp_server_async(payload: dict) -> dict:
     try:
         async with websockets.connect(MCP_WS_URL) as websocket:
@@ -313,12 +390,32 @@ def _format_quote_response(result: dict, symbol: str = "?") -> str:
         return f"I retrieved data for {symbol}, but the price wasn't available."
 
     price_str = f"${price:,.2f}"
+    proxy_info = INDEX_PROXY_INFO.get((symbol or "").upper())
+
+    def _proxy_suffix() -> str:
+        if not proxy_info:
+            return ""
+        implied_value = price * proxy_info["multiplier"]
+        return (
+            f", implying an approximate {proxy_info['index_name']} level of "
+            f"{implied_value:,.0f}"
+        )
 
     if change is not None:
         direction = "up" if change >= 0 else "down"
         change_str = f"{abs(change):.2f}%"
+        if proxy_info:
+            return (
+                f"{symbol} ({proxy_info['index_name']} proxy) is currently trading at {price_str}, "
+                f"{direction} {change_str} today{_proxy_suffix()}."
+            )
         return f"{symbol} is currently trading at {price_str}, {direction} {change_str} today."
     else:
+        if proxy_info:
+            return (
+                f"{symbol} ({proxy_info['index_name']} proxy) is currently trading at {price_str}"
+                f"{_proxy_suffix()}."
+            )
         return f"{symbol} is currently trading at {price_str}."
 
 
@@ -467,10 +564,46 @@ def _format_earnings_response(result, symbol: str = "?") -> str:
     return " ".join(parts) + "."
 
 
+def _format_dividend_response(result, symbol: str = "?") -> str:
+    if isinstance(result, dict) and "error" in result:
+        return f"Sorry, I couldn't retrieve dividend data: {result['error']}"
+
+    records = result if isinstance(result, list) else []
+    if not records:
+        return f"I couldn't find dividend history for {symbol}."
+
+    latest = records[0]
+    amount = latest.get("amount")
+    ex_date = latest.get("exDate")
+    pay_date = latest.get("paymentDate")
+    record_date = latest.get("recordDate")
+    declared_date = latest.get("declarationDate")
+    freq = latest.get("frequency")
+
+    parts = [f"Latest dividend for {symbol}:"]
+    if amount is not None:
+        parts.append(f"${amount:.4f} per share")
+    if ex_date:
+        parts.append(f"ex-dividend date {ex_date}")
+    if pay_date:
+        parts.append(f"payment date {pay_date}")
+    if record_date:
+        parts.append(f"record date {record_date}")
+    if declared_date:
+        parts.append(f"declared on {declared_date}")
+    if freq:
+        parts.append(f"frequency: {freq}")
+
+    if len(parts) == 1:
+        return f"Dividend data is available for {symbol}, but key fields were missing."
+
+    return " ".join(parts) + "."
+
+
 _HELP_TEXT = (
-    "I can look up stock prices and earnings data for publicly traded companies. "
+    "I can look up stock prices, earnings, and dividend data for publicly traded companies. "
     "Try asking something like: 'What is the price of NVDA?' or "
-    "'Show me Apple earnings.' or 'How is Tesla doing today?'"
+    "'Show me Apple earnings.' or 'What is Coca-Cola's latest dividend?'"
 )
 
 
@@ -506,11 +639,17 @@ def process_utterance(user_text: str, agent_name: str = "FinancialAgent") -> str
         )
 
     if not intent:
-        intent = "EARNINGS_QUERY" if _has_earnings_intent(user_text) else "PRICE_QUERY"
+        if _has_dividend_intent(user_text):
+            intent = "DIVIDEND_QUERY"
+        else:
+            intent = "EARNINGS_QUERY" if _has_earnings_intent(user_text) else "PRICE_QUERY"
 
     lower_text = user_text.lower()
     if intent == "PRICE_QUERY" and time_text and any(word in lower_text for word in ["was", "on", "historical", "history", "closed"]):
         intent = "HISTORY_QUERY"
+
+    # Free-tier fallback: map direct index symbols to liquid proxy ETFs.
+    stock = INDEX_SYMBOL_TO_PROXY_ETF.get(stock, stock)
 
     mcp_payload = {
         "intent": intent,
@@ -540,4 +679,6 @@ def process_utterance(user_text: str, agent_name: str = "FinancialAgent") -> str
         return _format_financial_response(result, symbol=symbol)
     if intent == "NEWS_QUERY":
         return _format_news_response(result, symbol=symbol)
+    if intent == "DIVIDEND_QUERY":
+        return _format_dividend_response(result, symbol=symbol)
     return _format_quote_response(result, symbol=symbol)

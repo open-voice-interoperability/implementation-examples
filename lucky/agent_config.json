@@ -1,0 +1,35 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Lucky",
+      "speakerUri": "http://localhost:8085",
+      "serviceUrl": "http://localhost:8085",
+      "organization": "OpenVoiceNetwork",
+      "role": "assistant",
+      "synopsis": "A high-risk financial guidance agent that uses OpenAI and asks Finn for live company market data"
+    },
+    "capabilities": {
+      "keyphrases": [
+        "aggressive",
+        "risk",
+        "growth",
+        "momentum",
+        "speculative",
+        "options",
+        "high upside",
+        "financial advice"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Provides aggressive, high-risk financial suggestions for users seeking upside",
+        "Uses OpenAI for NLP and advice, and asks Finn for current company market data when needed"
+      ],
+      "supportedLayers": [
+        "text",
+        "html"
+      ]
+    }
+  }
+}

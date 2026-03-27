@@ -228,33 +228,7 @@ class TemplateAgent(BotAgent):
         if not isinstance(conversants, list):
             conversants = []
 
-        # Floor-awareness is based on incoming conversant count.
         return len(conversants) <= 1
-
-    def _is_directly_addressed(self, event: UtteranceEvent, user_text: str) -> bool:
-        to_value = getattr(event, "to", None)
-        if to_value is None and isinstance(event, dict):
-            to_value = event.get("to")
-
-        # Explicit OpenFloor addressee targeting this agent.
-        if to_value is not None:
-            return self._is_addressed_to_me(event)
-
-        text = (user_text or "").strip().lower()
-        if not text:
-            return False
-
-        agent_name = str(getattr(self._manifest.identification, "conversationalName", "")).strip().lower()
-        if not agent_name:
-            return False
-
-        direct_prefixes = (
-            f"{agent_name}:",
-            f"{agent_name},",
-            f"{agent_name} ",
-            f"@{agent_name}",
-        )
-        return text.startswith(direct_prefixes)
     
     # =========================================================================
     # UTTERANCE EVENT - Delegated to utterance_handler.py
@@ -285,7 +259,7 @@ class TemplateAgent(BotAgent):
             user_text = self._extract_text_from_utterance_event(event)
             incoming_speaker_uri = (self._extract_speaker_uri_from_utterance_event(event) or "").strip().lower()
             self_speaker_uri = str(self._manifest.identification.speakerUri or "").strip().lower()
-            is_only_agent = self._is_only_agent_on_floor(in_envelope)
+            responding_to_name = self._resolve_utterance_speaker_name(event, in_envelope)
 
             if incoming_speaker_uri and self_speaker_uri and incoming_speaker_uri == self_speaker_uri:
                 logger.debug("[UTTERANCE] Ignoring self-originated utterance")
@@ -295,41 +269,30 @@ class TemplateAgent(BotAgent):
                 logger.debug("[UTTERANCE] No text found in utterance event")
                 return
 
-            parsed = utterance_handler.parse_query(user_text)
-            has_stock = bool(parsed.get("stock"))
-            has_intent = bool(parsed.get("intent"))
-
-            if not has_stock and not has_intent:
-                if is_only_agent:
-                    dialog = DialogEvent(
-                        speakerUri=self._manifest.identification.speakerUri,
-                        features={"text": TextFeature(values=["that's outside of my expertise"])},
-                    )
-                    out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
-                else:
-                    logger.debug("[UTTERANCE] Ignoring non-financial utterance while multiple agents are on the floor")
-                return
-
-            if not (is_only_agent or self._is_directly_addressed(event, user_text)):
-                logger.debug("[UTTERANCE] Ignoring utterance; Finn is neither directly addressed nor the only agent on the floor")
-                return
-
             logger.debug("[UTTERANCE] Received: %s", user_text)
             
             # Call utterance handler with just text + plain context - returns text response
             response_text = utterance_handler.process_utterance(
                 user_text,
                 agent_name=self._manifest.identification.conversationalName,
+                speaker_name=responding_to_name,
             )
             
             if not response_text:
+                if self._is_only_agent_on_floor(in_envelope) and not utterance_handler._is_user_finance_question(user_text):
+                    dialog = DialogEvent(
+                        speakerUri=self._manifest.identification.speakerUri,
+                        features={"text": TextFeature(values=["that's outside of my expertise"])},
+                    )
+                    out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
+                    return
                 logger.debug("[UTTERANCE] No response generated")
                 return
 
-            responding_to_name = self._resolve_utterance_speaker_name(event, in_envelope)
-            _known_agent_markers = ("lucky", "prudence", "finn")
-            if responding_to_name and any(m in responding_to_name.lower() for m in _known_agent_markers):
-                response_text = f"{responding_to_name}: {response_text}"
+            # Defensive guard: Prudence should not relay live-data requests to Finn.
+            if response_text.lower().startswith("finn, can you provide current market data"):
+                logger.debug("[UTTERANCE] Suppressing live-data relay response from Prudence")
+                return
 
             logger.debug("[UTTERANCE] Response: %s", response_text)
             
@@ -511,7 +474,7 @@ class TemplateAgent(BotAgent):
             return ""
 
         def _infer_agent_name_from_uri(uri: str) -> str:
-            normalized = self._normalize_endpoint_id(uri)
+            normalized = str(uri or "").strip().lower()
             if not normalized:
                 return ""
             if "finn" in normalized or ":8083" in normalized:
@@ -590,7 +553,7 @@ class TemplateAgent(BotAgent):
         if self.joinedFloor:
             greeting = f"Hi, I'm {agent_name}. I've joined the floor and I'm ready to help!"
         else:
-            greeting = f"Hi, I'm {agent_name}. I can give you real-time stock information."
+            greeting = f"Hi, I'm {agent_name}. I can give you financial advice.How can I help you today?"
         
         # Create greeting utterance
         dialog = DialogEvent(

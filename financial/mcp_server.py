@@ -50,6 +50,8 @@ def query_finnhub(intent, stock, time_text=None):
         url = f"{base_url}/stock/earnings?symbol={stock}&token={FINNHUB_API_KEY}"
     elif intent == "DIVIDEND_QUERY":
         url = f"{base_url}/stock/dividend?symbol={stock}&token={FINNHUB_API_KEY}"
+    elif intent == "RECOMMENDATIONS_QUERY":
+        url = f"{base_url}/stock/recommendation?symbol={stock}&token={FINNHUB_API_KEY}"
     elif intent == "HISTORY_QUERY":
         url = f"{base_url}/stock/candle?symbol={stock}&resolution=D&from={from_ts}&to={to_ts}&token={FINNHUB_API_KEY}"
 
@@ -103,6 +105,12 @@ async def handler(websocket):
                 parsed = parse_query(user_text)
                 stock = stock or parsed.get("stock")
                 intent = intent or parsed.get("intent")
+
+            # Guardrail: recommendation/rating language should route to recommendations endpoint.
+            lower_text = (user_text or "").lower()
+            recommendation_keywords = ("recommendation", "recommendations", "rating", "ratings", "analyst", "analysts", "sentiment")
+            if any(keyword in lower_text for keyword in recommendation_keywords):
+                intent = "RECOMMENDATIONS_QUERY"
 
             if intent and stock:
                 finn_data = query_finnhub(intent, stock, time_text=time_text)

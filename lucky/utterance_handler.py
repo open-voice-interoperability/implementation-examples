@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import random
+import re
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -17,14 +18,14 @@ logger = logging.getLogger(__name__)
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 MAX_RESPONSE_WORDS = 35
 REACTION_STYLE_OPTIONS = [
-    "Use punchy language and one vivid upside angle.",
+    "Use punchy language and state a clear preferred move.",
     "Use energetic phrasing with one concrete high-beta action.",
-    "Use assertive wording and vary cadence from prior replies.",
+    "Use assertive wording and sound decisive, not tentative.",
 ]
 GUIDANCE_STYLE_OPTIONS = [
     "Vary phrasing across turns and avoid repeating boilerplate.",
-    "Use different sentence openings and keep recommendations specific.",
-    "Rotate wording and examples while keeping the same risk posture.",
+    "State recommendations directly and keep them specific.",
+    "Rotate wording and examples while staying decisive and action-oriented.",
 ]
 KNOWN_AGENT_MARKERS = (
     "lucky",
@@ -151,6 +152,21 @@ def _is_agent_speaker(speaker_name: str) -> bool:
     return bool(_canonical_agent_name(speaker_name))
 
 
+def _strip_leading_addressee_prefixes(text: str) -> str:
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return ""
+
+    # Remove repeated leading addressee prefixes like "Prudence: " or "To Lucky - ".
+    prefix_pattern = re.compile(r"^\s*(?:to\s+)?(?:finn|prudence|lucky)\s*[:,-]\s*", re.IGNORECASE)
+    while True:
+        updated = prefix_pattern.sub("", cleaned, count=1).strip()
+        if updated == cleaned:
+            break
+        cleaned = updated
+    return cleaned
+
+
 def _is_user_finance_question(user_text: str) -> bool:
     text = (user_text or "").strip()
     if not text:
@@ -180,7 +196,7 @@ def _is_user_finance_question(user_text: str) -> bool:
 def _generate_reaction_to_peer_advice(user_text: str, client: OpenAI | None) -> str:
     if client is None:
         return _shorten_response(
-            "That is overly cautious and likely to cap upside. For growth-seeking investors, a focused high-volatility allocation can be more effective than over-diversifying everything away."
+            "That is too cautious and likely to cap upside. Take the higher-upside route: concentrate selectively, accept volatility, and keep capital aimed at the strongest growth opportunity."
         )
 
     system = (
@@ -188,6 +204,7 @@ def _generate_reaction_to_peer_advice(user_text: str, client: OpenAI | None) -> 
         "keep your vocabulary understandable by a lay person."
         "You have a cheerful happy-go-lucky personality and clearly disapprove of overly cautious, fear-driven advice. "
         "Reply with a short, assertive counterpoint favoring upside, selective concentration, and volatility tolerance. "
+        "Sound confident and decisive. Make a direct recommendation instead of hedging or listing balanced pros and cons. "
         "Do not mention live market data. Return at most 2 sentences and 30 words. "
         f"{random.choice(REACTION_STYLE_OPTIONS)}"
     )
@@ -206,8 +223,8 @@ def _generate_aggressive_guidance(user_text: str, user_goal: str, client: OpenAI
     if client is None:
         return _shorten_response(
             "I can help with aggressive financial guidance, but I need OPENAI_API_KEY "
-            "to generate tailored suggestions. As a default high-risk stance, focus on concentrated upside, "
-            "accept volatility, and size speculative positions deliberately."
+            "to generate tailored suggestions. Default to concentrated upside, accept volatility, "
+            "and put more capital behind the highest-conviction speculative idea."
         )
 
     system = (
@@ -216,14 +233,15 @@ def _generate_aggressive_guidance(user_text: str, user_goal: str, client: OpenAI
         "You openly disapprove of overly cautious investing that sacrifices too much upside. "
         "keep your vocabulary understandable by a lay person."
         "Do not claim to provide live market data. "
-        "Keep responses concise, practical, and energetic without being reckless in wording. "
+        "Keep responses concise, practical, energetic, and clearly directional. "
+        "Give strong recommendations with decisive verbs like buy, add, trim, hold, or avoid. Do not hedge with excessive caveats or neutrality. "
         "Return at most 2 sentences and 35 words total. "
         f"{random.choice(GUIDANCE_STYLE_OPTIONS)}"
     )
     user = (
         f"User message: {user_text}\n"
         f"Interpreted goal: {user_goal}\n"
-        "Provide 2-3 aggressive, high-risk suggestions only."
+        "Provide 2-3 aggressive, high-risk suggestions only, phrased as direct recommendations."
     )
 
     response = client.chat.completions.create(
@@ -265,15 +283,19 @@ def process_utterance(user_text: str, agent_name: str = "Lucky", speaker_name: s
         target_name = _canonical_agent_name(speaker_name) or (speaker_name or "").strip()
         client = _build_client()
         try:
-            reaction_text = _generate_reaction_to_peer_advice(user_text, client)
+            reaction_text = _strip_leading_addressee_prefixes(_generate_reaction_to_peer_advice(user_text, client))
+            if not reaction_text:
+                return ""
             _peer_reaction_count += 1
             _peer_rebuttal_used = True
             return f"{target_name}: {reaction_text}" if target_name else reaction_text
         except Exception:
             logger.exception("Failed to generate reaction to another advisor")
-            fallback = _shorten_response(
+            fallback = _strip_leading_addressee_prefixes(_shorten_response(
                 "That is too cautious for someone seeking upside. If the risk budget is real, a focused high-volatility allocation can make more sense than over-diversifying everything away."
-            )
+            ))
+            if not fallback:
+                return ""
             _peer_reaction_count += 1
             _peer_rebuttal_used = True
             return f"{target_name}: {fallback}" if target_name else fallback
@@ -281,6 +303,7 @@ def process_utterance(user_text: str, agent_name: str = "Lucky", speaker_name: s
     # A fresh user question resets peer-reaction budget for this turn.
     _peer_rebuttal_used = False
     _peer_reaction_count = 0
+    _responded_to_user_in_cycle = False
 
     if not _is_user_finance_question(user_text):
         return ""

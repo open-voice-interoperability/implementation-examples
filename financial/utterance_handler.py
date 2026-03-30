@@ -276,6 +276,11 @@ def _get_nlp_context():
         [{"LOWER": {"IN": ["dividend", "dividends", "yield", "payout"]}}, {"LOWER": {"IN": ["for", "of"]}, "OP": "?"}] + stock_entity,
         [{"LOWER": {"IN": ["show", "get", "what"]}}, {"LOWER": "me", "OP": "?"}, {"LOWER": {"IN": ["latest", "current"]}, "OP": "*"}, {"LOWER": {"IN": ["dividend", "yield"]}}, {"LOWER": {"IN": ["for", "of"]}, "OP": "?"}] + stock_entity,
     ])
+    matcher.add("RECOMMENDATIONS_QUERY", [
+        [{"LOWER": {"IN": ["recommendation", "recommendations", "rating", "ratings"]}}, {"LOWER": {"IN": ["for", "on", "about"]}, "OP": "?"}] + stock_entity,
+        [{"LOWER": {"IN": ["analyst", "analysts"]}}, {"LOWER": {"IN": ["recommendation", "recommendations", "rating", "ratings", "sentiment"]}}] + stock_entity,
+        [{"LOWER": {"IN": ["show", "get", "give", "what"]}}, {"LOWER": "me", "OP": "?"}, {"LOWER": {"IN": ["analyst", "street"]}, "OP": "?"}, {"LOWER": {"IN": ["recommendations", "ratings", "sentiment"]}}, {"LOWER": {"IN": ["for", "on", "about"]}, "OP": "?"}] + stock_entity,
+    ])
     matcher.add("HISTORY_QUERY", [
         [{"LOWER": {"IN": ["financial", "revenue", "profit"]}}, {"LOWER": {"IN": ["history", "performance", "trend"]}}] + stock_entity,
     ])
@@ -353,6 +358,13 @@ def _has_earnings_intent(text: str) -> bool:
 def _has_dividend_intent(text: str) -> bool:
     """Return True if the query appears to be about dividends or yield."""
     keywords = ["dividend", "yield", "payout", "ex-dividend", "ex dividend", "distribution"]
+    lower = text.lower()
+    return any(kw in lower for kw in keywords)
+
+
+def _has_recommendations_intent(text: str) -> bool:
+    """Return True if the query appears to be about analyst recommendations or ratings."""
+    keywords = ["recommendation", "recommendations", "rating", "ratings", "analyst", "analysts", "sentiment"]
     lower = text.lower()
     return any(kw in lower for kw in keywords)
 
@@ -600,10 +612,43 @@ def _format_dividend_response(result, symbol: str = "?") -> str:
     return " ".join(parts) + "."
 
 
+def _format_recommendations_response(result, symbol: str = "?") -> str:
+    if isinstance(result, dict) and "error" in result:
+        return f"Sorry, I couldn't retrieve analyst recommendations: {result['error']}"
+
+    records = result if isinstance(result, list) else []
+    if not records:
+        return f"I couldn't find analyst recommendation data for {symbol}."
+
+    latest = records[0] or {}
+    period = latest.get("period") or "the latest reporting period"
+    strong_buy = int(latest.get("strongBuy") or 0)
+    buy = int(latest.get("buy") or 0)
+    hold = int(latest.get("hold") or 0)
+    sell = int(latest.get("sell") or 0)
+    strong_sell = int(latest.get("strongSell") or 0)
+
+    bullish_total = strong_buy + buy
+    bearish_total = sell + strong_sell
+
+    sentiment = "mixed"
+    if bullish_total > bearish_total and bullish_total >= hold:
+        sentiment = "mostly bullish"
+    elif bearish_total > bullish_total and bearish_total >= hold:
+        sentiment = "mostly bearish"
+    elif hold > max(bullish_total, bearish_total):
+        sentiment = "mostly neutral"
+
+    return (
+        f"Analyst recommendations for {symbol} in {period} are {sentiment}: "
+        f"{strong_buy} strong buy, {buy} buy, {hold} hold, {sell} sell, and {strong_sell} strong sell."
+    )
+
+
 _HELP_TEXT = (
     "I can look up stock prices, earnings, and dividend data for publicly traded companies. "
     "Try asking something like: 'What is the price of NVDA?' or "
-    "'Show me Apple earnings.' or 'What is Coca-Cola's latest dividend?'"
+    "'Show me Apple earnings.' or 'What is Coca-Cola's latest dividend?' or 'What are analyst recommendations for NVDA?'"
 )
 
 
@@ -639,10 +684,16 @@ def process_utterance(user_text: str, agent_name: str = "FinancialAgent") -> str
         )
 
     if not intent:
-        if _has_dividend_intent(user_text):
+        if _has_recommendations_intent(user_text):
+            intent = "RECOMMENDATIONS_QUERY"
+        elif _has_dividend_intent(user_text):
             intent = "DIVIDEND_QUERY"
         else:
             intent = "EARNINGS_QUERY" if _has_earnings_intent(user_text) else "PRICE_QUERY"
+
+    # Guardrail: recommendation/rating language should always map to recommendations.
+    if _has_recommendations_intent(user_text):
+        intent = "RECOMMENDATIONS_QUERY"
 
     lower_text = user_text.lower()
     if intent == "PRICE_QUERY" and time_text and any(word in lower_text for word in ["was", "on", "historical", "history", "closed"]):
@@ -681,4 +732,6 @@ def process_utterance(user_text: str, agent_name: str = "FinancialAgent") -> str
         return _format_news_response(result, symbol=symbol)
     if intent == "DIVIDEND_QUERY":
         return _format_dividend_response(result, symbol=symbol)
+    if intent == "RECOMMENDATIONS_QUERY":
+        return _format_recommendations_response(result, symbol=symbol)
     return _format_quote_response(result, symbol=symbol)

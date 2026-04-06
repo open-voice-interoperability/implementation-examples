@@ -3,11 +3,12 @@
 Vercel-ready Flask server for StellaAgent.
 Supports local testing (flask run) and deployment on Vercel.
 """
-from flask import Flask, request, Response
+from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
 import json
 import sys
 import os
+import traceback
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -36,8 +37,9 @@ def _get_agent():
         agent = StellaAgent(manifest)
         return agent, None
     except Exception as exc:
-        startup_error = str(exc)
+        startup_error = f"{exc.__class__.__name__}: {exc}"
         print(f"ERROR server.py: Agent startup failed: {startup_error}", flush=True)
+        print(traceback.format_exc(), flush=True)
         return None, startup_error
 
 @app.route("/", methods=["POST"])
@@ -45,6 +47,8 @@ def _get_agent():
 @app.route("/api/", methods=["POST"])
 def handle_request():
     payload_text = request.get_data(as_text=True)
+    if not payload_text:
+        return Response("Invalid OpenFloor payload: empty request body", status=400)
 
     current_agent, init_error = _get_agent()
     if init_error:
@@ -67,10 +71,29 @@ def handle_request():
             return Response(f"Invalid OpenFloor payload: {e}", status=400)
 
     # Process and serialize response
-    out_envelope = current_agent.process_envelope(in_envelope)
-    payload_str = out_envelope.to_json(as_payload=True)
+    try:
+        out_envelope = current_agent.process_envelope(in_envelope)
+        payload_str = out_envelope.to_json(as_payload=True)
+    except Exception as exc:
+        error_text = f"{exc.__class__.__name__}: {exc}"
+        print(f"ERROR server.py: Envelope processing failed: {error_text}", flush=True)
+        print(traceback.format_exc(), flush=True)
+        return Response(f"Envelope processing error: {error_text}", status=500)
 
     return Response(payload_str, mimetype="application/json")
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    current_agent, init_error = _get_agent()
+    if init_error:
+        return jsonify({"status": "unhealthy", "error": init_error}), 500
+
+    return jsonify({
+        "status": "healthy",
+        "agent": getattr(current_agent._manifest.identification, "conversationalName", "stella"),
+        "serviceUrl": getattr(current_agent._manifest.identification, "serviceUrl", ""),
+    })
 
 
 # Vercel WSGI handler - this is the correct way to expose Flask for Vercel

@@ -2,7 +2,13 @@ import json
 import os
 from pathlib import Path
 from typing import Optional, List
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    def load_dotenv(*args, **kwargs):
+        return False
+
+    print("WARNING: python-dotenv not installed; skipping .env load", flush=True)
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
 

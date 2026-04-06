@@ -1,7 +1,8 @@
 import requests
+import os
 
 # NASA API Key
-nasa_api_key = wVnaajaqfHQIaOhSyc5SQWFecweOwKAe54OUSuZT
+nasa_api_key = os.getenv("NASA_API_KEY", "DEMO_KEY")
 
 # Construct the GET request URL
 nasa_url = f"https://api.nasa.gov/planetary/apod?api_key={nasa_api_key}"

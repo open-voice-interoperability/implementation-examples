@@ -1,10 +1,12 @@
 import requests
 import re
+import os
 from typing import Optional
 
 # Parameters for the request
 params = {
-    "api_key": "wVnaajaqfHQIaOhSyc5SQWFecweOwKAe54OUSuZT",       # Replace with your own key from https://api.nasa.gov
+    # Use env var if provided; DEMO_KEY avoids hardcoding secrets in source.
+    "api_key": os.getenv("NASA_API_KEY", "DEMO_KEY"),
     "hd": True                   # Optional: True to get HD image URL
 }
 

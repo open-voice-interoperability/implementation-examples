@@ -48,6 +48,9 @@ revoked_agents = []  # List to keep track of agents whose floor has been revoked
 agent_checkboxes = {}  # Dictionary to track checkboxes: {agent_url: checkbox_widget}
 manifest_cache = {}  # Dictionary to cache conversational names from manifests: {url: conversational_name}
 
+ADVISOR_AGENT_NAMES = {"lucky", "prudence"}
+INFORMATION_AGENT_NAMES = {"finn", "financial"}
+
 AGENT_STATUS_IDLE = "idle"
 AGENT_STATUS_WORKING = "working"
 AGENT_STATUS_ERROR = "error"
@@ -494,6 +497,139 @@ def _prepend_direct_address_context(text, addressed_agent, *, speaker_name=None,
 # Global conversation to track conversants across the session
 global_conversation = Conversation()
 
+
+def _is_placeholder_speaker_uri(value):
+    if not value or not isinstance(value, str):
+        return False
+    normalized = value.strip().lower()
+    return normalized.startswith("agent:http://") or normalized.startswith("agent:https://")
+
+
+def _preferred_speaker_uri(existing_speaker_uri, new_speaker_uri, service_url=None):
+    if new_speaker_uri:
+        if not existing_speaker_uri:
+            return new_speaker_uri
+        if _is_placeholder_speaker_uri(existing_speaker_uri):
+            return new_speaker_uri
+        if service_url and _normalize_agent_id(existing_speaker_uri) == _normalize_agent_id(service_url):
+            return new_speaker_uri
+    return existing_speaker_uri or new_speaker_uri
+
+
+def upsert_conversant_in_global(agent_url=None, speaker_uri=None, conversational_name=""):
+    """Merge a conversant into the shared conversation list using service URL or speaker URI."""
+    global global_conversation
+
+    clean_agent_url = _clean_url_candidate(agent_url) if agent_url else ""
+    normalized_url = _normalize_agent_id(clean_agent_url)
+    normalized_speaker = _normalize_agent_id(speaker_uri) if speaker_uri else ""
+    matches = []
+
+    for conversant in list(global_conversation.conversants or []):
+        identification = getattr(conversant, "identification", None)
+        if identification is None:
+            continue
+
+        existing_service_url = getattr(identification, "serviceUrl", None)
+        existing_speaker_uri = getattr(identification, "speakerUri", None)
+        service_match = normalized_url and _normalize_agent_id(existing_service_url) == normalized_url
+        speaker_match = normalized_speaker and _normalize_agent_id(existing_speaker_uri) == normalized_speaker
+
+        if service_match or speaker_match:
+            matches.append(conversant)
+
+    if matches:
+        primary = matches[0]
+        identification = primary.identification
+    else:
+        seed_url = clean_agent_url or _url_from_speaker_uri(speaker_uri)
+        identification = Identification(
+            speakerUri=speaker_uri or (f"agent:{seed_url}" if seed_url else None),
+            serviceUrl=seed_url or None,
+            organization="Unknown",
+            conversationalName="",
+            synopsis=f"Conversant endpoint at {seed_url}" if seed_url else "Conversant endpoint"
+        )
+        primary = Conversant(identification=identification)
+        global_conversation.conversants.append(primary)
+
+    current_service_url = getattr(identification, "serviceUrl", None)
+    resolved_service_url = clean_agent_url or current_service_url or _url_from_speaker_uri(speaker_uri)
+    if resolved_service_url:
+        identification.serviceUrl = resolved_service_url
+        identification.synopsis = f"Conversant endpoint at {resolved_service_url}"
+
+    identification.speakerUri = _preferred_speaker_uri(
+        getattr(identification, "speakerUri", None),
+        speaker_uri,
+        service_url=resolved_service_url,
+    ) or getattr(identification, "speakerUri", None)
+
+    if conversational_name and not _is_url_like(conversational_name):
+        current_name = getattr(identification, "conversationalName", "")
+        if not current_name or _is_url_like(current_name):
+            identification.conversationalName = conversational_name
+    elif not getattr(identification, "conversationalName", "") and resolved_service_url:
+        fallback_name = resolve_display_name_for_target(
+            resolved_service_url,
+            speaker_uri=identification.speakerUri,
+        )
+        if fallback_name and not _is_url_like(fallback_name):
+            identification.conversationalName = fallback_name
+
+    for duplicate in matches[1:]:
+        duplicate_identification = getattr(duplicate, "identification", None)
+        if duplicate_identification is None:
+            continue
+        if not getattr(identification, "serviceUrl", None):
+            identification.serviceUrl = getattr(duplicate_identification, "serviceUrl", None)
+        if not getattr(identification, "speakerUri", None):
+            identification.speakerUri = getattr(duplicate_identification, "speakerUri", None)
+        if not getattr(identification, "conversationalName", ""):
+            identification.conversationalName = getattr(duplicate_identification, "conversationalName", "")
+        if duplicate in global_conversation.conversants:
+            global_conversation.conversants.remove(duplicate)
+
+    return primary
+
+
+def sync_global_conversation_state():
+    """Ensure the shared conversation uses the best-known identity for each invited agent."""
+    global global_conversation
+
+    for agent_info in invited_agents:
+        agent_url = extract_url_from_agent_info(agent_info)
+        conversational_name = agent_info.get("conversational_name", "") if isinstance(agent_info, dict) else ""
+        upsert_conversant_in_global(agent_url=agent_url, conversational_name=conversational_name)
+
+    if floor_manager is not None:
+        for conversant in floor_manager.conversants.values():
+            upsert_conversant_in_global(
+                agent_url=getattr(conversant, "service_url", None),
+                speaker_uri=getattr(conversant, "speaker_uri", None),
+                conversational_name=getattr(conversant, "conversational_name", None) or "",
+            )
+
+    deduped_conversants = []
+    seen_keys = set()
+    for conversant in list(global_conversation.conversants or []):
+        identification = getattr(conversant, "identification", None)
+        if identification is None:
+            continue
+        key = _normalize_agent_id(getattr(identification, "serviceUrl", None)) or _normalize_agent_id(getattr(identification, "speakerUri", None))
+        if not key or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        deduped_conversants.append(conversant)
+
+    global_conversation.conversants = deduped_conversants
+
+
+def build_current_conversation():
+    """Create a conversation payload from the canonical global state."""
+    sync_global_conversation_state()
+    return Conversation(id=global_conversation.id, conversants=list(global_conversation.conversants))
+
 # Track full conversation history for context events
 conversation_history_for_context = []  # List of (speaker_name, speaker_uri, text) tuples
 
@@ -812,38 +948,19 @@ def extract_url_from_agent_info(agent_info):
 
 def add_conversant_to_global(agent_url):
     """Add a conversant to the global conversation."""
-    global global_conversation
-    # Check if already exists
-    for conversant in global_conversation.conversants:
-        if conversant.identification.serviceUrl == agent_url:
-            existing_name = getattr(conversant.identification, "conversationalName", "")
-            if not existing_name or _is_url_like(existing_name):
-                better_name = resolve_display_name_for_target(agent_url, f"agent:{agent_url}")
-                if better_name and not _is_url_like(better_name):
-                    conversant.identification.conversationalName = better_name
-            return  # Already exists
-    
-    # Add new conversant
     conversational_name = resolve_display_name_for_target(agent_url, f"agent:{agent_url}")
-    if not conversational_name:
-        conversational_name = agent_url
-    conversant = Conversant(
-        identification=Identification(
-            speakerUri=f"agent:{agent_url}",
-            serviceUrl=agent_url,
-            organization="Unknown",
-            conversationalName=conversational_name,
-            synopsis=f"Conversant endpoint at {agent_url}"
-        )
+    upsert_conversant_in_global(
+        agent_url=agent_url,
+        speaker_uri=f"agent:{agent_url}",
+        conversational_name=conversational_name,
     )
-    global_conversation.conversants.append(conversant)
 
 def remove_conversant_from_global(agent_url):
     """Remove a conversant from the global conversation."""
     global global_conversation
     global_conversation.conversants = [
         c for c in global_conversation.conversants 
-        if c.identification.serviceUrl != agent_url
+        if _normalize_agent_id(c.identification.serviceUrl) != _normalize_agent_id(agent_url)
     ]
 
 def update_conversation_history(speaker, text, speaker_uri=None, utterance_id=None):
@@ -851,6 +968,13 @@ def update_conversation_history(speaker, text, speaker_uri=None, utterance_id=No
     global conversation_history_for_context, processed_utterance_ids
 
     speaker = _resolve_history_speaker_name(speaker, speaker_uri)
+    should_follow_tail = False
+    try:
+        # Only auto-scroll when the user is already at/near the bottom.
+        _, bottom_fraction = conversation_text.yview()
+        should_follow_tail = bottom_fraction >= 0.98
+    except Exception:
+        should_follow_tail = True
     
     # Skip if we've already processed this utterance
     if utterance_id and utterance_id in processed_utterance_ids:
@@ -873,8 +997,8 @@ def update_conversation_history(speaker, text, speaker_uri=None, utterance_id=No
     # Use uppercase and special formatting to make speaker names stand out, with number
     conversation_text.insert("end", f"{utterance_number}. [{speaker.upper()}] {text}")
     conversation_text.configure(state='disabled')
-    # Auto-scroll to bottom
-    conversation_text.see("end")
+    if should_follow_tail:
+        conversation_text.see("end")
 
 def grant_floor_to_agent(agent_info, agent_url):
     """Send grant floor message to agent."""
@@ -886,7 +1010,7 @@ def grant_floor_to_agent(agent_info, agent_url):
     try:
         # Create grant floor envelope using global conversation
         global global_conversation
-        conversation = Conversation(id=global_conversation.id, conversants=list(global_conversation.conversants))
+        conversation = build_current_conversation()
         sender = Sender(
             speakerUri=client_uri,
             serviceUrl=client_url
@@ -951,7 +1075,7 @@ def revoke_floor_from_agent(agent_info, agent_url):
     try:
         # Create revoke floor envelope using global conversation
         global global_conversation
-        conversation = Conversation(id=global_conversation.id, conversants=list(global_conversation.conversants))
+        conversation = build_current_conversation()
         sender = Sender(
             speakerUri=client_uri,
             serviceUrl=client_url
@@ -1016,7 +1140,7 @@ def uninvite_agent(agent_info, agent_url):
     try:
         # Create uninvite envelope using global conversation
         global global_conversation
-        conversation = Conversation(id=global_conversation.id, conversants=list(global_conversation.conversants))
+        conversation = build_current_conversation()
         sender = Sender(
             speakerUri=client_uri,
             serviceUrl=client_url
@@ -1163,7 +1287,35 @@ def _collect_new_invite_urls(event_types, target_urls):
     return [url for url in target_urls if url not in already_invited_urls]
 
 
-def _apply_utterance_preflight(event_types, user_input, target_urls):
+def _agent_display_name_for_url(agent_url):
+    if not agent_url:
+        return ""
+
+    for agent_info in invited_agents:
+        if extract_url_from_agent_info(agent_info) != agent_url:
+            continue
+        if isinstance(agent_info, dict):
+            name = (agent_info.get("conversational_name") or "").strip()
+            if name:
+                return name
+
+    name = resolve_conversational_name(f"agent:{agent_url}", agent_url) or ""
+    if name:
+        return name
+
+    return KNOWN_AGENT_NAME_BY_URL.get(agent_url, "")
+
+
+def _infer_agent_role_for_url(agent_url):
+    name = (_agent_display_name_for_url(agent_url) or "").strip().lower()
+    if name in ADVISOR_AGENT_NAMES:
+        return "advisor"
+    if name in INFORMATION_AGENT_NAMES:
+        return "information"
+    return "unknown"
+
+
+def _apply_utterance_preflight(event_types, user_input, target_urls, send_to_all):
     """Validate utterance input, update local history, and resolve optional addressing."""
     addressed_agent = None
     if "utterance" not in event_types:
@@ -1180,7 +1332,15 @@ def _apply_utterance_preflight(event_types, user_input, target_urls):
                 addressed_agent.get("url") or _url_from_speaker_uri(addressed_agent.get("speaker_uri")),
                 speaker_uri=addressed_agent.get("speaker_uri"),
             )
-        target_urls = [extract_url_from_agent_info(agent) for agent in invited_agents]
+
+        addressed_url = addressed_agent.get("url") or _url_from_speaker_uri(addressed_agent.get("speaker_uri"))
+        if addressed_url:
+            target_urls = [addressed_url]
+
+    elif send_to_all and target_urls:
+        advisors = [url for url in target_urls if _infer_agent_role_for_url(url) == "advisor"]
+        if advisors:
+            target_urls = advisors
 
     update_conversation_history("You", user_input)
     return addressed_agent, target_urls, user_input
@@ -1224,7 +1384,7 @@ def invite():
 def _send_events_broadcast(event_types, user_input, target_urls, new_invite_urls, addressed_agent):
     global private, outgoing_events
 
-    conversation = Conversation(id=global_conversation.id, conversants=list(global_conversation.conversants))
+    conversation = build_current_conversation()
     sender = Sender(
         speakerUri=client_uri,
         serviceUrl=client_url
@@ -1302,7 +1462,10 @@ def _send_events_broadcast(event_types, user_input, target_urls, new_invite_urls
             show_incoming_events=bool(show_incoming_events_checkbox.get()),
             directed_addressee=addressed_agent,
             display_name_resolver=resolve_display_name_for_target,
+            sync_conversant_callback=upsert_conversant_in_global,
         )
+
+        sync_global_conversation_state()
 
         event_handlers.forward_responses_to_agents(
             all_responses,
@@ -1313,6 +1476,7 @@ def _send_events_broadcast(event_types, user_input, target_urls, new_invite_urls
             ui_pump_callback=_pump_ui_once,
             directed_addressee=addressed_agent,
             display_name_resolver=resolve_display_name_for_target,
+            build_conversation_callback=build_current_conversation,
         )
 
     except Exception as e:
@@ -1361,6 +1525,13 @@ def _process_direct_response_events(response_data, target_url, assistant_url, ad
                     manifest_speaker_uri,
                 )
 
+                canonical_speaker_uri = manifest_speaker_uri or assistant_uri
+                upsert_conversant_in_global(
+                    agent_url=manifest_service_url or target_url,
+                    speaker_uri=canonical_speaker_uri,
+                    conversational_name=assistantConversationalName,
+                )
+
                 for agent_info in invited_agents:
                     agent_info_url = extract_url_from_agent_info(agent_info)
                     if agent_info_url == manifest_service_url or agent_info_url == target_url:
@@ -1377,15 +1548,15 @@ def _process_direct_response_events(response_data, target_url, assistant_url, ad
                     previous_urls.append(manifest_service_url)
                     refresh_agent_combobox()
 
-                if floor_manager is not None and assistant_uri:
+                if floor_manager is not None and canonical_speaker_uri:
                     try:
                         floor_manager.add_conversant(
-                            speaker_uri=assistant_uri,
+                            speaker_uri=canonical_speaker_uri,
                             service_url=manifest_service_url,
                             conversational_name=assistantConversationalName
                         )
                         if DEBUG_CONSOLE_HTTP:
-                            print(f"Added {assistantConversationalName or assistant_uri} to floor manager")
+                            print(f"Added {assistantConversationalName or canonical_speaker_uri} to floor manager")
                     except Exception as e:
                         if DEBUG_CONSOLE_HTTP:
                             print(f"Failed to add agent to floor manager: {e}")
@@ -1399,6 +1570,11 @@ def _process_direct_response_events(response_data, target_url, assistant_url, ad
             html_features = features.get("html", {})
 
             speaker_uri = dialog_event.get("speakerUri", "Unknown")
+            upsert_conversant_in_global(
+                agent_url=target_url,
+                speaker_uri=speaker_uri if speaker_uri != "Unknown" else None,
+                conversational_name=resolve_conversational_name(speaker_uri, target_url) or "",
+            )
 
             resolved_name = resolve_conversational_name(speaker_uri, target_url)
             display_name = resolve_display_name_for_target(target_url, speaker_uri)
@@ -1450,7 +1626,7 @@ def _send_events_direct(event_types, user_input, target_urls, addressed_agent, u
         except Exception:
             pass
 
-        conversation = Conversation(id=global_conversation.id, conversants=list(global_conversation.conversants))
+        conversation = build_current_conversation()
 
         sender = Sender(
             speakerUri=client_uri,
@@ -1581,7 +1757,7 @@ def send_events(event_types):
     if "invite" in event_types and len(event_types) == 1 and not new_invite_urls:
         return
 
-    addressed_agent, target_urls, user_input = _apply_utterance_preflight(event_types, user_input, target_urls)
+    addressed_agent, target_urls, user_input = _apply_utterance_preflight(event_types, user_input, target_urls, send_to_all)
     if target_urls is None:
         return
     

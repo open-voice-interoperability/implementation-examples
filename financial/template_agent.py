@@ -24,6 +24,7 @@ Architecture:
 import json
 import logging
 import os
+import re
 from typing import Any, Callable, Dict, List
 
 # Import OpenFloor components
@@ -228,8 +229,40 @@ class TemplateAgent(BotAgent):
         if not isinstance(conversants, list):
             conversants = []
 
-        # Floor-awareness is based on incoming conversant count.
-        return len(conversants) <= 1
+        # Be conservative: missing/empty conversants means floor composition is unknown.
+        if not conversants:
+            return False
+
+        self_speaker_normalized = self._normalize_endpoint_id(self._manifest.identification.speakerUri)
+        self_service_normalized = self._normalize_endpoint_id(self._manifest.identification.serviceUrl)
+        known_conversant_ids = []
+
+        for conversant in conversants:
+            identification = getattr(conversant, "identification", None)
+            if identification is None and isinstance(conversant, dict):
+                identification = conversant.get("identification", {})
+
+            if isinstance(identification, dict):
+                speaker_uri = identification.get("speakerUri")
+                service_url = identification.get("serviceUrl")
+            else:
+                speaker_uri = getattr(identification, "speakerUri", None)
+                service_url = getattr(identification, "serviceUrl", None)
+
+            normalized_speaker = self._normalize_endpoint_id(speaker_uri)
+            normalized_service = self._normalize_endpoint_id(service_url)
+            if normalized_speaker:
+                known_conversant_ids.append(normalized_speaker)
+            if normalized_service:
+                known_conversant_ids.append(normalized_service)
+
+        if not known_conversant_ids:
+            return False
+
+        unique_ids = set(known_conversant_ids)
+        self_ids = {value for value in (self_speaker_normalized, self_service_normalized) if value}
+
+        return len(unique_ids) == 1 and bool(self_ids & unique_ids)
 
     def _is_directly_addressed(self, event: UtteranceEvent, user_text: str) -> bool:
         to_value = getattr(event, "to", None)
@@ -295,26 +328,17 @@ class TemplateAgent(BotAgent):
                 logger.debug("[UTTERANCE] No text found in utterance event")
                 return
 
-            parsed = utterance_handler.parse_query(user_text)
-            has_stock = bool(parsed.get("stock"))
-            has_intent = bool(parsed.get("intent"))
+            is_directly_addressed = self._is_directly_addressed(event, user_text)
 
-            if not has_stock and not has_intent:
-                if is_only_agent:
-                    dialog = DialogEvent(
-                        speakerUri=self._manifest.identification.speakerUri,
-                        features={"text": TextFeature(values=["that's outside of my expertise"])},
-                    )
-                    out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
-                else:
-                    logger.debug("[UTTERANCE] Ignoring non-financial utterance while multiple agents are on the floor")
-                return
-
-            if not (is_only_agent or self._is_directly_addressed(event, user_text)):
+            if not (is_only_agent or is_directly_addressed):
                 logger.debug("[UTTERANCE] Ignoring utterance; Finn is neither directly addressed nor the only agent on the floor")
                 return
 
             logger.debug("[UTTERANCE] Received: %s", user_text)
+
+            parsed = utterance_handler.parse_query(user_text)
+            parsed_stock = parsed.get("stock")
+            parsed_intent = parsed.get("intent")
             
             # Call utterance handler with just text + plain context - returns text response
             response_text = utterance_handler.process_utterance(
@@ -323,12 +347,27 @@ class TemplateAgent(BotAgent):
             )
             
             if not response_text:
+                if parsed_stock and not parsed_intent:
+                    stock_name = utterance_handler.get_stock_display_name(parsed_stock)
+                    dialog = DialogEvent(
+                        speakerUri=self._manifest.identification.speakerUri,
+                        features={"text": TextFeature(values=[f"what information would you like about {stock_name}?"])}
+                    )
+                    out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
+                    logger.debug("[UTTERANCE] Clarifying stock-only query for %s", stock_name)
+                    return
+
+                if is_only_agent or is_directly_addressed:
+                    dialog = DialogEvent(
+                        speakerUri=self._manifest.identification.speakerUri,
+                        features={"text": TextFeature(values=["that's outside of my expertise"])}
+                    )
+                    out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
                 logger.debug("[UTTERANCE] No response generated")
                 return
 
             responding_to_name = self._resolve_utterance_speaker_name(event, in_envelope)
-            _known_agent_markers = ("lucky", "prudence", "finn")
-            if responding_to_name and any(m in responding_to_name.lower() for m in _known_agent_markers):
+            if responding_to_name:
                 response_text = f"{responding_to_name}: {response_text}"
 
             logger.debug("[UTTERANCE] Response: %s", response_text)
@@ -514,13 +553,18 @@ class TemplateAgent(BotAgent):
             normalized = self._normalize_endpoint_id(uri)
             if not normalized:
                 return ""
-            if "finn" in normalized or ":8083" in normalized:
-                return "Finn"
-            if "prudence" in normalized or ":8084" in normalized:
-                return "Prudence"
-            if "lucky" in normalized or ":8085" in normalized:
-                return "Lucky"
-            return ""
+
+            candidate = str(uri or "").strip().rstrip("/")
+            if "/" in candidate:
+                candidate = candidate.split("/")[-1]
+            if ":" in candidate:
+                candidate = candidate.split(":")[-1]
+
+            candidate = re.sub(r"^agent:\s*", "", candidate, flags=re.IGNORECASE).strip()
+            candidate = re.sub(r"[^A-Za-z0-9 _-]", " ", candidate).strip()
+            if not candidate:
+                return ""
+            return " ".join(part.capitalize() for part in candidate.split())
 
         conversation = getattr(in_envelope, 'conversation', None)
         conversants = getattr(conversation, 'conversants', []) if conversation else []
@@ -817,7 +861,8 @@ def load_manifest_from_config(config_path: str = "agent_config.json") -> Manifes
         conversationalName=ident_data.get('conversationalName', 'TemplateAgent'),
         organization=ident_data.get('organization', 'YourOrganization'),
         role=ident_data.get('role', 'assistant'),
-        synopsis=ident_data.get('synopsis', 'A template OpenFloor agent')
+        synopsis=ident_data.get('synopsis', 'A template OpenFloor agent'),
+        openFloorRoles=ident_data.get('openFloorRoles', ['information'])
     )
     
     # Build Capabilities

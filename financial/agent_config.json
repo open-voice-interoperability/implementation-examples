@@ -6,7 +6,8 @@
       "serviceUrl": "http://localhost:8083",
       "organization": "OpenVoiceNetwork",
       "role": "assistant",
-      "synopsis": "A financial agent that provides real-time stock data powered by Finnhub"
+      "synopsis": "A financial agent that provides real-time stock data powered by Finnhub",
+      "openFloorRoles": ["information"]
     },
     "capabilities": {
       "keyphrases": [

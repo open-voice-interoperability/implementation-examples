@@ -6,7 +6,8 @@
       "serviceUrl": "http://localhost:8085",
       "organization": "OpenVoiceNetwork",
       "role": "assistant",
-      "synopsis": "A high-risk financial guidance agent that uses OpenAI and asks Finn for live company market data"
+      "synopsis": "A high-risk financial guidance agent that uses OpenAI and asks Finn for live company market data",
+      "openFloorRoles": ["advisor"]
     },
     "capabilities": {
       "keyphrases": [

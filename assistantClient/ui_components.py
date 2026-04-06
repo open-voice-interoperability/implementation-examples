@@ -308,6 +308,24 @@ def create_ui_elements(root, known_agents):
     # Conversation history
     CTkLabel(content_frame, text="Conversation History:", font=HEADING_FONT).pack(pady=(5, 0))
     widgets['conversation_text'] = CTkTextbox(content_frame, wrap='word', height=294)
+
+    def _scroll_conversation_with_wheel(event):
+        # Keep scrolling available even when the textbox is disabled/read-only.
+        delta = getattr(event, "delta", 0)
+        if delta:
+            widgets['conversation_text'].yview_scroll(int(-delta / 120), "units")
+            return "break"
+        if getattr(event, "num", None) == 4:
+            widgets['conversation_text'].yview_scroll(-1, "units")
+            return "break"
+        if getattr(event, "num", None) == 5:
+            widgets['conversation_text'].yview_scroll(1, "units")
+            return "break"
+        return None
+
+    widgets['conversation_text'].bind("<MouseWheel>", _scroll_conversation_with_wheel)
+    widgets['conversation_text'].bind("<Button-4>", _scroll_conversation_with_wheel)
+    widgets['conversation_text'].bind("<Button-5>", _scroll_conversation_with_wheel)
     widgets['conversation_text'].configure(state='disabled')
     widgets['conversation_text'].pack(pady=5, padx=20, fill="both")
 

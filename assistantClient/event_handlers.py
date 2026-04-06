@@ -318,7 +318,7 @@ def send_broadcast_to_agents(payload_obj, urls_to_send, status_callback=None, ui
     return all_responses
 
 
-def process_agent_responses(root, all_responses, floor_manager, update_conversation_history_callback, invited_agents=None, update_agent_textboxes_callback=None, extract_url_callback=None, manifest_cache=None, show_incoming_events: bool = False, directed_addressee=None, display_name_resolver=None):
+def process_agent_responses(root, all_responses, floor_manager, update_conversation_history_callback, invited_agents=None, update_agent_textboxes_callback=None, extract_url_callback=None, manifest_cache=None, show_incoming_events: bool = False, directed_addressee=None, display_name_resolver=None, sync_conversant_callback=None):
     """Phase 2: Process all responses and update conversation history.
     
     Args:
@@ -360,6 +360,17 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
                             normalized = _normalize_agent_id(key)
                             if normalized:
                                 manifest_cache[normalized] = assistantConversationalName
+
+                    canonical_speaker_uri = manifest_speaker_uri or assistant_uri
+                    if sync_conversant_callback is not None:
+                        try:
+                            sync_conversant_callback(
+                                agent_url=manifest_service_url or target_url,
+                                speaker_uri=canonical_speaker_uri,
+                                conversational_name=assistantConversationalName,
+                            )
+                        except Exception:
+                            pass
                     
                     # Update agent info with conversational name
                     if invited_agents is not None and extract_url_callback is not None:
@@ -376,14 +387,14 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
                                 break
                     
                     # Add agent to floor manager if active
-                    if floor_manager is not None and assistant_uri:
+                    if floor_manager is not None and canonical_speaker_uri:
                         try:
                             floor_manager.add_conversant(
-                                speaker_uri=assistant_uri,
+                                speaker_uri=canonical_speaker_uri,
                                 service_url=manifest_service_url,
                                 conversational_name=assistantConversationalName
                             )
-                            print(f"Added {assistantConversationalName or assistant_uri} to floor manager")
+                            print(f"Added {assistantConversationalName or canonical_speaker_uri} to floor manager")
                         except Exception as e:
                             print(f"Failed to add agent to floor manager: {e}")
                 else:
@@ -399,6 +410,15 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
                 # Extract speaker info for conversation history
                 speaker_uri = dialog_event.get("speakerUri", "Unknown")
                 print(f"[DEBUG] Processing utterance - speakerUri from dialogEvent: {speaker_uri}")
+
+                if sync_conversant_callback is not None:
+                    try:
+                        sync_conversant_callback(
+                            agent_url=target_url,
+                            speaker_uri=speaker_uri if speaker_uri != "Unknown" else None,
+                        )
+                    except Exception:
+                        pass
                 
                 # Get the conversational name for the actual speaker (from speakerUri in dialogEvent)
                 speaker_conversational_name = None
@@ -484,7 +504,7 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
             )
 
 
-def forward_responses_to_agents(all_responses, urls_to_send, global_conversation, update_conversation_history_callback, status_callback=None, ui_pump_callback=None, directed_addressee=None, display_name_resolver=None):
+def forward_responses_to_agents(all_responses, urls_to_send, global_conversation, update_conversation_history_callback, status_callback=None, ui_pump_callback=None, directed_addressee=None, display_name_resolver=None, build_conversation_callback=None):
     """Phase 3: Forward all responses to all other agents (after processing all initial responses).
     
     Args:
@@ -502,7 +522,28 @@ def forward_responses_to_agents(all_responses, urls_to_send, global_conversation
             return speaker_uri
         return None
 
+    def _current_conversation_state():
+        if build_conversation_callback is not None:
+            try:
+                return build_conversation_callback()
+            except Exception:
+                pass
+        return global_conversation
+
+    def _serialize_conversants(conversation_obj):
+        return [
+            {
+                "identification": {
+                    "speakerUri": c.identification.speakerUri,
+                    "serviceUrl": c.identification.serviceUrl,
+                    "conversationalName": c.identification.conversationalName
+                }
+            }
+            for c in getattr(conversation_obj, "conversants", []) or []
+        ]
+
     for target_url, response_data, original_sender, incoming_events in all_responses:
+        current_conversation = _current_conversation_state()
         print(f"\n=== FORWARDING CHECK ===")
         print(f"incoming_events count: {len(incoming_events)}")
         print(f"urls_to_send: {urls_to_send}")
@@ -533,17 +574,8 @@ def forward_responses_to_agents(all_responses, urls_to_send, global_conversation
                 forward_payload = {
                     "openFloor": {
                         "conversation": {
-                            "id": global_conversation.id,
-                            "conversants": [
-                                {
-                                    "identification": {
-                                        "speakerUri": c.identification.speakerUri,
-                                        "serviceUrl": c.identification.serviceUrl,
-                                        "conversationalName": c.identification.conversationalName
-                                    }
-                                }
-                                for c in global_conversation.conversants
-                            ]
+                            "id": current_conversation.id,
+                            "conversants": _serialize_conversants(current_conversation)
                         },
                         "sender": original_sender,  # Preserve original sender, not client
                         "events": broadcast_events  # Forward events as broadcasts
@@ -559,7 +591,7 @@ def forward_responses_to_agents(all_responses, urls_to_send, global_conversation
                             except Exception:
                                 pass
                         print(f"\n=== FORWARDING TO {other_agent_url} ===")
-                        print(f"Conversation ID: {global_conversation.id}")
+                        print(f"Conversation ID: {current_conversation.id}")
                         print(f"Number of broadcast events: {len(broadcast_events)}")
                         print(f"Broadcast events: {json.dumps(broadcast_events, indent=2)}")
                         forward_response = _post_with_optional_ui_pump(
@@ -610,7 +642,7 @@ def forward_responses_to_agents(all_responses, urls_to_send, global_conversation
                                         # Find speaker name by matching serviceUrl
                                         speaker_name = None
                                         speaker_service_url = _url_from_speaker_uri(speaker_uri)
-                                        for c in global_conversation.conversants:
+                                        for c in getattr(current_conversation, "conversants", []) or []:
                                             if c.identification.speakerUri == speaker_uri:
                                                 speaker_name = c.identification.conversationalName
                                                 speaker_service_url = c.identification.serviceUrl or speaker_service_url
@@ -618,7 +650,7 @@ def forward_responses_to_agents(all_responses, urls_to_send, global_conversation
                                         
                                         # If not found by speakerUri, try by serviceUrl
                                         if not speaker_name:
-                                            for c in global_conversation.conversants:
+                                            for c in getattr(current_conversation, "conversants", []) or []:
                                                 if c.identification.serviceUrl == other_agent_url:
                                                     speaker_name = c.identification.conversationalName
                                                     speaker_service_url = c.identification.serviceUrl or speaker_service_url
@@ -673,20 +705,12 @@ def forward_responses_to_agents(all_responses, urls_to_send, global_conversation
                                         response_broadcast_events.append(evt_copy)
                                     
                                     # Create payload for recursive forwarding
+                                    recursive_conversation = _current_conversation_state()
                                     recursive_payload = {
                                         "openFloor": {
                                             "conversation": {
-                                                "id": global_conversation.id,
-                                                "conversants": [
-                                                    {
-                                                        "identification": {
-                                                            "speakerUri": c.identification.speakerUri,
-                                                            "serviceUrl": c.identification.serviceUrl,
-                                                            "conversationalName": c.identification.conversationalName
-                                                        }
-                                                    }
-                                                    for c in global_conversation.conversants
-                                                ]
+                                                "id": recursive_conversation.id,
+                                                "conversants": _serialize_conversants(recursive_conversation)
                                             },
                                             "sender": responding_agent_sender,
                                             "events": response_broadcast_events

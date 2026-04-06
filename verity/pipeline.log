@@ -7103,3 +7103,25 @@ SyntaxError: unterminated string literal (detected at line 1)
 2026-03-25 13:59:10,401 - INFO - Processing conversation 73cd7102-1847-4250-871a-f32d20f59124 from openFloor://localhost/AssistantClientConvenerWeb
 2026-03-25 13:59:10,403 - INFO - Returning response for conversation 73cd7102-1847-4250-871a-f32d20f59124
 2026-03-25 13:59:10,404 - INFO - 127.0.0.1 - - [25/Mar/2026 13:59:10] "POST /verity/ HTTP/1.1" 200 -
+2026-04-03 11:11:21,589 - INFO - Loading agent configuration...
+2026-04-03 11:11:21,655 - INFO - Agent initialized: Verity
+2026-04-03 11:11:21,655 - INFO - Service URL: http://localhost:8768
+2026-04-03 11:11:21,671 - INFO - ============================================================
+2026-04-03 11:11:21,671 - INFO - Verity OpenFloor Agent Server
+2026-04-03 11:11:21,671 - INFO - ============================================================
+2026-04-03 11:11:21,671 - INFO - Agent: Verity
+2026-04-03 11:11:21,671 - INFO - Service URL: http://localhost:8768
+2026-04-03 11:11:21,671 - INFO - Speaker URI: openFloor:verity
+2026-04-03 11:11:21,671 - INFO - Server starting on http://0.0.0.0:8768
+2026-04-03 11:11:21,671 - INFO - ============================================================
+2026-04-03 11:11:21,671 - INFO - Endpoints:
+2026-04-03 11:11:21,671 - INFO -   POST /verity/ - OpenFloor envelope processing
+2026-04-03 11:11:21,671 - INFO -   POST /        - OpenFloor envelope processing
+2026-04-03 11:11:21,671 - INFO -   GET  /health  - Health check
+2026-04-03 11:11:21,671 - INFO -   POST /manifest - Agent manifest
+2026-04-03 11:11:21,671 - INFO - ============================================================
+2026-04-03 11:11:21,700 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8768
+ * Running on http://192.168.4.44:8768
+2026-04-03 11:11:21,702 - INFO - [33mPress CTRL+C to quit[0m

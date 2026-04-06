@@ -27,41 +27,33 @@ GUIDANCE_STYLE_OPTIONS = [
     "Use a different sentence structure than usual and keep recommendations concrete and firm.",
     "Keep tone steady but rotate wording and examples while remaining decisive.",
 ]
-KNOWN_AGENT_MARKERS = (
-    "lucky",
-    "prudence",
-    "finn",
-)
-AGENT_NAME_BY_ENDPOINT_MARKER = {
-    "localhost:8083": "Finn",
-    "localhost:8084": "Prudence",
-    "localhost:8085": "Lucky",
-    "/financial": "Finn",
-    "/prudence": "Prudence",
-    "/lucky": "Lucky",
-}
 _peer_rebuttal_used = False
 _peer_reaction_count = 0
 _responded_to_user_in_cycle = False
 
 
 def _canonical_agent_name(value: str) -> str:
-    normalized = (value or "").strip().lower()
+    raw = (value or "").strip()
+    normalized = raw.lower()
     if not normalized:
         return ""
 
-    for marker, name in AGENT_NAME_BY_ENDPOINT_MARKER.items():
-        if marker in normalized:
-            return name
+    if "assistantclientconvener" in normalized:
+        return ""
 
-    if "finn" in normalized:
-        return "Finn"
-    if "prudence" in normalized:
-        return "Prudence"
-    if "lucky" in normalized:
-        return "Lucky"
+    # Use speaker-provided identity only; avoid hardcoded peer mappings.
+    candidate = raw
+    if "/" in candidate:
+        candidate = candidate.rstrip("/").split("/")[-1]
+    if ":" in candidate:
+        candidate = candidate.split(":")[-1]
 
-    return ""
+    candidate = re.sub(r"^agent:\s*", "", candidate, flags=re.IGNORECASE).strip()
+    candidate = re.sub(r"[^A-Za-z0-9 _-]", " ", candidate).strip()
+    if not candidate:
+        return ""
+
+    return " ".join(part.capitalize() for part in candidate.split())
 
 
 def _build_client() -> OpenAI | None:
@@ -158,8 +150,8 @@ def _strip_leading_addressee_prefixes(text: str) -> str:
     if not cleaned:
         return ""
 
-    # Remove repeated leading addressee prefixes like "Lucky: " or "To Prudence - ".
-    prefix_pattern = re.compile(r"^\s*(?:to\s+)?(?:finn|prudence|lucky)\s*[:,-]\s*", re.IGNORECASE)
+    # Remove repeated leading addressee prefixes like "Lucky: " or "To Team - ".
+    prefix_pattern = re.compile(r"^\s*(?:to\s+)?[a-z][a-z0-9 _-]{0,40}\s*[:,-]\s*", re.IGNORECASE)
     while True:
         updated = prefix_pattern.sub("", cleaned, count=1).strip()
         if updated == cleaned:

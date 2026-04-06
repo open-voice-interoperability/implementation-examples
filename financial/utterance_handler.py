@@ -165,6 +165,11 @@ MARKET_INDICES = {
     "^GSPC": "S&P 500",
     "^RUT": "Russell 2000",
     "^VIX": "CBOE Volatility Index",
+    "^FTSE": "FTSE 100",
+    "^GDAXI": "DAX",
+    "^FCHI": "CAC 40",
+    "^STOXX50E": "EURO STOXX 50",
+    "^STOXX600": "STOXX Europe 600",
 }
 
 INDEX_SYNONYMS = {
@@ -178,6 +183,24 @@ INDEX_SYNONYMS = {
     "SP500": "^GSPC",
     "Russell 2000": "^RUT",
     "VIX": "^VIX",
+    "FTSE": "^FTSE",
+    "FTSE 100": "^FTSE",
+    "UK market": "^FTSE",
+    "British market": "^FTSE",
+    "DAX": "^GDAXI",
+    "German DAX": "^GDAXI",
+    "German market": "^GDAXI",
+    "CAC": "^FCHI",
+    "CAC 40": "^FCHI",
+    "French market": "^FCHI",
+    "France market": "^FCHI",
+    "Euro Stoxx 50": "^STOXX50E",
+    "EURO STOXX 50": "^STOXX50E",
+    "Eurozone market": "^STOXX50E",
+    "Stoxx 600": "^STOXX600",
+    "STOXX Europe 600": "^STOXX600",
+    "European market": "^STOXX600",
+    "Europe market": "^STOXX600",
 }
 
 INDEX_TRACKING_ETFS = {
@@ -185,6 +208,11 @@ INDEX_TRACKING_ETFS = {
     "QQQ": "Invesco QQQ Trust",
     "DIA": "SPDR Dow Jones Industrial Average ETF Trust",
     "IWM": "iShares Russell 2000 ETF",
+    "EWU": "iShares MSCI United Kingdom ETF",
+    "EWG": "iShares MSCI Germany ETF",
+    "EWQ": "iShares MSCI France ETF",
+    "FEZ": "SPDR EURO STOXX 50 ETF",
+    "VGK": "Vanguard FTSE Europe ETF",
 }
 
 INDEX_ETF_SYNONYMS = {
@@ -194,6 +222,11 @@ INDEX_ETF_SYNONYMS = {
     "S&P ETF": "SPY",
     "SP 500 ETF": "SPY",
     "Russell 2000 ETF": "IWM",
+    "FTSE ETF": "EWU",
+    "DAX ETF": "EWG",
+    "CAC ETF": "EWQ",
+    "Euro Stoxx ETF": "FEZ",
+    "Europe ETF": "VGK",
 }
 
 INDEX_PROXY_INFO = {
@@ -208,6 +241,11 @@ INDEX_SYMBOL_TO_PROXY_ETF = {
     "^GSPC": "SPY",
     "^IXIC": "QQQ",
     "^RUT": "IWM",
+    "^FTSE": "EWU",
+    "^GDAXI": "EWG",
+    "^FCHI": "EWQ",
+    "^STOXX50E": "FEZ",
+    "^STOXX600": "VGK",
 }
 
 TICKER_LOOKUP = {v.lower(): k for k, v in FORTUNE_100_STOCKS.items()}
@@ -229,8 +267,9 @@ def _get_nlp_context():
     matcher_module = importlib.import_module("spacy.matcher")
     Matcher = matcher_module.Matcher
 
-    nlp = spacy.load("en_core_web_sm")
-    ruler = nlp.add_pipe("entity_ruler", before="ner", config={"phrase_matcher_attr": "LOWER"})
+    # Use a lightweight blank English pipeline and rule-based extraction only.
+    nlp = spacy.blank("en")
+    ruler = nlp.add_pipe("entity_ruler", config={"phrase_matcher_attr": "LOWER"})
     ruler_patterns = []
     for ticker, name in FORTUNE_100_STOCKS.items():
         ruler_patterns.append({"label": "STOCK", "pattern": ticker})
@@ -255,6 +294,7 @@ def _get_nlp_context():
     matcher.add("PRICE_QUERY", [
         [{"LOWER": {"IN": ["price", "quote", "trading"]}}, {"LOWER": {"IN": ["of", "for"]}, "OP": "?"}] + stock_entity,
         [{"LOWER": {"IN": ["get", "show", "fetch", "give"]}}, {"LOWER": "me", "OP": "?"}, {"LOWER": {"IN": ["current", "latest"]}, "OP": "*"}, {"LOWER": {"IN": ["price", "quote"]}}, {"LOWER": {"IN": ["of", "for"]}, "OP": "?"}] + stock_entity,
+        [{"LOWER": {"IN": ["what", "what's", "whats"]}}, {"LOWER": {"IN": ["is", "s"]}, "OP": "?"}, {"LOWER": "a", "OP": "?"}, {"LOWER": {"IN": ["price", "quote", "value", "level"]}}, {"LOWER": {"IN": ["of", "for"]}, "OP": "?"}] + stock_entity,
     ])
     matcher.add("PROFILE_QUERY", [
         [{"LOWER": {"IN": ["company", "corporate"]}}, {"LOWER": {"IN": ["profile", "overview", "details"]}}] + stock_entity,
@@ -316,6 +356,22 @@ def parse_query(text: str) -> dict:
     return result
 
 
+def get_stock_display_name(symbol: str) -> str:
+    """Return a human-readable stock/index name for prompts."""
+    if not symbol:
+        return "that stock"
+
+    normalized = symbol.upper()
+    if normalized in FORTUNE_100_STOCKS:
+        return FORTUNE_100_STOCKS[normalized]
+    if normalized in MARKET_INDICES:
+        return MARKET_INDICES[normalized]
+    if normalized in INDEX_TRACKING_ETFS:
+        return INDEX_TRACKING_ETFS[normalized]
+
+    return normalized
+
+
 def parse_time_range(text: str) -> tuple[int, int]:
     dateparser = importlib.import_module("dateparser")
     now = datetime.utcnow()
@@ -367,6 +423,32 @@ def _has_recommendations_intent(text: str) -> bool:
     keywords = ["recommendation", "recommendations", "rating", "ratings", "analyst", "analysts", "sentiment"]
     lower = text.lower()
     return any(kw in lower for kw in keywords)
+
+
+def _has_price_intent(text: str) -> bool:
+    """Return True if the query appears to ask for current quote/price/value."""
+    keywords = ["price", "quote", "trading", "value", "level", "worth", "current", "latest"]
+    lower = text.lower()
+    return any(kw in lower for kw in keywords)
+
+
+def _resolve_intent(user_text: str, parsed_intent: str | None) -> str | None:
+    intent = parsed_intent
+
+    if not intent:
+        if _has_recommendations_intent(user_text):
+            intent = "RECOMMENDATIONS_QUERY"
+        elif _has_dividend_intent(user_text):
+            intent = "DIVIDEND_QUERY"
+        elif _has_earnings_intent(user_text):
+            intent = "EARNINGS_QUERY"
+        elif _has_price_intent(user_text):
+            intent = "PRICE_QUERY"
+
+    if _has_recommendations_intent(user_text):
+        intent = "RECOMMENDATIONS_QUERY"
+
+    return intent
 
 
 async def _call_mcp_server_async(payload: dict) -> dict:
@@ -664,36 +746,22 @@ def process_utterance(user_text: str, agent_name: str = "FinancialAgent") -> str
         A plain-text response string.
     """
     if not user_text or not user_text.strip():
-        return _HELP_TEXT
+        return ""
 
     lower = user_text.lower()
 
-    # Help / greeting
+    # Finn should stay silent unless the user clearly asks about a stock/index with a supported intent.
     if any(w in lower for w in ["help", "hello", "hi ", "hey", "what can you"]):
-        return _HELP_TEXT
+        return ""
 
     parsed = parse_query(user_text)
-    intent = parsed.get("intent")
+    intent = _resolve_intent(user_text, parsed.get("intent"))
     stock = parsed.get("stock")
     time_text = extract_time_text(user_text)
 
-    if not stock:
-        return (
-            "I'm not sure which stock you're asking about. "
-            "Please include a ticker symbol (like NVDA or AAPL) or a company name."
-        )
-
-    if not intent:
-        if _has_recommendations_intent(user_text):
-            intent = "RECOMMENDATIONS_QUERY"
-        elif _has_dividend_intent(user_text):
-            intent = "DIVIDEND_QUERY"
-        else:
-            intent = "EARNINGS_QUERY" if _has_earnings_intent(user_text) else "PRICE_QUERY"
-
-    # Guardrail: recommendation/rating language should always map to recommendations.
-    if _has_recommendations_intent(user_text):
-        intent = "RECOMMENDATIONS_QUERY"
+    if not intent or not stock:
+        logger.info("Ignoring Finn query without both intent and stock/index: intent=%s stock=%s", intent, stock)
+        return ""
 
     lower_text = user_text.lower()
     if intent == "PRICE_QUERY" and time_text and any(word in lower_text for word in ["was", "on", "historical", "history", "closed"]):

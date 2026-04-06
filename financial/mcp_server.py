@@ -116,7 +116,7 @@ async def handler(websocket):
                 finn_data = query_finnhub(intent, stock, time_text=time_text)
                 response = {"intent": intent, "stock": stock, "data": finn_data}
             else:
-                response = {"error": "Could not parse intent or stock"}
+                response = {"error": "Could not parse both intent and stock"}
 
         except Exception as exc:
             logger.exception("Error handling MCP websocket message")

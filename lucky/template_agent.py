@@ -24,6 +24,7 @@ Architecture:
 import json
 import logging
 import os
+import re
 from typing import Any, Callable, Dict, List
 
 # Import OpenFloor components
@@ -477,13 +478,18 @@ class TemplateAgent(BotAgent):
             normalized = str(uri or "").strip().lower()
             if not normalized:
                 return ""
-            if "finn" in normalized or ":8083" in normalized:
-                return "Finn"
-            if "prudence" in normalized or ":8084" in normalized:
-                return "Prudence"
-            if "lucky" in normalized or ":8085" in normalized:
-                return "Lucky"
-            return ""
+
+            candidate = str(uri or "").strip().rstrip("/")
+            if "/" in candidate:
+                candidate = candidate.split("/")[-1]
+            if ":" in candidate:
+                candidate = candidate.split(":")[-1]
+
+            candidate = re.sub(r"^agent:\s*", "", candidate, flags=re.IGNORECASE).strip()
+            candidate = re.sub(r"[^A-Za-z0-9 _-]", " ", candidate).strip()
+            if not candidate:
+                return ""
+            return " ".join(part.capitalize() for part in candidate.split())
 
         conversation = getattr(in_envelope, 'conversation', None)
         conversants = getattr(conversation, 'conversants', []) if conversation else []
@@ -780,7 +786,8 @@ def load_manifest_from_config(config_path: str = "agent_config.json") -> Manifes
         conversationalName=ident_data.get('conversationalName', 'TemplateAgent'),
         organization=ident_data.get('organization', 'YourOrganization'),
         role=ident_data.get('role', 'assistant'),
-        synopsis=ident_data.get('synopsis', 'A template OpenFloor agent')
+        synopsis=ident_data.get('synopsis', 'A template OpenFloor agent'),
+        openFloorRoles=ident_data.get('openFloorRoles', ['advisor'])
     )
     
     # Build Capabilities

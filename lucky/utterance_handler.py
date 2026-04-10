@@ -149,8 +149,8 @@ def _strip_leading_addressee_prefixes(text: str) -> str:
     if not cleaned:
         return ""
 
-    # Remove repeated leading addressee prefixes like "Prudence: " or "To Team - ".
-    prefix_pattern = re.compile(r"^\s*(?:to\s+)?[a-z][a-z0-9 _-]{0,40}\s*[:,-]\s*", re.IGNORECASE)
+    # Remove repeated leading addressee prefixes like "Lucky: " or "Prudence, ".
+    prefix_pattern = re.compile(r"^\s*(?:to\s+)?[a-z][a-z0-9_-]{0,40}\s*[:,]\s*", re.IGNORECASE)
     while True:
         updated = prefix_pattern.sub("", cleaned, count=1).strip()
         if updated == cleaned:
@@ -160,7 +160,8 @@ def _strip_leading_addressee_prefixes(text: str) -> str:
 
 
 def _is_user_finance_question(user_text: str) -> bool:
-    text = (user_text or "").strip()
+    # Allow directed prompts like "Prudence, what should I do...".
+    text = _strip_leading_addressee_prefixes((user_text or "").strip())
     if not text:
         return False
 
@@ -169,6 +170,7 @@ def _is_user_finance_question(user_text: str) -> bool:
         "stock", "stocks", "price", "market", "invest", "investment", "portfolio",
         "risk", "returns", "etf", "fund", "trading", "earnings", "company", "shares",
         "dividend", "valuation", "finance", "financial",
+        "buy", "sell", "hold", "position",
         "retire", "retirement", "pension", "401k", "ira", "roth", "annuity",
         "savings", "save", "wealth", "budget", "debt", "loan", "mortgage",
         "strategy", "money", "asset", "assets", "allocation", "bond", "bonds",
@@ -315,7 +317,8 @@ def process_utterance(user_text: str, agent_name: str = "Lucky", speaker_name: s
         }
 
     if analysis.get("needs_live_data"):
-        return ""
+        # Still provide actionable advisor guidance even when live data would help.
+        return _generate_aggressive_guidance(user_text, analysis.get("user_goal", user_text), client)
 
     try:
         return _generate_aggressive_guidance(user_text, analysis.get("user_goal", user_text), client)

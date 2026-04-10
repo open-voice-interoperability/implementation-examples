@@ -419,15 +419,34 @@ def create_ui_elements(root, known_agents):
 
 
 def create_error_log_window(root):
-    """Create an error log window with a read-only textbox."""
+    """Create an error log window with a read-only 10-row text area and scrollbars."""
     window = CTkToplevel(root)
     window.title("Error Log")
-    window.geometry("700x450")
+    window.geometry("760x320")
     apply_app_icon(window)
 
-    text = CTkTextbox(window, wrap='word', width=700, height=450)
+    container = tk.Frame(window)
+    container.pack(padx=10, pady=10, fill="both", expand=True)
+
+    y_scrollbar = tk.Scrollbar(container, orient="vertical")
+    x_scrollbar = tk.Scrollbar(container, orient="horizontal")
+
+    text = tk.Text(
+        container,
+        wrap="none",
+        width=92,
+        height=10,
+        yscrollcommand=y_scrollbar.set,
+        xscrollcommand=x_scrollbar.set,
+    )
+    y_scrollbar.config(command=text.yview)
+    x_scrollbar.config(command=text.xview)
+
+    y_scrollbar.pack(side="right", fill="y")
+    x_scrollbar.pack(side="bottom", fill="x")
+    text.pack(side="left", fill="both", expand=True)
+
     text.configure(state='disabled')
-    text.pack(padx=10, pady=10, fill="both", expand=True)
     return window, text
 
 

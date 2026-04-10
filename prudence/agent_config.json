@@ -7,7 +7,7 @@
       "organization": "OpenVoiceNetwork",
       "role": "assistant",
       "synopsis": "A conservative financial guidance agent that delegates live market data questions to Finn",
-      "openFloorRoles": ["advisor"]
+      "openFloorRoles": { "advisor": true }
     },
     "capabilities": {
       "keyphrases": [

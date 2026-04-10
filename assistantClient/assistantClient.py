@@ -966,15 +966,9 @@ def remove_conversant_from_global(agent_url):
 def update_conversation_history(speaker, text, speaker_uri=None, utterance_id=None):
     """Update the conversation history text area with a new utterance."""
     global conversation_history_for_context, processed_utterance_ids
+    scroll_threshold_lines = 20
 
     speaker = _resolve_history_speaker_name(speaker, speaker_uri)
-    should_follow_tail = False
-    try:
-        # Only auto-scroll when the user is already at/near the bottom.
-        _, bottom_fraction = conversation_text.yview()
-        should_follow_tail = bottom_fraction >= 0.98
-    except Exception:
-        should_follow_tail = True
     
     # Skip if we've already processed this utterance
     if utterance_id and utterance_id in processed_utterance_ids:
@@ -997,7 +991,8 @@ def update_conversation_history(speaker, text, speaker_uri=None, utterance_id=No
     # Use uppercase and special formatting to make speaker names stand out, with number
     conversation_text.insert("end", f"{utterance_number}. [{speaker.upper()}] {text}")
     conversation_text.configure(state='disabled')
-    if should_follow_tail:
+    line_count = len(conversation_text.get("1.0", "end-1c").split("\n"))
+    if line_count >= scroll_threshold_lines:
         conversation_text.see("end")
 
 def grant_floor_to_agent(agent_info, agent_url):
@@ -1337,10 +1332,8 @@ def _apply_utterance_preflight(event_types, user_input, target_urls, send_to_all
         if addressed_url:
             target_urls = [addressed_url]
 
-    elif send_to_all and target_urls:
-        advisors = [url for url in target_urls if _infer_agent_role_for_url(url) == "advisor"]
-        if advisors:
-            target_urls = advisors
+    # Note: Unaddressed broadcasts include all agents (advisors and information agents).
+    # Information agents receive events but decide internally not to respond unless directly addressed.
 
     update_conversation_history("You", user_input)
     return addressed_agent, target_urls, user_input

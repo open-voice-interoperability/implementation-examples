@@ -6,7 +6,8 @@
       "serviceUrl": "https://openvoice-time-agent.vercel.app/",
       "organization": "Open Voice Network",
       "role": "assistant",
-      "synopsis": "A world time information agent providing current time in major cities"
+      "synopsis": "A world time information agent providing current time in major cities",
+      "openFloorRoles": { "information": true }
     },
     "capabilities": {
       "keyphrases": [

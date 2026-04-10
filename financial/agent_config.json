@@ -7,7 +7,7 @@
       "organization": "OpenVoiceNetwork",
       "role": "assistant",
       "synopsis": "A financial agent that provides real-time stock data powered by Finnhub",
-      "openFloorRoles": ["information"]
+      "openFloorRoles": { "information": true }
     },
     "capabilities": {
       "keyphrases": [

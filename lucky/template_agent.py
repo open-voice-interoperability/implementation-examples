@@ -552,10 +552,17 @@ class TemplateAgent(BotAgent):
         
         # Store conversation ID
         self.currentConversation = in_envelope.conversation.id
-        
+
+        # If the invite is explicitly addressed to another agent (not this one),
+        # this agent is just being notified of someone else joining — stay silent.
+        to_value = getattr(event, "to", None)
+        if to_value is not None and not self._is_addressed_to_me(event):
+            logger.debug("[INVITE] Invite directed to another agent; suppressing greeting")
+            return
+
         # Send greeting (customize in your utterance_handler if needed)
         agent_name = self._manifest.identification.conversationalName
-        
+
         if self.joinedFloor:
             greeting = f"Hi, I'm {agent_name}. I've joined the floor and I'm ready to help!"
         else:
@@ -777,6 +784,21 @@ def load_manifest_from_config(config_path: str = "agent_config.json") -> Manifes
         config = json.load(f)
     
     manifest_data = config.get('manifest', {})
+
+    def _normalize_openfloor_roles(raw_roles, default_role: str):
+        if isinstance(raw_roles, dict):
+            normalized = {
+                str(role): True
+                for role, enabled in raw_roles.items()
+                if role and bool(enabled)
+            }
+            return normalized or {default_role: True}
+        if isinstance(raw_roles, list):
+            normalized = {str(role): True for role in raw_roles if role}
+            return normalized or {default_role: True}
+        if isinstance(raw_roles, str) and raw_roles.strip():
+            return {raw_roles.strip(): True}
+        return {default_role: True}
     
     # Build Identification
     ident_data = manifest_data.get('identification', {})
@@ -787,7 +809,7 @@ def load_manifest_from_config(config_path: str = "agent_config.json") -> Manifes
         organization=ident_data.get('organization', 'YourOrganization'),
         role=ident_data.get('role', 'assistant'),
         synopsis=ident_data.get('synopsis', 'A template OpenFloor agent'),
-        openFloorRoles=ident_data.get('openFloorRoles', ['advisor'])
+        openFloorRoles=_normalize_openfloor_roles(ident_data.get('openFloorRoles'), 'advisor')
     )
     
     # Build Capabilities

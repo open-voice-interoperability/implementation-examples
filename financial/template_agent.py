@@ -270,7 +270,29 @@ class TemplateAgent(BotAgent):
             to_value = event.get("to")
 
         # Explicit OpenFloor addressee targeting this agent.
+        # Treat only single-recipient targeting as direct addressing.
+        # Broadcasts (multiple recipients) are not direct addressing.
         if to_value is not None:
+            recipients = to_value if isinstance(to_value, (list, tuple, set)) else [to_value]
+            meaningful_recipients = []
+            for recipient in recipients:
+                if recipient is None:
+                    continue
+                if isinstance(recipient, dict):
+                    if recipient.get("speakerUri") or recipient.get("serviceUrl"):
+                        meaningful_recipients.append(recipient)
+                elif isinstance(recipient, str):
+                    if recipient.strip():
+                        meaningful_recipients.append(recipient)
+                else:
+                    speaker_uri = getattr(recipient, "speakerUri", None)
+                    service_url = getattr(recipient, "serviceUrl", None)
+                    if speaker_uri or service_url:
+                        meaningful_recipients.append(recipient)
+
+            if len(meaningful_recipients) != 1:
+                return False
+
             return self._is_addressed_to_me(event)
 
         text = (user_text or "").strip().lower()
@@ -288,6 +310,43 @@ class TemplateAgent(BotAgent):
             f"@{agent_name}",
         )
         return text.startswith(direct_prefixes)
+    
+    def _is_utterance_from_user(self, in_envelope: Envelope, incoming_speaker_uri: str) -> bool:
+        """Check if utterance came from a human user (not another agent)."""
+        if not incoming_speaker_uri:
+            # No speaker info = assume user
+            return True
+
+        normalized_incoming = self._normalize_endpoint_id(incoming_speaker_uri)
+
+        # Match against every conversant in the conversation by URI.
+        # Any conversant whose speakerUri or serviceUrl matches is another agent,
+        # not the human user. (The assistant client's own speaker URI is excluded
+        # by the earlier self-utterance check before this method is called.)
+        conversation = getattr(in_envelope, "conversation", None)
+        conversants = getattr(conversation, "conversants", []) if conversation else []
+        if isinstance(conversants, list):
+            for conversant in conversants:
+                identification = getattr(conversant, "identification", None)
+                if identification is None and isinstance(conversant, dict):
+                    identification = conversant.get("identification", {})
+                if isinstance(identification, dict):
+                    c_speaker = self._normalize_endpoint_id(identification.get("speakerUri", "") or "")
+                    c_service = self._normalize_endpoint_id(identification.get("serviceUrl", "") or "")
+                else:
+                    c_speaker = self._normalize_endpoint_id(getattr(identification, "speakerUri", "") or "")
+                    c_service = self._normalize_endpoint_id(getattr(identification, "serviceUrl", "") or "")
+                if normalized_incoming and (normalized_incoming == c_speaker or normalized_incoming == c_service):
+                    return False  # Speaker is a known floor agent
+
+        # Fallback: name-fragment check for cases where conversants list is absent
+        agent_name_fragments = {"lucky", "prudence", "finn", "financial"}
+        lower_uri = incoming_speaker_uri.lower()
+        for fragment in agent_name_fragments:
+            if fragment in lower_uri:
+                return False
+
+        return True
     
     # =========================================================================
     # UTTERANCE EVENT - Delegated to utterance_handler.py
@@ -330,8 +389,13 @@ class TemplateAgent(BotAgent):
 
             is_directly_addressed = self._is_directly_addressed(event, user_text)
 
-            if not (is_only_agent or is_directly_addressed):
-                logger.debug("[UTTERANCE] Ignoring utterance; Finn is neither directly addressed nor the only agent on the floor")
+            # Information agents only respond when directly addressed by name
+            # or when they are the only agent on the floor.
+            # They stay silent for general user broadcasts when other agents are present.
+            should_respond = is_directly_addressed or is_only_agent
+
+            if not should_respond:
+                logger.debug("[UTTERANCE] Ignoring utterance; Finn is neither directly addressed nor the only agent on floor")
                 return
 
             logger.debug("[UTTERANCE] Received: %s", user_text)
@@ -627,7 +691,14 @@ class TemplateAgent(BotAgent):
         
         # Store conversation ID
         self.currentConversation = in_envelope.conversation.id
-        
+
+        # If the invite is explicitly addressed to another agent (not this one),
+        # this agent is just being notified of someone else joining — stay silent.
+        to_value = getattr(event, "to", None)
+        if to_value is not None and not self._is_addressed_to_me(event):
+            logger.debug("[INVITE] Invite directed to another agent; suppressing greeting")
+            return
+
         # Send greeting (customize in your utterance_handler if needed)
         agent_name = self._manifest.identification.conversationalName
         
@@ -852,6 +923,21 @@ def load_manifest_from_config(config_path: str = "agent_config.json") -> Manifes
         config = json.load(f)
     
     manifest_data = config.get('manifest', {})
+
+    def _normalize_openfloor_roles(raw_roles, default_role: str):
+        if isinstance(raw_roles, dict):
+            normalized = {
+                str(role): True
+                for role, enabled in raw_roles.items()
+                if role and bool(enabled)
+            }
+            return normalized or {default_role: True}
+        if isinstance(raw_roles, list):
+            normalized = {str(role): True for role in raw_roles if role}
+            return normalized or {default_role: True}
+        if isinstance(raw_roles, str) and raw_roles.strip():
+            return {raw_roles.strip(): True}
+        return {default_role: True}
     
     # Build Identification
     ident_data = manifest_data.get('identification', {})
@@ -862,7 +948,7 @@ def load_manifest_from_config(config_path: str = "agent_config.json") -> Manifes
         organization=ident_data.get('organization', 'YourOrganization'),
         role=ident_data.get('role', 'assistant'),
         synopsis=ident_data.get('synopsis', 'A template OpenFloor agent'),
-        openFloorRoles=ident_data.get('openFloorRoles', ['information'])
+        openFloorRoles=_normalize_openfloor_roles(ident_data.get('openFloorRoles'), 'information')
     )
     
     # Build Capabilities

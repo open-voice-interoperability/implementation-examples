@@ -17,6 +17,14 @@
             "role": "shows astronomical images",
             "synopsis": "sends images from NASA's image libraries"
         },
+        "character": {
+                        "headShot": "null.png",
+                        "voice": {
+                                "vendor": "MS_EDGE",
+                                "name": "Emma",
+                                "uri": "Microsoft Emma Online (Natural) - English (United States)"
+                        }
+                    },
         "capabilities": {
             "keyphrases": [
                 "space",

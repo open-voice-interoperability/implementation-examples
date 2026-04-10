@@ -13,10 +13,6 @@ import traceback
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-# Agent imports
-from stella_agent import load_manifest_from_config, StellaAgent
-from openfloor.envelope import Envelope
-
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
@@ -33,6 +29,10 @@ def _get_agent():
         return None, startup_error
 
     try:
+        # Defer imports so module import failures are surfaced as runtime
+        # startup errors instead of crashing Vercel entrypoint loading.
+        from stella_agent import load_manifest_from_config, StellaAgent
+
         manifest = load_manifest_from_config()
         agent = StellaAgent(manifest)
         return agent, None
@@ -63,9 +63,11 @@ def handle_request():
 
     # Parse incoming envelope
     try:
+        from openfloor.envelope import Envelope
         in_envelope = Envelope.from_json(payload_text, as_payload=True)
     except Exception:
         try:
+            from openfloor.envelope import Envelope
             in_envelope = Envelope.from_json(json.dumps(request.get_json()), as_payload=True)
         except Exception as e:
             return Response(f"Invalid OpenFloor payload: {e}", status=400)

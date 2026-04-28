@@ -11,25 +11,50 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 
+_preexisting_openai_api_key = os.environ.get("OPENAI_API_KEY")
 load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
+if _preexisting_openai_api_key is None:
+    os.environ.pop("OPENAI_API_KEY", None)
+else:
+    os.environ["OPENAI_API_KEY"] = _preexisting_openai_api_key
 
 logger = logging.getLogger(__name__)
 
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:14b")
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "auto").strip().lower()
+SHOW_LLM_PROVIDER = os.environ.get("SHOW_LLM_PROVIDER", "false").strip().lower() in {"1", "true", "yes", "on"}
 MAX_RESPONSE_WORDS = 35
 REACTION_STYLE_OPTIONS = [
     "Use plain-spoken wording with short clauses and a clear recommendation.",
     "Use restrained professional wording with one concrete caution.",
     "Use concise coach-like wording with one firm risk-control action.",
+    "Use direct language with one specific downside scenario.",
+    "Lead with a short warning, then give one practical next step.",
+    "Use plain language and contrast risky vs safer options in one sentence.",
+    "Use a skeptical tone and include one risk-control rule.",
 ]
 GUIDANCE_STYLE_OPTIONS = [
     "Vary your phrasing from prior replies and avoid repeating stock expressions.",
     "Use a different sentence structure than usual and keep recommendations concrete and firm.",
     "Keep tone steady but rotate wording and examples while remaining decisive.",
+    "Start with risk framing, then provide a concrete allocation or behavior rule.",
+    "Use short, punchy clauses and avoid repeating prior opening phrases.",
+    "Use one brief metaphor related to safety or resilience, then actionable guidance.",
+    "Alternate between imperative and explanatory sentence patterns.",
+    "Use fresh wording and avoid reusing the same verbs from recent replies.",
 ]
+REACTION_TEMPERATURE_RANGE = (0.9, 1.2)
+GUIDANCE_TEMPERATURE_RANGE = (0.85, 1.15)
+RESPONSE_TOP_P = 0.95
+RESPONSE_PRESENCE_PENALTY = 0.35
+RESPONSE_FREQUENCY_PENALTY = 0.25
 _peer_rebuttal_used = False
 _peer_reaction_count = 0
 _responded_to_user_in_cycle = False
+_last_llm_provider = ""
+_last_llm_model = ""
 
 
 def _canonical_agent_name(value: str) -> str:
@@ -57,10 +82,77 @@ def _canonical_agent_name(value: str) -> str:
 
 
 def _build_client() -> OpenAI | None:
+    targets = _llm_targets()
+    return targets[0][1] if targets else None
+
+
+def _ollama_base_url() -> str:
+    base_url = OLLAMA_HOST.rstrip("/")
+    if not base_url.endswith("/v1"):
+        base_url = f"{base_url}/v1"
+    return base_url
+
+
+def _provider_label() -> str:
+    if SHOW_LLM_PROVIDER and _last_llm_provider:
+        return f"[{_last_llm_provider}:{_last_llm_model}] "
+    return ""
+
+
+def _llm_targets() -> list[tuple[str, OpenAI, str]]:
+    targets: list[tuple[str, OpenAI, str]] = []
     api_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
-    if not api_key:
-        return None
-    return OpenAI(api_key=api_key)
+
+    if LLM_PROVIDER in {"auto", "ollama"}:
+        targets.append(
+            (
+                "ollama",
+                OpenAI(
+                    base_url=_ollama_base_url(),
+                    api_key=(os.environ.get("OLLAMA_API_KEY") or "ollama"),
+                ),
+                OLLAMA_MODEL,
+            )
+        )
+
+    if api_key and LLM_PROVIDER in {"auto", "openai", "ollama"}:
+        targets.append(("openai", OpenAI(api_key=api_key), OPENAI_MODEL))
+
+    return targets
+
+
+def _create_chat_completion(messages: list[dict[str, str]], **kwargs):
+    global _last_llm_provider, _last_llm_model
+    last_error = None
+    query_text = ""
+    for message in reversed(messages):
+        if message.get("role") == "user":
+            query_text = (message.get("content") or "").replace("\n", " ").strip()
+            break
+
+    for provider, llm_client, model in _llm_targets():
+        try:
+            response = llm_client.chat.completions.create(
+                model=model,
+                messages=messages,
+                **kwargs,
+            )
+            _last_llm_provider = provider
+            _last_llm_model = model
+            logger.info(
+                "LLM provider=%s model=%s query=%s",
+                provider,
+                model,
+                query_text[:120],
+            )
+            return response
+        except Exception as exc:
+            last_error = exc
+            logger.warning("%s request failed: %s", provider, exc)
+
+    if last_error is not None:
+        logger.warning("No LLM provider succeeded: %s", last_error)
+    return None
 
 
 def _classify_query(user_text: str, client: OpenAI | None) -> dict:
@@ -81,14 +173,20 @@ def _classify_query(user_text: str, client: OpenAI | None) -> dict:
         "Limit response to 50 words max in total. If no company is mentioned, company_or_ticker should be empty string."
     )
 
-    response = client.chat.completions.create(
-        model=OPENAI_MODEL,
+    response = _create_chat_completion(
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": prompt},
             {"role": "user", "content": user_text},
         ],
     )
+
+    if response is None:
+        return {
+            "needs_live_data": _heuristic_live_data_check(user_text),
+            "company_or_ticker": "",
+            "user_goal": user_text,
+        }
 
     content = response.choices[0].message.content or "{}"
     parsed = json.loads(content)
@@ -176,6 +274,8 @@ def _is_user_finance_question(user_text: str) -> bool:
         "savings", "save", "wealth", "budget", "debt", "loan", "mortgage",
         "strategy", "money", "asset", "assets", "allocation", "bond", "bonds",
         "crypto", "bitcoin", "interest", "rate", "tax", "taxes",
+        "real estate", "property", "properties", "housing", "home", "house",
+        "rental", "rent", "landlord", "tenant", "reit", "reits",
     )
     request_starts = (
         "what", "how", "why", "when", "where", "who", "can", "could", "should", "would",
@@ -203,21 +303,27 @@ def _generate_reaction_to_peer_advice(user_text: str, client: OpenAI | None) -> 
         "Do not mention live market data. Return at most 2 sentences and 30 words. "
         f"{random.choice(REACTION_STYLE_OPTIONS)}"
     )
-    response = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        temperature=0.8,
+    response = _create_chat_completion(
+        temperature=round(random.uniform(*REACTION_TEMPERATURE_RANGE), 2),
+        top_p=RESPONSE_TOP_P,
+        presence_penalty=RESPONSE_PRESENCE_PENALTY,
+        frequency_penalty=RESPONSE_FREQUENCY_PENALTY,
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user_text},
         ],
     )
-    return _shorten_response(response.choices[0].message.content or "")
+    if response is None:
+        return _shorten_response(
+            "That is reckless advice for most people. Take the safer route: diversify, reduce position size, and protect downside before chasing upside."
+        )
+    return _shorten_response(f"{_provider_label()}{response.choices[0].message.content or ''}")
 
 
 def _generate_conservative_guidance(user_text: str, user_goal: str, client: OpenAI | None) -> str:
     if client is None:
         return _shorten_response(
-            "I can help with conservative financial guidance, but I need OPENAI_API_KEY "
+            "I can help with conservative financial guidance, but I need either Ollama or OPENAI_API_KEY "
             "to generate tailored suggestions. Prioritize emergency savings, diversification, low-cost funds, "
             "and smaller position sizes before taking any additional risk."
         )
@@ -239,15 +345,23 @@ def _generate_conservative_guidance(user_text: str, user_goal: str, client: Open
         "Provide 2-3 conservative suggestions only, phrased as direct recommendations."
     )
 
-    response = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        temperature=0.75,
+    response = _create_chat_completion(
+        temperature=round(random.uniform(*GUIDANCE_TEMPERATURE_RANGE), 2),
+        top_p=RESPONSE_TOP_P,
+        presence_penalty=RESPONSE_PRESENCE_PENALTY,
+        frequency_penalty=RESPONSE_FREQUENCY_PENALTY,
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
     )
-    return _shorten_response(response.choices[0].message.content or "")
+    if response is None:
+        return _shorten_response(
+            "I can help with conservative financial guidance, but I need either Ollama or OPENAI_API_KEY "
+            "to generate tailored suggestions. Prioritize emergency savings, diversification, low-cost funds, "
+            "and smaller position sizes before taking any additional risk."
+        )
+    return _shorten_response(f"{_provider_label()}{response.choices[0].message.content or ''}")
 
 
 def _looks_like_agent_greeting(text: str) -> bool:

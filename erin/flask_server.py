@@ -20,7 +20,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 from flask import Flask, request, Response, jsonify
 
+_preexisting_openai_api_key = os.environ.get("OPENAI_API_KEY")
 load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
+if _preexisting_openai_api_key is None:
+    os.environ.pop("OPENAI_API_KEY", None)
+else:
+    os.environ["OPENAI_API_KEY"] = _preexisting_openai_api_key
 
 # Import our agent components
 from template_agent import TemplateAgent, load_manifest_from_config
@@ -39,10 +44,33 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 
+def _runtime_base_url() -> str:
+    configured = (os.environ.get('SERVICE_URL') or os.environ.get('PUBLIC_SERVICE_URL') or '').strip()
+    if configured:
+        return configured.rstrip('/')
+
+    host = os.environ.get('HOST', '0.0.0.0').strip() or '0.0.0.0'
+    port = int(os.environ.get('PORT', 8082))
+    public_host = 'localhost' if host in {'0.0.0.0', '127.0.0.1'} else host
+    return f'http://{public_host}:{port}'
+
+
+def _apply_runtime_identity(base_url: str) -> None:
+    normalized = (base_url or '').rstrip('/')
+    if not normalized:
+        return
+
+    manifest.identification.serviceUrl = normalized
+    current_speaker_uri = getattr(manifest.identification, 'speakerUri', '') or ''
+    if current_speaker_uri.startswith('http://') or current_speaker_uri.startswith('https://'):
+        manifest.identification.speakerUri = normalized
+
+
 # Initialize agent at module level (loaded once at startup)
 try:
     logger.info("Loading agent configuration...")
     manifest = load_manifest_from_config()
+    _apply_runtime_identity(_runtime_base_url())
     agent = TemplateAgent(manifest)
     logger.info(f"Agent initialized: {manifest.identification.conversationalName}")
     logger.info(f"Service URL: {manifest.identification.serviceUrl}")
@@ -73,6 +101,9 @@ def handle_envelope():
         
         # Log incoming request (abbreviated for security)
         logger.info(f"Received envelope: {json_payload[:100]}...")
+
+        request_base_url = request.host_url.rstrip('/')
+        _apply_runtime_identity(request_base_url)
         
         # Extract conversation ID for logging
         try:

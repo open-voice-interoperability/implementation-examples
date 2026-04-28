@@ -8,7 +8,7 @@ Uses envelope_handler for all JSON parsing and serialization.
 Usage:
     python flask_server.py
 
-The server will start on http://localhost:8084 by default.
+The server will start on http://localhost:8080 by default.
 Configure host and port via environment variables:
     HOST=0.0.0.0 PORT=5000 python flask_server.py
 """
@@ -45,7 +45,7 @@ def _runtime_base_url() -> str:
         return configured.rstrip('/')
 
     host = os.environ.get('HOST', '0.0.0.0').strip() or '0.0.0.0'
-    port = int(os.environ.get('PORT', 8084))
+    port = int(os.environ.get('PORT', 8086))
     public_host = 'localhost' if host in {'0.0.0.0', '127.0.0.1'} else host
     return f'http://{public_host}:{port}'
 
@@ -197,7 +197,7 @@ def get_manifest():
 if __name__ == '__main__':
     # Get configuration from environment
     host = os.environ.get('HOST', '0.0.0.0')
-    port = int(os.environ.get('PORT', 8084))
+    port = int(os.environ.get('PORT', 8086))
     debug = os.environ.get('DEBUG', 'false').lower() == 'true'
     
     logger.info("=" * 60)

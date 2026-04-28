@@ -889,9 +889,15 @@ def load_manifest_from_config(config_path: str = "agent_config.json") -> Manifes
     
     # Build Identification
     ident_data = manifest_data.get('identification', {})
+    _service_host = os.environ.get('SERVICE_HOST', '').strip()
+    _raw_speaker_uri = ident_data.get('speakerUri', ident_data.get('serviceEndpoint', 'http://localhost:8080'))
+    _raw_service_url = ident_data.get('serviceUrl', ident_data.get('serviceEndpoint', 'http://localhost:8080'))
+    if _service_host:
+        _raw_speaker_uri = _raw_speaker_uri.replace('localhost', _service_host).replace('127.0.0.1', _service_host)
+        _raw_service_url = _raw_service_url.replace('localhost', _service_host).replace('127.0.0.1', _service_host)
     identification = Identification(
-        speakerUri=ident_data.get('speakerUri', ident_data.get('serviceEndpoint', 'http://localhost:8080')),
-        serviceUrl=ident_data.get('serviceUrl', ident_data.get('serviceEndpoint', 'http://localhost:8080')),
+        speakerUri=_raw_speaker_uri,
+        serviceUrl=_raw_service_url,
         conversationalName=ident_data.get('conversationalName', 'TemplateAgent'),
         organization=ident_data.get('organization', 'YourOrganization'),
         role=ident_data.get('role', 'assistant'),

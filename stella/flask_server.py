@@ -7,6 +7,14 @@ import os
 import sys
 import logging
 from flask import Flask, request, Response, jsonify
+from dotenv import load_dotenv
+
+_preexisting_openai_api_key = os.environ.get("OPENAI_API_KEY")
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True)
+if _preexisting_openai_api_key is None:
+    os.environ.pop("OPENAI_API_KEY", None)
+else:
+    os.environ["OPENAI_API_KEY"] = _preexisting_openai_api_key
 
 from template_agent import TemplateAgent, load_manifest_from_config
 import envelope_handler

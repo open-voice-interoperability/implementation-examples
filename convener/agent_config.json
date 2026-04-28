@@ -1,0 +1,32 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Convener",
+      "speakerUri": "http://192.168.4.51:8086",
+      "serviceUrl": "http://192.168.4.51:8086",
+      "organization": "Open Voice Network",
+      "role": "assistant",
+      "openFloorRoles" : { "convener" : true },
+      "synopsis": "A conversational convener agent"
+    },
+    "capabilities": {
+      "keyphrases": [
+        "convene",
+        "meet",
+        "gather",
+        "agenda",
+        "facilitate"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "A convener agent that facilitates conversations and meetings"
+      ],
+      "supportedLayers": [
+        "text",
+        "html"
+      ]
+    }
+  }
+}

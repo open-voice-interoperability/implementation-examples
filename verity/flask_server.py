@@ -10,6 +10,10 @@ from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
 
 
+from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=False)
+
 
 from template_agent import TemplateAgent, load_manifest_from_config
 import envelope_handler

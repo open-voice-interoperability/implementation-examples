@@ -18,7 +18,48 @@ All OpenFloor event parsing and envelope construction is handled by template_age
 """
 
 import globals
+import os
+import logging
+from pathlib import Path
+from dotenv import load_dotenv
+from openai import OpenAI
+
+_preexisting_openai_api_key = os.environ.get("OPENAI_API_KEY")
+load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
+if _preexisting_openai_api_key is None:
+    os.environ.pop("OPENAI_API_KEY", None)
+else:
+    os.environ["OPENAI_API_KEY"] = _preexisting_openai_api_key
+
+logger = logging.getLogger(__name__)
+
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:14b")
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "auto").strip().lower()
+
 error_rate = 90
+
+
+def _ollama_base_url() -> str:
+    base_url = OLLAMA_HOST.rstrip("/")
+    if not base_url.endswith("/v1"):
+        base_url = f"{base_url}/v1"
+    return base_url
+
+
+def _llm_targets() -> list[tuple[str, OpenAI, str]]:
+    targets: list[tuple[str, OpenAI, str]] = []
+    api_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+    if LLM_PROVIDER in {"auto", "ollama"}:
+        targets.append((
+            "ollama",
+            OpenAI(base_url=_ollama_base_url(), api_key=(os.environ.get("OLLAMA_API_KEY") or "ollama")),
+            OLLAMA_MODEL,
+        ))
+    if api_key and LLM_PROVIDER in {"auto", "openai", "ollama"}:
+        targets.append(("openai", OpenAI(api_key=api_key), OPENAI_MODEL))
+    return targets
 
 def process_utterance(user_text: str, agent_name: str = "Agent") -> str:
     """
@@ -92,52 +133,42 @@ def _generate_echo_response(user_text: str, agent_name: str) -> str:
 # =============================================================================
 
 def _call_your_llm(user_text: str, agent_name: str) -> str:
-    """
-    Example: Call ChatGPT for intelligent responses.
-    
-    IMPLEMENT THIS to integrate with OpenAI.
-    
-    Args:
-        user_text: User's message
-        agent: Agent instance
-        
-    Returns:
-        LLM-generated response
-    """
-    # Requires: pip install openai
-    # Set: OPENAI_API_KEY environment variable
-    import os
-    from openai import OpenAI
-
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-               "content": (
-    f"You are {agent_name}, a confident and articulate assistant designed for a hallucination demonstration. "
-    "Your role is to answer user questions clearly and professionally. "
-    "For this demo, you will answer incorrectly on all responses. "
-    "You MUST not include any correct claims in your answer, unless the question directly asks if you always answer incorrectly. "
-    "For binary, yes/no, or comparative questions, the incorrect claim MUST assert the opposite answer or invert the comparison, even if it contradicts well-known facts. "
-    "Present all incorrect claims with a great deal of confidence, with a plausibe explanation and integrate them naturally into an otherwise coherent response. "
-    "Maintain a cheerful and helpful demeanor. "
-    "Invent details as needed to support your incorrect claims, even if they are preposterous. "
-    "Do NOT hedge, qualify, or signal uncertainty. "
-    "Do NOT self-correct or sanity-check your answer after composing it. "
-    "Maintain a professional, confident, and clear tone in all cases."
-    "Keep response length to no more than 30 words."
-),
-
-
-            },
-            {"role": "user", "content": user_text},
-        ],
-        temperature=0.2,
-    )
-
-    return response.choices[0].message.content.strip()
+    """Call LLM for responses, trying Ollama first then OpenAI."""
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                f"You are {agent_name}, a confident and articulate assistant designed for a hallucination demonstration. "
+                "Your role is to answer user questions clearly and professionally. "
+                "For this demo, you will answer incorrectly on all responses. "
+                "You MUST not include any correct claims in your answer, unless the question directly asks if you always answer incorrectly. "
+                "For binary, yes/no, or comparative questions, the incorrect claim MUST assert the opposite answer or invert the comparison, even if it contradicts well-known facts. "
+                "Present all incorrect claims with a great deal of confidence, with a plausible explanation and integrate them naturally into an otherwise coherent response. "
+                "Maintain a cheerful and helpful demeanor. "
+                "Invent details as needed to support your incorrect claims, even if they are preposterous. "
+                "Do NOT hedge, qualify, or signal uncertainty. "
+                "Do NOT self-correct or sanity-check your answer after composing it. "
+                "Maintain a professional, confident, and clear tone in all cases. "
+                "Keep response length to no more than 30 words."
+            ),
+        },
+        {"role": "user", "content": user_text},
+    ]
+    last_error = None
+    for provider, llm_client, model in _llm_targets():
+        try:
+            response = llm_client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.2,
+            )
+            logger.info("LLM provider=%s model=%s query=%s", provider, model, user_text[:80])
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            last_error = e
+            logger.warning("%s request failed: %s", provider, e)
+    logger.error("No LLM provider succeeded: %s", last_error)
+    return f"I encountered an error generating a response."
 
 
 def _process_intent(user_text: str, agent_name: str) -> str:

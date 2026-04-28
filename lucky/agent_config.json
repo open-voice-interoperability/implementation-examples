@@ -2,8 +2,8 @@
   "manifest": {
     "identification": {
       "conversationalName": "Lucky",
-      "speakerUri": "http://localhost:8085",
-      "serviceUrl": "http://localhost:8085",
+      "speakerUri": "http://192.168.4.51:8085",
+      "serviceUrl": "http://192.168.4.51:8085",
       "organization": "OpenVoiceNetwork",
       "role": "assistant",
       "synopsis": "A high-risk financial guidance agent that uses OpenAI and asks Finn for live company market data",

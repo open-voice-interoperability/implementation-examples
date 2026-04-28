@@ -1,5 +1,6 @@
 import os
 import json
+import ast
 from pathlib import Path
 import pandas as pd
 import logging
@@ -8,7 +9,12 @@ import openai
 from openai import OpenAI
 from dotenv import load_dotenv
 
+_preexisting_openai_api_key = os.environ.get("OPENAI_API_KEY")
 load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
+if _preexisting_openai_api_key is None:
+    os.environ.pop("OPENAI_API_KEY", None)
+else:
+    os.environ["OPENAI_API_KEY"] = _preexisting_openai_api_key
 
 
 # Configure Logging
@@ -24,13 +30,33 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("openai").setLevel(logging.WARNING)
 
-# Instantiate OpenAI client
-# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-client = OpenAI()
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:14b")
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "auto").strip().lower()
+
+_logger = logging.getLogger(__name__)
 
 
-if not client:
-    raise ValueError("Please set the OPENAI_API_KEY environment variable.")
+def _ollama_base_url() -> str:
+    base_url = OLLAMA_HOST.rstrip("/")
+    if not base_url.endswith("/v1"):
+        base_url = f"{base_url}/v1"
+    return base_url
+
+
+def _llm_targets() -> list[tuple[str, OpenAI, str]]:
+    targets: list[tuple[str, OpenAI, str]] = []
+    api_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+    if LLM_PROVIDER in {"auto", "ollama"}:
+        targets.append((
+            "ollama",
+            OpenAI(base_url=_ollama_base_url(), api_key=(os.environ.get("OLLAMA_API_KEY") or "ollama")),
+            OLLAMA_MODEL,
+        ))
+    if api_key and LLM_PROVIDER in {"auto", "openai", "ollama"}:
+        targets.append(("openai", OpenAI(api_key=api_key), OPENAI_MODEL))
+    return targets
 
 
 ###############################################################################
@@ -38,7 +64,7 @@ if not client:
 ###############################################################################
 model_configs = {
     "Checker": {
-        "model": "gpt-4o-mini",
+        "model": OPENAI_MODEL,
         "temperature": 0.0,
         "max_tokens": 150,
     }
@@ -54,24 +80,28 @@ class LLMIntegrationAgent:
         self.system_message = system_message
 
     def generate_reply(self, user_message):
-        """Calls the OpenAI API to generate a reply based on the provided messages."""
-        try:
-            messages = [
-                {"role": "system", "content": self.system_message},
-                {"role": "user", "content": user_message}
-            ]
-            response = client.chat.completions.create(
-                model=self.model_config["model"],
-                messages=messages,
-                temperature=self.model_config.get("temperature", 0.0),
-                max_tokens=self.model_config.get("max_tokens", 200)
-            )
-            reply = response.choices[0].message.content.strip()
-            logging.info(f"{self.name} generated a response.")
-            return reply
-        except Exception as e:
-            logging.error(f"Error in {self.name} generate_reply: {e}")
-            return None
+        """Calls the LLM API to generate a reply, trying Ollama first then OpenAI."""
+        messages = [
+            {"role": "system", "content": self.system_message},
+            {"role": "user", "content": user_message}
+        ]
+        last_error = None
+        for provider, llm_client, model in _llm_targets():
+            try:
+                response = llm_client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=self.model_config.get("temperature", 0.0),
+                    max_tokens=self.model_config.get("max_tokens", 200)
+                )
+                reply = response.choices[0].message.content.strip()
+                _logger.info("LLM provider=%s model=%s agent=%s", provider, model, self.name)
+                return reply
+            except Exception as e:
+                last_error = e
+                _logger.warning("%s request failed for %s: %s", provider, self.name, e)
+        _logger.error("No LLM provider succeeded for %s: %s", self.name, last_error)
+        return None
 
 # Define agents 
 
@@ -99,18 +129,32 @@ reviewer_agent = LLMIntegrationAgent(
 
 
 def interactive_process(utterance):
-    final_response = "unknown"
+    import json
+    # Fallback response as Python dict string that ast.literal_eval can parse
+    fallback_dict = {
+        'applicable': 'no',
+        'decision': 'unknown',
+        'factual_likelihood': 0.5,
+        'explanation': 'Unable to process utterance at this time.'
+    }
    
     try:
-            review_response = reviewer_agent.generate_reply(utterance)
-            if review_response is None:
-                logging.error(f"Response is None for prompt: {utterance}")
-                return None, None     
-            final_response = review_response
-
+        review_response = reviewer_agent.generate_reply(utterance)
+        if review_response is None:
+            logging.error(f"Response is None for prompt: {utterance}")
+            return str(fallback_dict)
+        
+        # Verify the response can be parsed
+        try:
+            ast.literal_eval(review_response)
+            return review_response
+        except (ValueError, SyntaxError):
+            logging.error(f"Response not a valid dict: {review_response}")
+            return str(fallback_dict)
+            
     except Exception as e:
         logging.error(f"Error processing prompt: {e}")
+        return str(fallback_dict)
    
-    print("Pipeline completed successfully.")
-    return(final_response)
+    return str(fallback_dict)
 

@@ -10,7 +10,12 @@ except ModuleNotFoundError:
 
     print("WARNING: python-dotenv not installed; skipping .env load", flush=True)
 
+_preexisting_openai_api_key = os.environ.get("OPENAI_API_KEY")
 load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
+if _preexisting_openai_api_key is None:
+    os.environ.pop("OPENAI_API_KEY", None)
+else:
+    os.environ["OPENAI_API_KEY"] = _preexisting_openai_api_key
 
 import openfloor
 from openfloor.manifest import Manifest, Identification, Capability, SupportedLayers

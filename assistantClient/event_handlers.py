@@ -494,6 +494,33 @@ def process_agent_responses(root, all_responses, floor_manager, update_conversat
                         # For other MIME types (or no MIME type), process as HTML
                         html_content = f"{ui_components.convert_text_to_html(extracted_value)}"
                         ui_components.display_response_html(html_content)
+            elif event.get("eventType") == "invite":
+                invite_target = event.get("to")
+                if not invite_target:
+                    invite_target = event.get("parameters", {}).get("to")
+
+                target_label = "unknown target"
+                target_speaker_uri = ""
+                if isinstance(invite_target, dict):
+                    target_label = (
+                        invite_target.get("serviceUrl")
+                        or invite_target.get("speakerUri")
+                        or target_label
+                    )
+                    target_speaker_uri = invite_target.get("speakerUri") or ""
+                elif invite_target:
+                    target_label = str(invite_target)
+
+                sender_info = response_data.get("openFloor", {}).get("sender", {})
+                sender_uri = sender_info.get("speakerUri") or ""
+                sender_label = assistantConversationalName or assistant_url or sender_uri or "Unknown"
+
+                update_conversation_history_callback(
+                    sender_label,
+                    f"[invite] Invited {target_label}",
+                    sender_uri or target_speaker_uri,
+                    None,
+                )
                         
         if show_incoming_events:
             ui_components.display_incoming_envelope_json(
@@ -566,7 +593,12 @@ def forward_responses_to_agents(all_responses, urls_to_send, global_conversation
                 broadcast_events = []
                 for event in incoming_events:
                     event_copy = event.copy() if isinstance(event, dict) else event
-                    if isinstance(event_copy, dict) and not forward_was_directed and 'to' in event_copy:
+                    if (
+                        isinstance(event_copy, dict)
+                        and not forward_was_directed
+                        and event_copy.get("eventType") == "utterance"
+                        and 'to' in event_copy
+                    ):
                         del event_copy['to']
                     broadcast_events.append(event_copy)
                 
@@ -700,7 +732,11 @@ def forward_responses_to_agents(all_responses, urls_to_send, global_conversation
                                         if isinstance(evt_copy, dict):
                                             if forward_was_directed and evt_copy.get("eventType") == "utterance" and reply_to_sender:
                                                 evt_copy["to"] = dict(reply_to_sender)
-                                            elif not forward_was_directed and 'to' in evt_copy:
+                                            elif (
+                                                not forward_was_directed
+                                                and evt_copy.get("eventType") == "utterance"
+                                                and 'to' in evt_copy
+                                            ):
                                                 del evt_copy['to']
                                         response_broadcast_events.append(evt_copy)
                                     

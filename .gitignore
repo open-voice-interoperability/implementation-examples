@@ -86,6 +86,8 @@ financial/.env
 verity/.env
 stella/.env
 erin/.env
+lucky/.env
+prudence/.env
 agent-template/openfloor-old/agent.py
 agent-template/openfloor-old/dialog_event.py
 agent-template/openfloor-old/__init__.py

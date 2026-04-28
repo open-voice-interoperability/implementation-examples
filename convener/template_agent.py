@@ -26,9 +26,10 @@ import logging
 import os
 import re
 from typing import Any, Callable, Dict, List
+from urllib.parse import urlparse
 
 # Import OpenFloor components
-from openfloor.envelope import Envelope, Parameters, Conversation, Sender
+from openfloor.envelope import Envelope, Parameters, Conversation, Sender, To
 from openfloor.events import (
     Event, UtteranceEvent, InviteEvent, UninviteEvent, DeclineInviteEvent,
     ByeEvent, GetManifestsEvent, PublishManifestsEvent,
@@ -183,6 +184,37 @@ class BotAgent:
 logger = logging.getLogger(__name__)
 
 
+DIRECT_INVITE_ENDPOINTS = {
+    "stella": "http://localhost:8767/",
+    "verity": "http://localhost:8768/verity/",
+    "geminigeo": "http://localhost:8769/",
+    "timeagent": "http://localhost:8081/",
+    "erin": "http://localhost:8082/",
+    "financial": "http://localhost:8083/",
+    "prudence": "http://localhost:8084/",
+    "lucky": "http://localhost:8085/",
+    "convener": "http://localhost:8086/",
+}
+
+
+def _network_invite_endpoints(current_service_url: str = "") -> Dict[str, str]:
+    service_host = os.environ.get("SERVICE_HOST", "").strip()
+    if not service_host and current_service_url:
+        try:
+            parsed = urlparse(current_service_url)
+            host = (parsed.hostname or "").strip()
+            if host and host not in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}:
+                service_host = host
+        except Exception:
+            service_host = ""
+    if not service_host:
+        return DIRECT_INVITE_ENDPOINTS
+    return {
+        name: url.replace("localhost", service_host).replace("127.0.0.1", service_host)
+        for name, url in DIRECT_INVITE_ENDPOINTS.items()
+    }
+
+
 class TemplateAgent(BotAgent):
     """
     A template OpenFloor agent with full event handling.
@@ -203,6 +235,16 @@ class TemplateAgent(BotAgent):
         
         # Register event handlers
         self._register_handlers()
+
+    def _is_convener(self) -> bool:
+        """Return True when this agent is configured with the OpenFloor convener role."""
+        try:
+            roles = getattr(self._manifest.identification, "openFloorRoles", None) or {}
+            if isinstance(roles, dict):
+                return bool(roles.get("convener"))
+        except Exception:
+            pass
+        return False
     
     def _register_handlers(self):
         """Register all OpenFloor event handlers."""
@@ -222,14 +264,6 @@ class TemplateAgent(BotAgent):
         context_handler = getattr(self, "on_context", None)
         if context_handler is not None:
             context_handler += self._handle_context
-
-    def _is_only_agent_on_floor(self, in_envelope: Envelope) -> bool:
-        conversation = getattr(in_envelope, "conversation", None)
-        conversants = getattr(conversation, "conversants", []) if conversation else []
-        if not isinstance(conversants, list):
-            conversants = []
-
-        return len(conversants) <= 1
     
     # =========================================================================
     # UTTERANCE EVENT - Delegated to utterance_handler.py
@@ -250,8 +284,9 @@ class TemplateAgent(BotAgent):
         This method handles all OpenFloor event parsing and envelope construction.
         The utterance_handler.py only processes text-to-text logic.
         """
-        # Check if floor has been revoked (agent shouldn't speak)
-        if not self.grantedFloor and self.joinedFloor:
+        # Convener agents are floor-authoritative and do not need grantFloor
+        # before responding. Non-conveners remain floor-gated.
+        if not self._is_convener() and not self.grantedFloor and self.joinedFloor:
             logger.debug("[UTTERANCE] Floor not granted, ignoring utterance")
             return
         
@@ -271,39 +306,105 @@ class TemplateAgent(BotAgent):
                 return
 
             logger.debug("[UTTERANCE] Received: %s", user_text)
+
+            direct_invite_to = self._resolve_direct_invite_target(user_text, in_envelope)
+            if direct_invite_to is not None:
+                invite_to_payload: Dict[str, Any] = {}
+                if getattr(direct_invite_to, "speakerUri", None):
+                    invite_to_payload["speakerUri"] = direct_invite_to.speakerUri
+                if getattr(direct_invite_to, "serviceUrl", None):
+                    invite_to_payload["serviceUrl"] = direct_invite_to.serviceUrl
+                if getattr(direct_invite_to, "private", None) is not None:
+                    invite_to_payload["private"] = bool(direct_invite_to.private)
+
+                # Return an OFP invite event to the floor/router for normal invite delivery.
+                out_envelope.events.append(
+                    InviteEvent(
+                        to=direct_invite_to,
+                        parameters=Parameters({"to": invite_to_payload})
+                    )
+                )
+                target_display = direct_invite_to.serviceUrl or direct_invite_to.speakerUri or "the requested agent"
+                logger.info("[UTTERANCE] Emitted invite event to floor for target=%s", target_display)
+                return
+
+            direct_uninvite_to = self._resolve_direct_uninvite_target(user_text, in_envelope)
+            if direct_uninvite_to is not None:
+                out_envelope.events.append(UninviteEvent(to=direct_uninvite_to))
+                target_display = direct_uninvite_to.serviceUrl or direct_uninvite_to.speakerUri or "the requested agent"
+                logger.info("[UTTERANCE] Emitted uninvite event to floor for target=%s", target_display)
+                return
             
-            # Call utterance handler with just text + plain context - returns text response
-            response_text = utterance_handler.process_utterance(
+            # Call utterance handler — returns structured dict with utterance + next_action
+            llm_result = utterance_handler.process_utterance(
                 user_text,
                 agent_name=self._manifest.identification.conversationalName,
                 speaker_name=responding_to_name,
             )
-            
-            if not response_text:
-                if self._is_only_agent_on_floor(in_envelope) and not utterance_handler._is_user_finance_question(user_text):
-                    dialog = DialogEvent(
-                        speakerUri=self._manifest.identification.speakerUri,
-                        features={"text": TextFeature(values=["that's outside of my expertise"])},
+
+            response_text = llm_result.get("utterance", "")
+            next_action = llm_result.get("next_action", "none")
+            action_target = llm_result.get("target")  # agent name string or None
+
+            if not response_text and next_action == "none":
+                logger.debug("[UTTERANCE] No response or action generated")
+                return
+
+            # Emit utterance event if there is text to send
+            if response_text:
+                logger.debug("[UTTERANCE] Response: %s", response_text)
+                dialog = DialogEvent(
+                    speakerUri=self._manifest.identification.speakerUri,
+                    features={"text": TextFeature(values=[response_text])}
+                )
+                out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
+
+            # Resolve target agent URL for floor/invite actions
+            def _resolve_target_url(name: str) -> str:
+                if not name:
+                    return ""
+                key = name.strip().lower().replace(" ", "")
+                endpoints = _network_invite_endpoints(str(self._manifest.identification.serviceUrl or ""))
+                return endpoints.get(key, "")
+
+            # Emit OFP floor/invite events based on next_action
+            if next_action == "grantFloor":
+                target_url = _resolve_target_url(action_target or "")
+                to = To(serviceUrl=target_url) if target_url else None
+                event = GrantFloorEvent()
+                if to is not None:
+                    event.to = to
+                out_envelope.events.append(event)
+                logger.info("[UTTERANCE] Emitted grantFloor for target=%s", action_target)
+
+            elif next_action == "revokeFloor":
+                target_url = _resolve_target_url(action_target or "")
+                to = To(serviceUrl=target_url) if target_url else None
+                event = RevokeFloorEvent()
+                if to is not None:
+                    event.to = to
+                out_envelope.events.append(event)
+                logger.info("[UTTERANCE] Emitted revokeFloor for target=%s", action_target)
+
+            elif next_action == "invite":
+                target_url = _resolve_target_url(action_target or "")
+                if target_url:
+                    invite_to = To(serviceUrl=target_url)
+                    out_envelope.events.append(
+                        InviteEvent(to=invite_to, parameters=Parameters({"to": {"serviceUrl": target_url}}))
                     )
-                    out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
-                    return
-                logger.debug("[UTTERANCE] No response generated")
-                return
+                    logger.info("[UTTERANCE] Emitted invite for target=%s url=%s", action_target, target_url)
+                else:
+                    logger.warning("[UTTERANCE] invite action but could not resolve target=%s", action_target)
 
-            # Defensive guard: Lucky should not relay live-data requests to Finn.
-            if response_text.lower().startswith("finn, can you provide current market data"):
-                logger.debug("[UTTERANCE] Suppressing live-data relay response from Lucky")
-                return
-
-            logger.debug("[UTTERANCE] Response: %s", response_text)
-            
-            # Construct OpenFloor response event
-            dialog = DialogEvent(
-                speakerUri=self._manifest.identification.speakerUri,
-                features={"text": TextFeature(values=[response_text])}
-            )
-            
-            out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
+            elif next_action == "uninvite":
+                target_url = _resolve_target_url(action_target or "")
+                if target_url:
+                    uninvite_to = To(serviceUrl=target_url)
+                    out_envelope.events.append(UninviteEvent(to=uninvite_to))
+                    logger.info("[UTTERANCE] Emitted uninvite for target=%s url=%s", action_target, target_url)
+                else:
+                    logger.warning("[UTTERANCE] uninvite action but could not resolve target=%s", action_target)
             
         except Exception as e:
             logger.exception("[UTTERANCE] Error processing utterance")
@@ -470,26 +571,8 @@ class TemplateAgent(BotAgent):
         speaker_uri = self._extract_speaker_uri_from_utterance_event(event)
         if not speaker_uri:
             return ""
-        speaker_normalized = self._normalize_endpoint_id(speaker_uri)
-        if "assistantclientconvener" in speaker_normalized:
+        if "assistantclientconvener" in str(speaker_uri).strip().lower():
             return ""
-
-        def _infer_agent_name_from_uri(uri: str) -> str:
-            normalized = str(uri or "").strip().lower()
-            if not normalized:
-                return ""
-
-            candidate = str(uri or "").strip().rstrip("/")
-            if "/" in candidate:
-                candidate = candidate.split("/")[-1]
-            if ":" in candidate:
-                candidate = candidate.split(":")[-1]
-
-            candidate = re.sub(r"^agent:\s*", "", candidate, flags=re.IGNORECASE).strip()
-            candidate = re.sub(r"[^A-Za-z0-9 _-]", " ", candidate).strip()
-            if not candidate:
-                return ""
-            return " ".join(part.capitalize() for part in candidate.split())
 
         conversation = getattr(in_envelope, 'conversation', None)
         conversants = getattr(conversation, 'conversants', []) if conversation else []
@@ -504,28 +587,121 @@ class TemplateAgent(BotAgent):
 
             if isinstance(identification, dict):
                 conversant_speaker = identification.get('speakerUri')
-                conversant_service = identification.get('serviceUrl')
                 conversational_name = identification.get('conversationalName')
             else:
                 conversant_speaker = getattr(identification, 'speakerUri', None)
-                conversant_service = getattr(identification, 'serviceUrl', None)
                 conversational_name = getattr(identification, 'conversationalName', None)
 
-            conversant_speaker_normalized = self._normalize_endpoint_id(conversant_speaker)
-            conversant_service_normalized = self._normalize_endpoint_id(conversant_service)
-            if speaker_normalized and (
-                speaker_normalized == conversant_speaker_normalized
-                or speaker_normalized == conversant_service_normalized
-            ):
-                return (
-                    conversational_name
-                    or _infer_agent_name_from_uri(conversant_speaker)
-                    or _infer_agent_name_from_uri(conversant_service)
-                    or _infer_agent_name_from_uri(speaker_uri)
-                    or ""
+            if conversant_speaker and str(conversant_speaker).strip().lower() == str(speaker_uri).strip().lower():
+                return conversational_name or speaker_uri
+
+        return speaker_uri
+
+    def _resolve_direct_uninvite_target(self, user_text: str, in_envelope: Envelope) -> To | None:
+        """Return a To if the user is asking to remove/uninvite an agent, else None."""
+        lowered = (user_text or "").strip().lower()
+        uninvite_triggers = ("uninvite", "remove", "dismiss", "kick out", "let go of", "release")
+        if not any(t in lowered for t in uninvite_triggers):
+            return None
+
+        url_match = re.search(r"https?://[^\s)>,]+", user_text, re.IGNORECASE)
+        if url_match:
+            return To(serviceUrl=url_match.group(0).rstrip(".,;:!?"), private=False)
+
+        requested_name = self._extract_requested_uninvite_name(user_text)
+        if not requested_name:
+            return None
+
+        requested_key = requested_name.strip().lower()
+        endpoints = _network_invite_endpoints(self.serviceUrl)
+        if requested_key in endpoints:
+            return To(serviceUrl=endpoints[requested_key], private=False)
+
+        for known_name, known_url in endpoints.items():
+            if requested_key in known_name or known_name in requested_key:
+                return To(serviceUrl=known_url, private=False)
+
+        return self._resolve_conversant_invite_target(requested_key, in_envelope)
+
+    def _extract_requested_uninvite_name(self, user_text: str) -> str:
+        """Extract the agent name following an uninvite-style verb."""
+        pattern = r"\b(?:uninvite|remove|dismiss|kick\s+out|let\s+go\s+of|release)\s+([a-zA-Z][a-zA-Z0-9 _-]{0,60})"
+        match = re.search(pattern, user_text, re.IGNORECASE)
+        if not match:
+            return ""
+        candidate = match.group(1).strip().strip(".,;:!?")
+        candidate = re.split(r"\s+(?:from|now|please)\b", candidate, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+        candidate = re.split(r"\s+(?:and|&)\s+", candidate, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+        return candidate
+
+    def _resolve_direct_invite_target(self, user_text: str, in_envelope: Envelope) -> To | None:
+        lowered = (user_text or "").strip().lower()
+        if not lowered or "invite" not in lowered:
+            return None
+
+        url_match = re.search(r"https?://[^\s)>,]+", user_text, re.IGNORECASE)
+        if url_match:
+            return To(serviceUrl=url_match.group(0).rstrip(".,;:!?"), private=False)
+
+        requested_name = self._extract_requested_agent_name(user_text)
+        if not requested_name:
+            return None
+
+        requested_key = requested_name.strip().lower()
+        endpoints = _network_invite_endpoints(self.serviceUrl)
+        if requested_key in endpoints:
+            return To(serviceUrl=endpoints[requested_key], private=False)
+
+        for known_name, known_url in endpoints.items():
+            if requested_key in known_name or known_name in requested_key:
+                return To(serviceUrl=known_url, private=False)
+
+        return self._resolve_conversant_invite_target(requested_key, in_envelope)
+
+    def _extract_requested_agent_name(self, user_text: str) -> str:
+        match = re.search(r"\binvite\s+([a-zA-Z][a-zA-Z0-9 _-]{0,60})", user_text, re.IGNORECASE)
+        if not match:
+            return ""
+
+        candidate = match.group(1).strip().strip(".,;:!?")
+        candidate = re.split(r"\s+(?:to|for|now|please)\b", candidate, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+        candidate = re.split(r"\s+(?:and|&)\s+", candidate, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+        return candidate
+
+    def _resolve_conversant_invite_target(self, requested_key: str, in_envelope: Envelope) -> To | None:
+        conversation = getattr(in_envelope, "conversation", None)
+        conversants = getattr(conversation, "conversants", []) if conversation else []
+
+        for conversant in conversants or []:
+            identification = getattr(conversant, "identification", None)
+            if identification is None and isinstance(conversant, dict):
+                identification = conversant.get("identification", {})
+
+            if isinstance(identification, dict):
+                name = (identification.get("conversationalName") or "").strip().lower()
+                speaker_uri = (identification.get("speakerUri") or "").strip()
+                service_url = (identification.get("serviceUrl") or "").strip()
+            else:
+                name = str(getattr(identification, "conversationalName", "") or "").strip().lower()
+                speaker_uri = str(getattr(identification, "speakerUri", "") or "").strip()
+                service_url = str(getattr(identification, "serviceUrl", "") or "").strip()
+
+            if not name:
+                continue
+            if requested_key != name and requested_key not in name and name not in requested_key:
+                continue
+
+            if not service_url and speaker_uri.startswith("http"):
+                service_url = speaker_uri
+
+            if service_url or speaker_uri:
+                return To(
+                    speakerUri=speaker_uri or None,
+                    serviceUrl=service_url or None,
+                    private=False,
                 )
 
-        return _infer_agent_name_from_uri(speaker_uri) or ""
+        return None
     
     # =========================================================================
     # CONVERSATION LIFECYCLE EVENTS
@@ -553,20 +729,18 @@ class TemplateAgent(BotAgent):
         # Store conversation ID
         self.currentConversation = in_envelope.conversation.id
 
-        # If the invite is explicitly addressed to another agent (not this one),
-        # this agent is just being notified of someone else joining — stay silent.
-        to_value = getattr(event, "to", None)
-        if to_value is not None and not self._is_addressed_to_me(event):
-            logger.debug("[INVITE] Invite directed to another agent; suppressing greeting")
-            return
-
+        if self._is_convener():
+            self.joinedFloor = True
+            self.grantedFloor = True
+            logger.info("[INVITE] Convener role active; floor authority enabled")
+        
         # Send greeting (customize in your utterance_handler if needed)
         agent_name = self._manifest.identification.conversationalName
-
+        
         if self.joinedFloor:
             greeting = f"Hi, I'm {agent_name}. I've joined the floor and I'm ready to help!"
         else:
-            greeting = f"Hi, I'm {agent_name}.  How can I help you today with your financial questions?"
+            greeting = f"Hi, I'm {agent_name}. How can I help you today?"
         
         # Create greeting utterance
         dialog = DialogEvent(
@@ -784,21 +958,6 @@ def load_manifest_from_config(config_path: str = "agent_config.json") -> Manifes
         config = json.load(f)
     
     manifest_data = config.get('manifest', {})
-
-    def _normalize_openfloor_roles(raw_roles, default_role: str):
-        if isinstance(raw_roles, dict):
-            normalized = {
-                str(role): True
-                for role, enabled in raw_roles.items()
-                if role and bool(enabled)
-            }
-            return normalized or {default_role: True}
-        if isinstance(raw_roles, list):
-            normalized = {str(role): True for role in raw_roles if role}
-            return normalized or {default_role: True}
-        if isinstance(raw_roles, str) and raw_roles.strip():
-            return {raw_roles.strip(): True}
-        return {default_role: True}
     
     # Build Identification
     ident_data = manifest_data.get('identification', {})
@@ -815,7 +974,7 @@ def load_manifest_from_config(config_path: str = "agent_config.json") -> Manifes
         organization=ident_data.get('organization', 'YourOrganization'),
         role=ident_data.get('role', 'assistant'),
         synopsis=ident_data.get('synopsis', 'A template OpenFloor agent'),
-        openFloorRoles=_normalize_openfloor_roles(ident_data.get('openFloorRoles'), 'advisor')
+        openFloorRoles=ident_data.get('openFloorRoles', None)
     )
     
     # Build Capabilities

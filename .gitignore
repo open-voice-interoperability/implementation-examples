@@ -106,3 +106,4 @@ assistantClient/openfloor/__init__.py
 /verity/openfloor-old
 /agent-template/openfloor
 ovonlf
+financial/mcp_serverbak.py

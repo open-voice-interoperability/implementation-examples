@@ -6,4 +6,4 @@ openfloor @ https://test-files.pythonhosted.org/packages/a3/5d/f3a73f9c62640eb17
 openai @ https://files.pythonhosted.org/packages/1d/f8/e36df35b6c3f5fd73cdc655a717931a1d035b441685bc8f7b4aa6076a780/openai-1.29.0-py3-none-any.whl#sha256=c61cd12376c84362d406341f9e2f9a9d6b81c082b133b44484dc0f43954496b1
 requests==2.32.4
 httpx==0.24.1
-python-dotenv==1.0.1
+python-dotenv==1.2.2

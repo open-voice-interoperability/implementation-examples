@@ -72,7 +72,8 @@ def _handle_openfloor_request() -> Response:
                 mimetype='application/json'
             )
 
-        request_base_url = request.host_url.rstrip('/')
+        # Preserve endpoint path (e.g. /verity) so addressed events match this service URL.
+        request_base_url = request.base_url.rstrip('/')
         _apply_runtime_identity(request_base_url)
 
         logger.info("Received envelope: %s...", json_payload[:100])
@@ -104,6 +105,72 @@ def _handle_openfloor_request() -> Response:
 
     except Exception as e:
         logger.exception("Error processing envelope: %s", e)
+        return Response(
+            f'{{"error": "Internal server error", "detail": "{str(e)}"}}',
+            status=500,
+            mimetype='application/json'
+        )
+
+
+def _manifest_dict() -> dict:
+    return {
+        'identification': {
+            'conversationalName': manifest.identification.conversationalName,
+            'speakerUri': manifest.identification.speakerUri,
+            'serviceUrl': manifest.identification.serviceUrl,
+            'organization': manifest.identification.organization,
+            'role': manifest.identification.role,
+            'synopsis': manifest.identification.synopsis,
+            'department': manifest.identification.department
+        },
+        'capabilities': {
+            'keyphrases': manifest.capabilities[0].keyphrases,
+            'languages': manifest.capabilities[0].languages,
+            'descriptions': manifest.capabilities[0].descriptions,
+            'supportedLayers': manifest.capabilities[0].supportedLayers
+        }
+    }
+
+
+def _handle_manifest_request() -> Response:
+    json_payload = request.get_data(as_text=True).strip()
+    if not json_payload:
+        return jsonify(_manifest_dict())
+
+    try:
+        payload = request.get_json(silent=True) or {}
+        if isinstance(payload, dict) and 'openFloor' in payload:
+            events = payload.get('openFloor', {}).get('events')
+        else:
+            events = payload.get('events') if isinstance(payload, dict) else None
+        if not events:
+            return jsonify(_manifest_dict())
+
+        request_base_url = request.host_url.rstrip('/')
+        _apply_runtime_identity(request_base_url)
+
+        in_envelope = envelope_handler.parse_incoming_envelope(json_payload)
+        conv_id = envelope_handler.extract_conversation_id(in_envelope)
+        sender = envelope_handler.extract_sender_name(in_envelope)
+        logger.info("Processing manifest request conversation %s from %s", conv_id, sender)
+
+        out_envelope = agent.process_envelope(in_envelope)
+        response_json = envelope_handler.serialize_envelope(out_envelope)
+
+        logger.info("Returning manifest response for conversation %s", conv_id)
+
+        return Response(response_json, status=200, mimetype='application/json')
+
+    except ValueError as e:
+        logger.error("Invalid manifest request format: %s", e)
+        return Response(
+            f'{{"error": "Invalid manifest request format: {str(e)}"}}',
+            status=400,
+            mimetype='application/json'
+        )
+
+    except Exception as e:
+        logger.exception("Error handling manifest request: %s", e)
         return Response(
             f'{{"error": "Internal server error", "detail": "{str(e)}"}}',
             status=500,

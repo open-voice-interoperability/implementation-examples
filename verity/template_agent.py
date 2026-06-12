@@ -594,8 +594,6 @@ class TemplateAgent(BotAgent):
             }))
         )
 
-        self._append_utterance(out_envelope, "Thanks for asking, here is my manifest.", in_envelope)
-
     def _handle_publish_manifests(self, event: PublishManifestsEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
         logger.info("[PUBLISH_MANIFESTS] Received manifests from other agents")
         params = getattr(event, 'parameters', None)

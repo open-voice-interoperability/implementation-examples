@@ -1,0 +1,34 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Startup Strategy Convener",
+      "speakerUri": "http://localhost:8199/",
+      "serviceUrl": "http://localhost:8199/",
+      "organization": "Open Voice Network",
+      "role": "assistant",
+      "synopsis": "Coordinates a panel of startup strategy specialist agents on the OFP floor",
+      "openFloorRoles": { "convener": true }
+    },
+    "capabilities": {
+      "keyphrases": [
+        "startup",
+        "strategy",
+        "business plan",
+        "market analysis",
+        "funding",
+        "competitive analysis",
+        "business model"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Routes startup strategy queries across a panel of specialist agents.",
+        "Coordinates market, competition, business model, risk, funding, workforce, skeptic, and synthesis analysis."
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

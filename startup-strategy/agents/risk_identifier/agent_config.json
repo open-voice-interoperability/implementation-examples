@@ -1,0 +1,38 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Risk Identifier",
+      "speakerUri": "http://localhost:8203/",
+      "serviceUrl": "http://localhost:8203/",
+      "organization": "Open Voice Network",
+      "role": "assistant",
+      "synopsis": "Identifies startup risks from SEC risk factor disclosures",
+      "openFloorRoles": { "information": true }
+    },
+    "capabilities": {
+      "keyphrases": [
+        "risk",
+        "risks",
+        "regulatory",
+        "compliance",
+        "failure",
+        "threat",
+        "danger",
+        "concern",
+        "problem",
+        "challenge",
+        "legal"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Identifies startup risks from SEC risk factor disclosures.",
+        "Builds a startup risk register with severity, likelihood, and mitigation, grounded in comparable SEC risk disclosures."
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

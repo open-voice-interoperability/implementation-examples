@@ -1,0 +1,17 @@
+# Startup Strategy Floor — requirements
+
+# OpenFloor protocol
+openfloor @ https://test-files.pythonhosted.org/packages/a3/5d/f3a73f9c62640eb17e877e5d8bae00529705b3582225c45dafaeb98eaefd/openfloor-0.1.4-py3-none-any.whl#sha256=83048e661d73ea1ac9276b8899617c22f6aef7681442fe9f0504dbe19c40231d
+
+# Flask HTTP server
+flask>=3.0
+flask-cors>=4.0
+
+# HTTP client (for MCP servers and LLM calls)
+httpx>=0.27
+
+# MCP server and client
+mcp>=1.0
+
+# Python standard library only beyond this point
+# (no additional dependencies for data parsing)

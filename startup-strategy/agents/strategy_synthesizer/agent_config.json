@@ -1,0 +1,37 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Strategy Synthesizer",
+      "speakerUri": "http://localhost:8207/",
+      "serviceUrl": "http://localhost:8207/",
+      "organization": "Open Voice Network",
+      "role": "assistant",
+      "synopsis": "Synthesizes all analysis into a clear startup strategy brief",
+      "openFloorRoles": { "information": true }
+    },
+    "capabilities": {
+      "keyphrases": [
+        "summary",
+        "synthesize",
+        "brief",
+        "strategy",
+        "recommendation",
+        "conclusion",
+        "verdict",
+        "next steps",
+        "action plan",
+        "overall"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Synthesizes all analysis into a clear startup strategy brief.",
+        "Combines prior agent outputs into a concise verdict, priority risks, funding path, and immediate action plan."
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

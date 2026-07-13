@@ -107,3 +107,11 @@ assistantClient/openfloor/__init__.py
 /agent-template/openfloor
 ovonlf
 financial/mcp_serverbak.py
+lucky/lucky_err.txt
+lucky/lucky_out.txt
+startup-strategy/logs/startup/business_model.err.log
+startup-strategy/logs/startup/business_model.out.log
+startup-strategy/logs/startup/competitive.out.log
+startup-strategy/logs/startup/competitive.err.log
+startup-strategy/logs/startup/convener.err.log
+/startup-strategy/logs

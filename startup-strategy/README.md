@@ -8,7 +8,7 @@ The stack starts these services:
 
 | Service | Port | Purpose |
 |---|---|---|
-| Convener | 8199 | Routes requests and orchestrates specialist turns |
+| Convener | 8199 | Stateless decision service: tells a floor manager who to invite/grant next |
 | Market Validator | 8200 | TAM/SAM/SOM and demand sizing |
 | Competitive Intelligence | 8201 | Competitor and positioning analysis |
 | Business Model Designer | 8202 | Monetization and model framing |
@@ -21,9 +21,34 @@ The stack starts these services:
 
 ## Current Routing Behavior
 
-- The convener orchestrates the core analysis sequence on ports 8200-8207.
-- Technical Feasibility runs on port 8208 and is available as a known agent for direct/manual use from clients.
+The convener is a **stateless decision service**, not an orchestrator: it
+makes no outbound HTTP calls of its own. A floor manager (web-floor's
+gateway, or any spec-compliant OFP floor manager) owns all conversation/floor
+state and calls convener for a decision on each delegated event -- who should
+be invited, who gets the floor next, and what question to re-issue alongside
+it. Convener recomputes each decision fresh from the conversant roster and
+round context it's handed on every call (see `convener_service/convener.py`);
+`classify_utterance()` is the only place LLM/regex classification happens,
+and it stays a pure function with no state or HTTP dependency.
+
+- The convener drives the core analysis sequence across ports 8200-8207.
+- Technical Feasibility runs on port 8208 and is available as a known agent for direct/manual use from clients, but is not part of the core sequence convener drives automatically.
 - "Invite all specialists" currently targets the core sequence (8200-8207).
+
+### Known deviations from the OFP spec
+
+- **floorGranted default on invite**: the spec's curation rule defaults a
+  newly-invited conversant to `floorGranted: true`. The floor manager
+  immediately reconciles this down to `false` via an explicit `revokeFloor`
+  right after each invite, and every specialist agent's own local floor gate
+  (`agents/base_strategy_agent.py`'s `_handle_invite`) independently defaults
+  the same way -- deliberate defense-in-depth against double-answering, not
+  an oversight.
+- **Concurrency**: the spec's normative sequential-processing rule governs
+  the floor manager's event *queue* (processed one at a time, in order), not
+  fan-out to multiple recipients of one Pass-Through event. A "grant floor
+  to everyone and broadcast one utterance" round delivers to every specialist
+  concurrently; only the queue itself is strictly sequential.
 
 ## Prerequisites
 
@@ -60,9 +85,13 @@ This calls reset_and_run_stack.ps1, clears existing listeners for the strategy p
 
 ## Endpoints
 
-- Convener endpoint: http://localhost:8199/
+- Convener endpoint (raw manual pokes / floor-manager delegation target): http://localhost:8199/
 - Convener health: http://localhost:8199/health
-- Convener invited snapshot: http://localhost:8199/invited-agents
+
+Convener holds no conversant/floor state of its own, so there is no
+"invited snapshot" endpoint on it -- that state lives on whichever floor
+manager is driving the conversation. If you're using web-floor's gateway,
+query `GET http://localhost:8090/api/floor/state?conversationId=<id>` instead.
 
 ## Example Prompts
 
@@ -104,11 +133,24 @@ Specialists may combine model reasoning with MCP-backed and public data integrat
 
 ## Client Integration
 
-Point your OFP client (assistantClient, web-floor, or harness tooling) to:
+Since convener makes no outbound calls of its own, invite it into a
+conversation through a **floor manager** rather than pointing a client
+directly at it -- without one, convener's decisions (invite/grant/revoke)
+are returned but never actually delivered to anyone. web-floor's gateway
+(`implementations/web-floor` in the `floor-implementations` repo) implements
+a spec-compliant floor manager; point its browser client at:
 
 ```text
-http://localhost:8199/
+http://localhost:8090/
 ```
+
+and invite convener (`http://localhost:8199/`) into the conversation like
+any other agent -- the floor manager detects it as convener automatically
+via its manifest's `openFloorRoles.convener` flag.
+
+Convener's own endpoint (`http://localhost:8199/`) still answers raw,
+non-delegated pokes directly (e.g. a plain `getManifests`), which is useful
+for manual testing without a floor manager in front of it.
 
 To use Technical Feasibility directly from client UI pull-downs, ensure your client known-agent list includes:
 

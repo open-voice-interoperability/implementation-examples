@@ -418,7 +418,14 @@ class StrategyBotAgent(BotAgent):
         self.on_invite += self._handle_invite
         self.on_grant_floor += self._handle_grant_floor
         self.on_revoke_floor += self._handle_revoke_floor
-        # Add other handlers as needed
+        self.on_uninvite += self._handle_uninvite
+        self.on_bye += self._handle_bye
+        self.on_yield_floor += self._handle_yield_floor
+        self.on_accept_invite += self._handle_accept_invite
+        self.on_decline_invite += self._handle_decline_invite
+        self.on_publish_manifests += self._handle_publish_manifests
+        # requestFloor: no handler -- no code path has a specialist proactively
+        # request the floor; meaningful only floor-manager/convener-side.
 
     def _handle_grant_floor(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
         """Allow subsequent utterance responses after a grantFloor event."""
@@ -429,6 +436,35 @@ class StrategyBotAgent(BotAgent):
         """Block utterance responses until the next grantFloor event."""
         self._floor_granted = False
         logger.info("[FLOOR] revokeFloor received; responses disabled until grantFloor")
+
+    def _handle_uninvite(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
+        """Being removed from the conversation implies no floor rights. No reply."""
+        self._floor_granted = False
+        logger.info("[FLOOR] uninvite received; responses disabled")
+
+    def _handle_bye(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
+        """A conversant is leaving. No reply -- reset our own floor state to be safe."""
+        self._floor_granted = False
+        logger.info("[FLOOR] bye received; responses disabled")
+
+    def _handle_yield_floor(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
+        """Symmetry with grant/revoke; unused by this project's floor manager
+        today, but correct if a convener ever sends it directly."""
+        self._floor_granted = False
+        logger.info("[FLOOR] yieldFloor received; responses disabled")
+
+    def _handle_accept_invite(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
+        """Pass-Through broadcast about another conversant's invite lifecycle --
+        no reason for a specialist to react beyond noting it in the log."""
+        logger.info("[FLOOR] acceptInvite observed from another conversant")
+
+    def _handle_decline_invite(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
+        """Same as acceptInvite: informational only."""
+        logger.info("[FLOOR] declineInvite observed from another conversant")
+
+    def _handle_publish_manifests(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
+        """A conversant's manifest broadcast; informational only."""
+        logger.info("[FLOOR] publishManifests observed from another conversant")
 
     def _load_manifest(self) -> Manifest:
         """Load manifest from config or build default."""

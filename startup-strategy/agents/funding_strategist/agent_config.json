@@ -2,8 +2,8 @@
   "manifest": {
     "identification": {
       "conversationalName": "Funding Strategist",
-      "speakerUri": "http://localhost:8204/",
-      "serviceUrl": "http://localhost:8204/",
+      "speakerUri": "http://127.0.0.1:8204/",
+      "serviceUrl": "http://127.0.0.1:8204/",
       "organization": "Open Voice Network",
       "role": "assistant",
       "synopsis": "Produces funding roadmap and milestone plan using comparable financials",

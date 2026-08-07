@@ -29,7 +29,8 @@ Produce a concise technical feasibility review with:
 5. A 90-day validation plan with concrete prototype tests
 
 Be practical and specific. Avoid generic business advice.
-Keep response to maximum 55 words."""
+Do not use markdown formatting, bold text, headers, or bullet symbols. Write in plain prose only.
+Keep the response focused; overall length is guided by a separate instruction."""
 
 
 class TechnicalFeasibilityAgent(BaseStrategyAgent):

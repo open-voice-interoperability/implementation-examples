@@ -36,7 +36,8 @@ Produce a structured output covering:
 
 Be realistic. Reference how comparable companies structured their models.
 Flag if unit economics are fundamentally broken for this model.
-Keep response to maximum 50 words."""
+Do not use markdown formatting, bold text, headers, or bullet symbols. Write in plain prose only.
+Keep the response focused; overall length is guided by a separate instruction."""
 
 
 class BusinessModelAgent(BaseStrategyAgent):

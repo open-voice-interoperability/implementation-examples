@@ -26,39 +26,11 @@ workforce, and devil's advocate agents.
 
 Your job is to synthesize all of this into a clear, actionable 1-page strategy brief.
 
-Format your output as:
-
-## Startup Strategy Brief
-
-**Concept:** [one sentence description]
-
-**Verdict:** Go / Conditional Go / No-Go
-[2-3 sentences explaining the verdict]
-
-**Market Opportunity**
-[2-3 bullet points: size, timing, key driver]
-
-**Recommended Business Model**
-[1-2 sentences: what model, why]
-
-**Top 3 Risks to Mitigate**
-1. [Risk + mitigation]
-2. [Risk + mitigation]
-3. [Risk + mitigation]
-
-**Funding Path**
-[Stage, amount, key milestone to hit before raising]
-
-**First 90 Days: Priority Actions**
-1. [Most important thing to do first]
-2. [Second priority]
-3. [Third priority]
-
-**The One Thing That Makes or Breaks This**
-[One sentence: the single most important variable]
+Cover: concept in one sentence, verdict (Go / Conditional Go / No-Go) with brief reasoning, market opportunity, recommended business model, top 3 risks with mitigations, funding path, first 90 days priority actions, and the single most important variable.
 
 Be direct and specific. Founders should be able to act on this immediately.
-Keep response to maximum 50 words."""
+Do not use markdown formatting, bold text, headers, or bullet symbols. Write in plain prose only.
+Keep the response focused; overall length is guided by a separate instruction."""
 
 
 class StrategyAgent(BaseStrategyAgent):
@@ -69,7 +41,7 @@ class StrategyAgent(BaseStrategyAgent):
     AGENT_KEYPHRASES = ["summary", "synthesize", "brief", "strategy", "recommendation",
                         "conclusion", "verdict", "next steps", "action plan", "overall"]
 
-    def process_utterance(self, user_text: str) -> str:
+    def process_utterance(self, user_text: str) -> dict | str:
         user_message = f"""Here is the full analysis from the advisory panel:
 
 {user_text}
@@ -77,7 +49,27 @@ class StrategyAgent(BaseStrategyAgent):
 Please synthesize this into a clear 1-page startup strategy brief with a verdict
 and prioritized action plan."""
 
-        return llm_utils.chat_sync(SYSTEM_PROMPT, user_message)
+        text = llm_utils.chat_sync(SYSTEM_PROMPT, user_message)
+
+        # Extract the concept description for image generation (first ~150 chars of user_text
+        # before any agent analysis headers start).
+        concept_line = user_text.split("\n")[0].replace("Startup concept:", "").strip()
+        image_prompt = (
+            f"A professional, vibrant business concept illustration for: {concept_line[:200]}. "
+            "Clean modern vector art style, no text overlays, warm colors, isometric or flat design."
+        )
+        image_uri = llm_utils.generate_image_sync(image_prompt, size="1024x1024")
+
+        if image_uri:
+            html = (
+                f"<div style='text-align:center;padding:8px 0'>"
+                f"<img src='{image_uri}' alt='Concept illustration' "
+                f"style='max-width:100%;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.15)'/>"
+                f"</div>"
+            )
+            return {"text": text, "html": html}
+
+        return text
 
 
 def main() -> None:

@@ -12,6 +12,8 @@ Separation of concerns:
 - Specialist agents: Domain-specific logic via process_utterance()
 """
 
+import base64
+import io
 import json
 import logging
 import os
@@ -21,19 +23,18 @@ import uuid
 from typing import Any, Callable, Dict, List
 
 from flask import Flask, request, Response, jsonify
+from PIL import Image, ImageDraw, ImageFont
 
 # Make shared modules importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # OpenFloor imports
-from openfloor.envelope import Envelope, Parameters, Conversation, Sender, Schema, To
+from openfloor.envelope import Envelope, Parameters, Conversation, Sender
 from openfloor.events import (
-    Event, UtteranceEvent, InviteEvent, UninviteEvent, DeclineInviteEvent,
-    ByeEvent, GetManifestsEvent, PublishManifestsEvent,
-    RequestFloorEvent, GrantFloorEvent, RevokeFloorEvent, YieldFloorEvent,
+    UtteranceEvent, InviteEvent, GetManifestsEvent, PublishManifestsEvent,
 )
 from openfloor.manifest import Manifest, Identification, Capability, SupportedLayers
-from openfloor.dialog_event import DialogEvent, TextFeature, Token
+from openfloor.dialog_event import DialogEvent, Feature, TextFeature, Token
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO,
@@ -45,19 +46,30 @@ logging.basicConfig(level=logging.INFO,
 # =============================================================================
 
 class _EventHook:
-    """Event hook for registering multiple handlers."""
+    """Event hook for registering multiple handlers.
+
+    Mimics a C#-style multicast delegate: use ``+=`` to subscribe a callable
+    and ``-=`` to unsubscribe. Calling the hook invokes every registered
+    handler in order, so several independent listeners can react to the same
+    OpenFloor event.
+    """
     def __init__(self):
+        # Ordered list of subscribed callbacks; invoked left-to-right.
         self._handlers: List[Callable[..., None]] = []
 
     def __iadd__(self, handler: Callable[..., None]):
+        # Support: hook += handler
         self._handlers.append(handler)
         return self
 
     def __isub__(self, handler: Callable[..., None]):
+        # Support: hook -= handler  (removes every matching reference)
         self._handlers = [existing for existing in self._handlers if existing != handler]
         return self
 
     def __call__(self, *args, **kwargs):
+        # Iterate over a copy so a handler may safely subscribe/unsubscribe
+        # while the hook is firing.
         for handler in list(self._handlers):
             handler(*args, **kwargs)
 
@@ -73,9 +85,12 @@ class BotAgent:
     """
     
     def __init__(self, manifest: Manifest):
+        # The manifest describes this agent's identity (speakerUri/serviceUrl)
+        # and capabilities; it is published in response to getManifests.
         self._manifest = manifest
         
-        # Event hooks for all OpenFloor event types
+        # One hook per OpenFloor event type. Subclasses subscribe their own
+        # handlers to these hooks instead of overriding a giant dispatch method.
         self.on_envelope = _EventHook()
         self.on_utterance = _EventHook()
         self.on_invite = _EventHook()
@@ -90,6 +105,8 @@ class BotAgent:
         self.on_revoke_floor = _EventHook()
         self.on_yield_floor = _EventHook()
 
+        # Maps an incoming event's eventType string to the matching hook so
+        # bot_on_envelope() can route each event without a long if/elif chain.
         self._event_type_to_handler: Dict[str, _EventHook] = {
             "invite": self.on_invite,
             "utterance": self.on_utterance,
@@ -105,7 +122,7 @@ class BotAgent:
             "yieldFloor": self.on_yield_floor,
         }
 
-        # Wire default handlers
+        # Wire the built-in default handlers. Subclasses add more via +=.
         self.on_envelope += self.bot_on_envelope
         self.on_utterance += self.bot_on_utterance
         self.on_get_manifests += self.bot_on_get_manifests
@@ -120,17 +137,25 @@ class BotAgent:
 
     def process_envelope(self, in_envelope: Envelope) -> Envelope:
         """Process incoming envelope and return response envelope."""
+        # Reply on the same conversation so the floor can correlate turns.
         conversation_id = getattr(getattr(in_envelope, "conversation", None), "id", None)
         out_envelope = Envelope(
             conversation=Conversation(id=conversation_id),
             sender=Sender(speakerUri=self.speakerUri, serviceUrl=self.serviceUrl),
         )
+        # Firing on_envelope runs bot_on_envelope, which fans each event out
+        # to its type-specific hook and appends any responses to out_envelope.
         self.on_envelope(in_envelope, out_envelope)
         return out_envelope
 
     @staticmethod
     def _normalize_endpoint_id(value: Any) -> str:
-        """Normalize an endpoint ID for comparison."""
+        """Normalize an endpoint ID for comparison.
+
+        Strips an optional ``agent:`` prefix, lower-cases, and drops a trailing
+        slash so that, e.g., ``Agent:http://Host/`` and ``http://host`` compare
+        as equal when matching recipients.
+        """
         if value is None:
             return ""
         normalized = str(value).strip().lower()
@@ -139,21 +164,29 @@ class BotAgent:
         return normalized.rstrip("/")
 
     def _is_addressed_to_me(self, event: Any) -> bool:
-        """Check if event is addressed to this agent."""
+        """Check if event is addressed to this agent.
+
+        An event with no ``to`` field is treated as a broadcast (addressed to
+        everyone). Otherwise it matches when any recipient's speakerUri or
+        serviceUrl equals this agent's own, after normalization.
+        """
         to_value = getattr(event, "to", None)
         if to_value is None and isinstance(event, dict):
             to_value = event.get("to")
+        # No explicit recipient => broadcast => everyone processes it.
         if to_value is None:
             return True
 
         my_speaker_normalized = self._normalize_endpoint_id(self.speakerUri)
         my_service_normalized = self._normalize_endpoint_id(self.serviceUrl)
 
+        # 'to' may be a single recipient or a list; normalize to a list.
         recipients = to_value if isinstance(to_value, (list, tuple, set)) else [to_value]
         if not recipients:
             return True
 
         for recipient in recipients:
+            # A recipient can be a dict, a bare URI string, or an object.
             if isinstance(recipient, dict):
                 to_speaker = recipient.get("speakerUri")
                 to_service = recipient.get("serviceUrl")
@@ -167,6 +200,7 @@ class BotAgent:
             to_speaker_normalized = self._normalize_endpoint_id(to_speaker)
             to_service_normalized = self._normalize_endpoint_id(to_service)
 
+            # Match on either identity field.
             if to_speaker_normalized and to_speaker_normalized == my_speaker_normalized:
                 return True
             if to_service_normalized and to_service_normalized == my_service_normalized:
@@ -177,11 +211,14 @@ class BotAgent:
     def bot_on_envelope(self, in_envelope: Envelope, out_envelope: Envelope) -> None:
         """Default envelope handler - routes events to appropriate hooks."""
         for event in getattr(in_envelope, "events", []) or []:
+            # Skip events meant for other agents on the floor.
             if not self._is_addressed_to_me(event):
                 continue
+            # Look up the eventType (attribute on objects, key on dicts)...
             event_type = getattr(event, "eventType", None)
             if not event_type and isinstance(event, dict):
                 event_type = event.get("eventType")
+            # ...and dispatch to the matching hook if one is registered.
             handler = self._event_type_to_handler.get(event_type)
             if handler is not None:
                 handler(event, in_envelope, out_envelope)
@@ -192,6 +229,7 @@ class BotAgent:
 
     def bot_on_get_manifests(self, event: GetManifestsEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
         """Default getManifests handler - publish agent manifest."""
+        # Advertise this agent under servicingManifests; we discover no others.
         out_envelope.events.append(
             PublishManifestsEvent(parameters=Parameters({
                 "servicingManifests": [self._manifest],
@@ -203,6 +241,85 @@ class BotAgent:
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
+
+def _chart_font(scale: int, size: int) -> "ImageFont.FreeTypeFont":
+    # load_default(size=...) is Pillow's bundled, portable scalable font --
+    # no dependency on any particular OS having a given font file installed.
+    # It has no bold weight, which is deliberate: every label (including the
+    # chart title) renders at the same plain weight.
+    return ImageFont.load_default(size=size * scale)
+
+
+def render_bar_chart_png(
+    title: str,
+    rows: list[tuple[str, int, str, str]],
+    *,
+    width: int = 400,
+    row_h: int = 40,
+    top: int = 32,
+    label_x: int = 115,
+    bar_x: int = 120,
+    bar_h: int = 22,
+    value_x: int | None = None,
+    alt: str = "chart",
+) -> str:
+    """Render a horizontal bar chart as a base64 PNG <img> tag.
+
+    Draws directly with Pillow instead of building SVG markup: Word's
+    HTML-paste pipeline doesn't reliably support SVG data URIs, so an
+    embedded chart built that way can fail to render and get replaced with a
+    bold broken-image placeholder. A plain PNG pastes as an ordinary picture
+    in every consumer (the chat UI, the popup report, and Word), and drawing
+    every label at the same plain weight avoids reintroducing bold text.
+
+    rows is (label, bar_width_px, display_text, color) -- callers compute
+    bar_width_px themselves (e.g. value / max_value * max_bar_width) since
+    the normalization differs per chart. color is any Pillow-recognized
+    color string (e.g. "#2196F3"). value_x, if given, draws every display
+    text at that fixed x instead of immediately after its own bar.
+    """
+    if not rows:
+        return ""
+
+    height = top + row_h * len(rows) + 8
+    scale = 2  # render at 2x and downscale for crisper text/edges
+    img = Image.new("RGB", (width * scale, height * scale), "#f8f9fa")
+    draw = ImageDraw.Draw(img)
+    title_font = _chart_font(scale, 14)
+    label_font = _chart_font(scale, 11)
+
+    title_box = draw.textbbox((0, 0), title, font=title_font)
+    draw.text(
+        ((width * scale - (title_box[2] - title_box[0])) / 2, 9 * scale),
+        title, font=title_font, fill="#222222",
+    )
+
+    for i, (label, bar_w, display, color) in enumerate(rows):
+        row_top = (top + i * row_h) * scale
+        bar_top = row_top + (row_h * scale - bar_h * scale) // 2
+        text_y = bar_top + (bar_h * scale - 11 * scale) // 2
+
+        label_box = draw.textbbox((0, 0), label, font=label_font)
+        draw.text(
+            (label_x * scale - (label_box[2] - label_box[0]), text_y),
+            label, font=label_font, fill="#333333",
+        )
+
+        bar_w_px = max(2, bar_w) * scale
+        draw.rounded_rectangle(
+            [bar_x * scale, bar_top, bar_x * scale + bar_w_px, bar_top + bar_h * scale],
+            radius=3 * scale, fill=color,
+        )
+
+        value_pos_x = (value_x * scale) if value_x is not None else (bar_x * scale + bar_w_px + 6 * scale)
+        draw.text((value_pos_x, text_y), display, font=label_font, fill="#333333")
+
+    img = img.resize((width, height), Image.LANCZOS)
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG", optimize=True)
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f'<img src="data:image/png;base64,{encoded}" alt="{alt}">'
+
 
 def _build_supported_layers(config_value):
     if isinstance(config_value, list):
@@ -273,8 +390,19 @@ class StrategyBotAgent(BotAgent):
         manifest = self._load_manifest()
         super().__init__(manifest)
 
-        # Floor state: respond by default, stop only after explicit revokeFloor.
-        self._floor_granted = True
+        # Floor state: invitation does not imply permission to speak.
+        # Specialists should only answer after an explicit grantFloor.
+        self._floor_granted = False
+        # When the gate is enabled (default), utterances received while the
+        # floor is revoked are silently ignored. Set ENFORCE_FLOOR_GATE=0 to
+        # allow answering direct utterances without a grantFloor first.
+        self._enforce_floor_gate = os.getenv("ENFORCE_FLOOR_GATE", "1").strip().lower() in {"1", "true", "yes", "on"}
+
+        # Effective word budget for the current utterance. Defaults to the class
+        # cap but is overridden per-request when the caller (e.g. the convener,
+        # driven by the UI slider) supplies a maxWords feature. Subclasses may
+        # read this in process_utterance() to size their LLM prompt.
+        self._current_max_words = self.MAX_RESPONSE_WORDS
         
         # Backwards compatibility
         self.manifest = manifest
@@ -285,6 +413,8 @@ class StrategyBotAgent(BotAgent):
     def _register_handlers(self):
         """Register event handlers for strategy agents."""
         # Utterance is already wired in __init__; we override bot_on_utterance instead
+        # Track floor grants/revocations so bot_on_utterance knows whether it
+        # is currently allowed to respond.
         self.on_invite += self._handle_invite
         self.on_grant_floor += self._handle_grant_floor
         self.on_revoke_floor += self._handle_revoke_floor
@@ -302,6 +432,7 @@ class StrategyBotAgent(BotAgent):
 
     def _load_manifest(self) -> Manifest:
         """Load manifest from config or build default."""
+        # Look for an agent_config.json sitting next to the specialist's module.
         module = sys.modules.get(self.__class__.__module__)
         module_file = getattr(module, "__file__", "")
         module_dir = os.path.dirname(os.path.abspath(module_file)) if module_file else ""
@@ -310,9 +441,11 @@ class StrategyBotAgent(BotAgent):
         if config_path and os.path.exists(config_path):
             manifest = load_manifest_from_config(config_path)
         else:
+            # No config file: fall back to attribute-driven defaults.
             manifest = self._default_manifest()
 
-        # Override with environment variables
+        # Environment variables win over both config and defaults so the same
+        # image can be deployed behind different URLs without code changes.
         override_service_url = os.getenv("SERVICE_URL", "").strip()
         override_speaker_uri = os.getenv("SPEAKER_URI", "").strip()
         if override_service_url:
@@ -345,72 +478,40 @@ class StrategyBotAgent(BotAgent):
 
     @staticmethod
     def _limit_words(text: str, max_words: int = 50) -> str:
-        """Limit response to max words."""
+        """Limit response to max words, extending to the end of the current sentence."""
         if not text:
             return ""
+        # Split on any run of non-whitespace to count words robustly.
         words = re.findall(r"\S+", text.strip())
         if len(words) <= max_words:
             return " ".join(words)
-        return " ".join(words[:max_words])
+        # Hard cap at max_words...
+        result = words[:max_words]
+        # ...but if that lands mid-sentence, keep appending words until we hit
+        # sentence-ending punctuation so the reply doesn't stop abruptly.
+        _sentence_end = re.compile(r'[.!?]["\')]*$')
+        if not _sentence_end.search(result[-1]):
+            for word in words[max_words:]:
+                result.append(word)
+                if _sentence_end.search(word):
+                    break
+        return " ".join(result)
 
-    def process_utterance(self, user_text: str) -> str:
-        """Override in subclasses to implement domain logic."""
+    def process_utterance(self, user_text: str) -> "str | dict":
+        """Override in subclasses to implement domain logic.
+
+        May return either a plain string or a dict of the form
+        {"text": str, "html": str} when the agent also produces a chart/visual.
+        """
         return f"[{self.AGENT_NAME}] received: {user_text}"
 
-    def bot_on_utterance(self, event: UtteranceEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
-        """Handle utterance events using OpenFloor template pattern."""
-        try:
-            if not self._floor_granted:
-                logger.info("[UTTERANCE] Ignored because floor is revoked")
-                return
+    def _extract_max_words(self, event: UtteranceEvent) -> int:
+        """Read an optional ``maxWords`` feature from the utterance.
 
-            # Extract text from event
-            user_text = self._extract_utterance_text(event)
-            if not user_text:
-                logger.debug("[UTTERANCE] No text found")
-                return
-
-            logger.info("[UTTERANCE] Processing: %s", user_text[:100])
-
-            # Call domain-specific logic
-            response_text = self.process_utterance(user_text)
-            response_text = self._limit_words(response_text, self.MAX_RESPONSE_WORDS)
-
-            if not response_text:
-                logger.debug("[UTTERANCE] No response generated")
-                return
-
-            logger.info("[UTTERANCE] Response: %s", response_text[:100])
-
-            # Build OpenFloor response
-            dialog = DialogEvent(
-                speakerUri=self._manifest.identification.speakerUri,
-                features={"text": TextFeature(tokens=[Token(value=response_text)])}
-            )
-            out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
-
-        except Exception as e:
-            logger.exception("[UTTERANCE] Error processing utterance")
-            dialog = DialogEvent(
-                speakerUri=self._manifest.identification.speakerUri,
-                features={"text": TextFeature(tokens=[Token(value="Error processing message")])}
-            )
-            out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
-
-    def _extract_utterance_text(self, event: UtteranceEvent) -> str:
-        """Extract text from UtteranceEvent."""
-        def _get_attr(obj, key, default=None):
-            if obj is None:
-                return default
-            if isinstance(obj, dict):
-                return obj.get(key, default)
-            if hasattr(obj, "get"):
-                try:
-                    return obj.get(key, default)
-                except Exception:
-                    pass
-            return getattr(obj, key, default)
-
+        The convener forwards the UI slider value as a maxWords feature so the
+        specialist can size both its LLM prompt and its truncation. Falls back
+        to the class default and clamps to a sane range.
+        """
         dialog = getattr(event, "dialogEvent", None)
         if dialog is None:
             params = getattr(event, "parameters", None)
@@ -418,24 +519,170 @@ class StrategyBotAgent(BotAgent):
                 dialog = getattr(params, "dialogEvent", None)
                 if dialog is None and hasattr(params, "get"):
                     dialog = params.get("dialogEvent")
+        if not dialog:
+            return self.MAX_RESPONSE_WORDS
 
+        features = getattr(dialog, "features", None)
+        if features is None and hasattr(dialog, "get"):
+            features = dialog.get("features")
+        if not features:
+            return self.MAX_RESPONSE_WORDS
+
+        mw_feature = features.get("maxWords") if hasattr(features, "get") else None
+        if not mw_feature:
+            return self.MAX_RESPONSE_WORDS
+
+        tokens = getattr(mw_feature, "tokens", None)
+        if tokens is None and hasattr(mw_feature, "get"):
+            tokens = mw_feature.get("tokens")
+        if not tokens:
+            return self.MAX_RESPONSE_WORDS
+
+        first = tokens[0]
+        raw = first if isinstance(first, str) else getattr(first, "value", None)
+        if raw is None and hasattr(first, "get"):
+            raw = first.get("value")
+        try:
+            return max(25, min(500, int(str(raw).strip())))
+        except (ValueError, TypeError):
+            return self.MAX_RESPONSE_WORDS
+
+    def bot_on_utterance(self, event: UtteranceEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
+        """Handle utterance events using OpenFloor template pattern."""
+        try:
+            # Self-loop guard: never process an utterance this agent itself
+            # spoke. _is_addressed_to_me() only checks the `to` recipient --
+            # a `to`-less (broadcast) event addressed to nobody in particular
+            # passes that check for everyone, including the original speaker,
+            # so a client-side rebroadcast (or any other echo) of this
+            # agent's own reply would otherwise be answered as a fresh
+            # question. Checked by identity by design, independent of
+            # whatever upstream mechanism produced the echo.
+            speaker_uri = self._get_event_speaker_uri(event)
+            if speaker_uri and self._normalize_endpoint_id(speaker_uri) == self._normalize_endpoint_id(self.speakerUri):
+                logger.info("[UTTERANCE] Ignored: speaker is this agent itself (self-loop guard)")
+                return
+
+            # Floor gate: only respond when we currently hold the floor, unless
+            # the gate has been explicitly disabled for direct/testing use.
+            if not self._floor_granted and self._enforce_floor_gate:
+                logger.info("[UTTERANCE] Ignored because floor is revoked (strict floor gate enabled)")
+                return
+            if not self._floor_granted and not self._enforce_floor_gate:
+                logger.info("[UTTERANCE] Floor is revoked, but strict floor gate is disabled; processing direct utterance")
+
+            # Extract text from event
+            user_text = self._extract_utterance_text(event)
+            if not user_text:
+                logger.debug("[UTTERANCE] No text found")
+                return
+
+            # Honor a per-request word budget (from the convener/UI slider) for
+            # both prompt sizing (subclasses read self._current_max_words) and
+            # the final truncation below.
+            self._current_max_words = self._extract_max_words(event)
+
+            logger.info("[UTTERANCE] Processing: %s", user_text[:100])
+
+            # Call domain-specific logic
+            result = self.process_utterance(user_text)
+
+            # Support both plain string and {"text": ..., "html": ...} dict returns.
+            # Agents that produce a chart return a dict carrying an extra SVG/HTML
+            # feature; simpler agents just return a string.
+            if isinstance(result, dict):
+                response_text = self._limit_words(result.get("text", ""), self._current_max_words)
+                html_content = (result.get("html") or "").strip()
+            else:
+                response_text = self._limit_words(str(result), self._current_max_words)
+                html_content = ""
+
+            if not response_text:
+                logger.debug("[UTTERANCE] No response generated")
+                return
+
+            logger.info("[UTTERANCE] Response: %s", response_text[:100])
+
+            # Always include the text feature; attach an html feature only when
+            # the agent produced chart/visual markup.
+            features: dict = {"text": TextFeature(tokens=[Token(value=response_text)])}
+            if html_content:
+                features["html"] = Feature(mimeType="text/html", tokens=[Token(value=html_content)])
+
+            # Build OpenFloor response
+            dialog = DialogEvent(
+                speakerUri=self._manifest.identification.speakerUri,
+                features=features
+            )
+            out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
+
+        except Exception as e:
+            # Never crash the request loop: reply with a generic error utterance.
+            logger.exception("[UTTERANCE] Error processing utterance")
+            dialog = DialogEvent(
+                speakerUri=self._manifest.identification.speakerUri,
+                features={"text": TextFeature(tokens=[Token(value="Error processing message")])}
+            )
+            out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
+
+    @staticmethod
+    def _get_attr(obj, key, default=None):
+        """Accessor that works whether obj is a dict, dict-like object, or
+        plain attribute object."""
+        if obj is None:
+            return default
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        if hasattr(obj, "get"):
+            try:
+                return obj.get(key, default)
+            except Exception:
+                pass
+        return getattr(obj, key, default)
+
+    def _get_dialog_event(self, event: UtteranceEvent):
+        """Extract the dialogEvent from an UtteranceEvent, whether nested as a
+        direct attribute or under parameters."""
+        dialog = getattr(event, "dialogEvent", None)
+        if dialog is None:
+            params = getattr(event, "parameters", None)
+            if params is not None:
+                dialog = getattr(params, "dialogEvent", None)
+                if dialog is None and hasattr(params, "get"):
+                    dialog = params.get("dialogEvent")
+        return dialog
+
+    def _get_event_speaker_uri(self, event: UtteranceEvent) -> str:
+        """The speakerUri on an incoming utterance's dialogEvent, i.e. who
+        actually said it (may differ from the envelope's own sender when a
+        message has been relayed/rebroadcast)."""
+        dialog = self._get_dialog_event(event)
+        return (self._get_attr(dialog, "speakerUri", "") or "").strip()
+
+    def _extract_utterance_text(self, event: UtteranceEvent) -> str:
+        """Extract text from UtteranceEvent."""
+        dialog = self._get_dialog_event(event)
         if not dialog:
             return ""
 
-        features = _get_attr(dialog, "features", {}) or {}
-        text_feature = _get_attr(features, "text")
+        features = self._get_attr(dialog, "features", {}) or {}
+        text_feature = self._get_attr(features, "text")
         if not text_feature:
             return ""
 
-        tokens = _get_attr(text_feature, "tokens", []) or []
+        # Concatenate all token values into the final utterance string.
+        tokens = self._get_attr(text_feature, "tokens", []) or []
         return " ".join(
-            (_get_attr(t, "value", "") if not isinstance(t, str) else t)
+            (self._get_attr(t, "value", "") if not isinstance(t, str) else t)
             for t in tokens
         ).strip()
 
     def _handle_invite(self, event: InviteEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
         """Default invite handler - accept invitations."""
         from openfloor.events import AcceptInviteEvent
+        # Accepting an invite does NOT grant the floor; reset the gate so we
+        # stay silent until an explicit grantFloor arrives.
+        self._floor_granted = False
         out_envelope.events.append(AcceptInviteEvent())
 
     def handle_json_envelope(self, json_payload: str) -> str:
@@ -453,6 +700,8 @@ class StrategyBotAgent(BotAgent):
             
             return out_envelope.to_json(as_payload=True)
         except Exception as e:
+            # On any parse/processing failure, return a well-formed but empty
+            # envelope so the caller still receives valid OpenFloor JSON.
             logger.exception("[HANDLE] Error processing envelope")
             error_response = {
                 "openFloor": {
@@ -477,181 +726,6 @@ BaseStrategyAgent = StrategyBotAgent
 
 
 # =============================================================================
-# KEPT FOR BACKWARDS COMPATIBILITY
-# =============================================================================
-
-def _field(obj, key: str, default=None):
-    """Deprecated - kept for reference only."""
-    if obj is None:
-        return default
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    if hasattr(obj, "get"):
-        try:
-            return obj.get(key, default)
-        except Exception:
-            pass
-    return getattr(obj, key, default)
-
-
-def _parse_incoming_envelope(json_payload: str):
-    """Deprecated - kept for reference only."""
-    first_error = None
-    try:
-        return Envelope.from_json(json_payload, as_payload=True)
-    except Exception as e:
-        first_error = e
-
-    try:
-        return Envelope.from_json(json_payload)
-    except Exception as e:
-        raise ValueError(f"{first_error}; fallback parse failed: {e}")
-
-
-# =============================================================================
-# DEPRECATED CLASS (kept for reference)
-# =============================================================================
-
-class BaseStrategyAgent_DEPRECATED:
-    """
-    DEPRECATED: Use StrategyBotAgent instead.
-    This class is kept for reference and will be removed in a future version.
-    """
-
-    # Override these in subclasses
-    AGENT_NAME: str = "StrategyAgent"
-    AGENT_PORT: int = 8200
-    AGENT_SYNOPSIS: str = "A startup strategy analysis agent"
-    AGENT_KEYPHRASES: list = ["startup", "strategy", "analysis"]
-    AGENT_CAPABILITY_DETAIL: str = "Processes startup strategy inputs and returns a text analysis."
-    MAX_RESPONSE_WORDS: int = 50
-
-    @staticmethod
-    def _limit_words(text: str, max_words: int = 50) -> str:
-        if not text:
-            return ""
-        words = re.findall(r"\S+", text.strip())
-        if len(words) <= max_words:
-            return " ".join(words)
-        return " ".join(words[:max_words])
-
-    def _default_manifest(self) -> Manifest:
-        service_url = os.getenv("SERVICE_URL", f"http://localhost:{self.AGENT_PORT}/")
-        speaker_uri = os.getenv("SPEAKER_URI", f"tag:startup-strategy,2025:{self.AGENT_NAME.lower().replace(' ', '-')}")
-        return Manifest(
-            identification=Identification(
-                conversationalName=self.AGENT_NAME,
-                speakerUri=speaker_uri,
-                serviceUrl=service_url,
-                organization="Open Voice Network",
-                role="assistant",
-                synopsis=self.AGENT_SYNOPSIS,
-                openFloorRoles={"information": True},
-            ),
-            capabilities=[Capability(
-                keyphrases=self.AGENT_KEYPHRASES,
-                languages=["en-us"],
-                descriptions=[self.AGENT_SYNOPSIS, self.AGENT_CAPABILITY_DETAIL],
-                supportedLayers=SupportedLayers(input=["text"], output=["text"]),
-            )],
-        )
-
-    def _load_manifest(self) -> Manifest:
-        module = sys.modules.get(self.__class__.__module__)
-        module_file = getattr(module, "__file__", "")
-        module_dir = os.path.dirname(os.path.abspath(module_file)) if module_file else ""
-        config_path = os.path.join(module_dir, "agent_config.json") if module_dir else ""
-
-        manifest = load_manifest_from_config(config_path) if config_path and os.path.exists(config_path) else self._default_manifest()
-
-        override_service_url = os.getenv("SERVICE_URL", "").strip()
-        override_speaker_uri = os.getenv("SPEAKER_URI", "").strip()
-        if override_service_url:
-            manifest.identification.serviceUrl = override_service_url
-        if override_speaker_uri:
-            manifest.identification.speakerUri = override_speaker_uri
-        return manifest
-
-    def __init__(self):
-        self.conversation_context: dict = {}
-        self.manifest = self._load_manifest()
-
-    def process_utterance(self, user_text: str) -> str:
-        """Override this in subclasses."""
-        return f"[{self.AGENT_NAME}] received: {user_text}"
-
-    def handle_envelope(self, json_payload: str) -> str:
-        try:
-            in_envelope = _parse_incoming_envelope(json_payload)
-        except Exception as e:
-            return json.dumps({"error": f"Invalid envelope: {e}"})
-
-        conv_id = getattr(getattr(in_envelope, "conversation", None), "id", None)
-        out_envelope = Envelope(
-            conversation=Conversation(id=conv_id),
-            sender=Sender(
-                speakerUri=self.manifest.identification.speakerUri,
-                serviceUrl=self.manifest.identification.serviceUrl,
-            ),
-            schema=Schema(version="1.1", url="https://openvoicenetwork.org/schema"),
-            events=[],
-        )
-
-        events = getattr(in_envelope, "events", []) or []
-        for event in events:
-            event_type = getattr(event, "eventType", None)
-
-            if event_type == "getManifests":
-                pub = PublishManifestsEvent()
-                pub.manifests = [self.manifest]
-                out_envelope.events = [pub]
-                break
-
-            elif event_type == "invite":
-                from openfloor.events import AcceptInviteEvent
-                accept = AcceptInviteEvent()
-                out_envelope.events = [accept]
-                break
-
-            elif event_type == "utterance":
-                dialog = getattr(event, "dialogEvent", None)
-                if dialog is None:
-                    params = getattr(event, "parameters", None)
-                    if params is not None:
-                        dialog = getattr(params, "dialogEvent", None)
-                        if dialog is None and hasattr(params, "get"):
-                            dialog = params.get("dialogEvent")
-                user_text = ""
-                if dialog:
-                    features = _field(dialog, "features", {}) or {}
-                    text_feature = _field(features, "text")
-                    if text_feature:
-                        tokens = _field(text_feature, "tokens", []) or []
-                        user_text = " ".join(
-                            (_field(t, "value", "") if not isinstance(t, str) else t)
-                            for t in tokens
-                        )
-
-                response_text = self._limit_words(
-                    self.process_utterance(user_text),
-                    self.MAX_RESPONSE_WORDS,
-                )
-
-                de = DialogEvent(speakerUri=self.manifest.identification.speakerUri)
-                tf = TextFeature()
-                tf.tokens = [Token(value=response_text)]
-                de.features = {"text": tf}
-                utt = UtteranceEvent(dialogEvent=de)
-                out_envelope.events = [utt]
-                break
-
-        if not getattr(out_envelope, "events", None):
-            out_envelope.events = []
-
-        return out_envelope.to_json(as_payload=True)
-
-
-# =============================================================================
 # FLASK APP FACTORY
 # =============================================================================
 
@@ -659,26 +733,26 @@ def make_flask_app(agent: "StrategyBotAgent") -> Flask:
     """Create Flask app for strategy agent."""
     app = Flask(__name__)
 
+    # Accept OpenFloor envelopes at both the root and a name-based path so the
+    # agent works whether it is addressed as "/" or "/agent-name/".
     @app.route("/", methods=["POST"])
     @app.route(f"/{agent.AGENT_NAME.lower().replace(' ', '-')}/", methods=["POST"])
     def handle():
         payload = request.get_data(as_text=True)
         if not payload:
             return Response('{"error":"empty body"}', status=400, mimetype="application/json")
-        
-        # Support both old and new method names
-        if hasattr(agent, 'handle_json_envelope'):
-            result = agent.handle_json_envelope(payload)
-        else:
-            result = agent.handle_envelope(payload)
+
+        result = agent.handle_json_envelope(payload)
         return Response(result, status=200, mimetype="application/json")
 
     @app.route("/manifest", methods=["POST"])
     def manifest():
+        # REST convenience endpoint; OFP clients normally use getManifests instead.
         return jsonify(agent._manifest.__json__())
 
     @app.route("/health", methods=["GET"])
     def health():
+        # Simple liveness probe used by the run scripts / load balancer.
         return {"status": "ok", "agent": agent.AGENT_NAME}
 
     return app

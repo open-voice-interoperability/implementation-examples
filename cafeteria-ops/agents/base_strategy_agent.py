@@ -2,9 +2,9 @@
 """
 Base Strategy Agent — OpenFloor Template-Based Implementation
 
-All cafeteria-ops specialist agents inherit from StrategyBotAgent,
+All specialist agents inherit from StrategyBotAgent,
 which extends BotAgent (from the OpenFloor template) with Flask integration
-and cafeteria-operations-specific processing.
+and domain-specific processing.
 
 Separation of concerns:
 - BotAgent: OpenFloor event routing and lifecycle
@@ -41,25 +41,16 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
-# Port -> display name for every cafeteria-ops agent, used only to make the
+# Port -> display name for this project's own agents, used only to make the
 # shared conversation-history transcript (see StrategyBotAgent's
 # _record_conversation_turn/_conversation_history_text below) readable --
-# "Menu Designer: Day 1: ..." rather than "http://127.0.0.1:8301/: Day 1:
-# ...". Hand-duplicated from convener_service/convener.py's AGENTS dict,
-# same "kept in sync by hand" tradeoff as every other cross-agent port
-# reference in this project (e.g. nutrition_agent.py's
-# _RECIPE_PORTION_SERVICE_URL) -- this project has no shared package
-# between the convener and the agents it addresses.
-_AGENT_LABELS_BY_PORT = {
-    8300: "Convener",
-    8301: "Menu Designer",
-    8302: "Nutrition Specialist",
-    8303: "Recipe & Portion Specialist",
-    8304: "Menu Optimization Specialist",
-    8305: "Inventory Specialist",
-    8306: "Procurement Specialist",
-    8310: "Shopping List Specialist",
-}
+# a name rather than "http://127.0.0.1:<port>/" in each recorded turn.
+# Defined per project in agents/agent_labels.py and hand-kept in sync with
+# convener_service/convener.py's AGENTS dict, the same "kept in sync by
+# hand" tradeoff as every other cross-agent port reference in these
+# projects -- there is no shared package between a convener and the agents
+# it addresses.
+from agents.agent_labels import AGENT_LABELS_BY_PORT
 
 
 # =============================================================================
@@ -375,12 +366,12 @@ def load_manifest_from_config(config_path: str) -> Manifest:
 
     return Manifest(
         identification=Identification(
-            conversationalName=identification_data.get("conversationalName", "CafeteriaOpsAgent"),
-            speakerUri=identification_data.get("speakerUri", identification_data.get("serviceUrl", "http://127.0.0.1:8300/")),
-            serviceUrl=identification_data.get("serviceUrl", "http://127.0.0.1:8300/"),
+            conversationalName=identification_data.get("conversationalName", "StrategyAgent"),
+            speakerUri=identification_data.get("speakerUri", identification_data.get("serviceUrl", "http://127.0.0.1:8000/")),
+            serviceUrl=identification_data.get("serviceUrl", "http://127.0.0.1:8000/"),
             organization=identification_data.get("organization", "Open Voice Network"),
             role=identification_data.get("role", "assistant"),
-            synopsis=identification_data.get("synopsis", "A cafeteria operations analysis agent"),
+            synopsis=identification_data.get("synopsis", "A specialist analysis agent"),
             department=identification_data.get("department"),
             openFloorRoles=identification_data.get("openFloorRoles"),
         ),
@@ -399,11 +390,11 @@ class StrategyBotAgent(BotAgent):
     """
 
     # Override these in subclasses
-    AGENT_NAME: str = "CafeteriaOpsAgent"
-    AGENT_PORT: int = 8300
-    AGENT_SYNOPSIS: str = "A cafeteria operations analysis agent"
-    AGENT_KEYPHRASES: list = ["cafeteria", "menu", "operations"]
-    AGENT_CAPABILITY_DETAIL: str = "Processes cafeteria operations inputs and returns a text analysis."
+    AGENT_NAME: str = "StrategyAgent"
+    AGENT_PORT: int = 8000
+    AGENT_SYNOPSIS: str = "A specialist analysis agent"
+    AGENT_KEYPHRASES: list = ["analysis"]
+    AGENT_CAPABILITY_DETAIL: str = "Processes inputs and returns a text analysis."
     MAX_RESPONSE_WORDS: int = 50
 
     def __init__(self):
@@ -722,7 +713,7 @@ class StrategyBotAgent(BotAgent):
         client-chosen and not one of the fixed agent ports."""
         match = re.search(r":(\d{4,5})/?", speaker_uri or "")
         if match:
-            label = _AGENT_LABELS_BY_PORT.get(int(match.group(1)))
+            label = AGENT_LABELS_BY_PORT.get(int(match.group(1)))
             if label:
                 return label
         return "User"

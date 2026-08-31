@@ -1,0 +1,37 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Recipe & Portion Specialist",
+      "speakerUri": "http://127.0.0.1:8303/",
+      "serviceUrl": "http://127.0.0.1:8303/",
+      "organization": "Open Voice Network",
+      "role": "assistant",
+      "synopsis": "Finds real recipe ideas and grounds cafeteria portion sizing",
+      "openFloorRoles": { "information": true }
+    },
+    "capabilities": {
+      "keyphrases": [
+        "recipe",
+        "recipes",
+        "portion",
+        "portions",
+        "serving",
+        "serving size",
+        "ingredients",
+        "preparation",
+        "cook",
+        "batch"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Finds real recipe ideas and grounds cafeteria portion sizing.",
+        "Retrieves real recipes and ingredient data to propose cafeteria-scale portion guidance for a specific dish."
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

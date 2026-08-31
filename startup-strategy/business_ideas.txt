@@ -1,0 +1,23 @@
+1) Neighborhood Heat Alert Concierge
+This service helps older adults and caregivers manage dangerous heat waves with personalized daily check-ins and cooling plans. It combines weather forecasts, health risk profiles, and local transportation options to suggest safe routines and nearby cooling centers. Families can receive simple alerts when a loved one misses a check-in or reports symptoms. Revenue comes from monthly family subscriptions and partnerships with local health systems.
+
+2) SME Cyber Drill Studio
+This platform runs short, role-based cybersecurity simulation drills for small and midsize businesses that cannot afford full security teams. Teams practice phishing response, ransomware containment, and customer communication in guided 20-minute sessions. After each drill, managers get a practical action list tied to low-cost tools and policy updates. The business charges per seat with optional compliance reporting add-ons.
+
+3) Smart Kitchen Waste Exchange
+This app helps restaurants and grocers reduce food waste by matching surplus ingredients with nearby buyers in real time. Sellers list excess inventory by quantity and freshness window, and buyers receive route-aware offers they can claim quickly. Built-in quality logs and pickup verification reduce disputes and improve trust between participants. The model earns transaction fees and premium analytics subscriptions.
+
+4) Construction Permit Navigator
+This product guides small contractors through city permit requirements using a step-by-step workflow tailored to project type and location. It translates legal language into plain checklists, auto-generates required document packets, and tracks review deadlines. Contractors can share progress with clients to reduce uncertainty and avoid schedule slips. Revenue comes from per-project fees and annual plans for multi-project firms.
+
+5) Career Relaunch Sprint for Caregivers
+This service supports parents and family caregivers returning to work after a career break with structured 6-week relaunch programs. Participants build updated portfolios, practice interviews, and complete short project experiences with partner companies. Employers get pre-screened talent pools and onboarding playbooks designed for smoother transitions. The company monetizes through employer placement fees and cohort tuition sponsorships.
+
+6) Dream-to-Patent Translator
+This company sells a bedside headband that captures sleep-stage biosignals and turns morning voice notes into draft invention briefs. A proprietary model maps recurring dream motifs to possible product categories, materials, and use cases, then files pre-screened prior-art checks overnight. Customers can subscribe to weekly "inventor packets" with prototype sketches and maker-space build instructions. Revenue combines hardware sales, premium patent concierge plans, and licensing commissions on successful filings.
+
+7) Personal Gravity Tuning Studio
+This startup offers premium rooms where customers experience slight, controlled gravity shifts using magnetic flooring and wearable counterweight suits. Athletes train in custom gravity profiles to improve explosiveness, while office workers book low-gravity sessions for joint relief and mobility. Members receive biometric dashboards showing adaptation curves, balance changes, and recovery windows. The business model uses membership tiers, franchise studios, and branded training equipment.
+
+8) Lunar Mood Farming Network
+This platform coordinates rooftop light arrays that mimic moon phases to influence neighborhood sleep rhythms and evening commerce patterns. Local businesses subscribe to synchronized "full-moon nights" designed to boost foot traffic, while residents opt into gentler circadian presets for better rest. The system uses environmental sensors and anonymized mobility data to tune lighting intensity block by block. Revenue comes from municipal contracts, merchant subscriptions, and an API for wellness apps.

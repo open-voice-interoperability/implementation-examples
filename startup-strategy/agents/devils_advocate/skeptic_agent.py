@@ -42,7 +42,8 @@ You have heard the full conversation so far. Your job is to:
 Be sharp and direct. Do not be polite about fatal flaws.
 Your job is to prevent founders from walking into avoidable failure.
 End with: "The most likely way this fails is: [one sentence]"
-Keep response to maximum 50 words."""
+Do not use markdown formatting, bold text, headers, or bullet symbols. Write in plain prose only.
+Keep the response focused; overall length is guided by a separate instruction."""
 
 
 class SkepticAgent(BaseStrategyAgent):

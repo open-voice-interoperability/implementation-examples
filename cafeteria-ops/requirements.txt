@@ -1,0 +1,29 @@
+# Cafeteria Ops Floor — requirements
+
+# OpenFloor protocol
+openfloor @ https://test-files.pythonhosted.org/packages/a3/5d/f3a73f9c62640eb17e877e5d8bae00529705b3582225c45dafaeb98eaefd/openfloor-0.1.4-py3-none-any.whl#sha256=83048e661d73ea1ac9276b8899617c22f6aef7681442fe9f0504dbe19c40231d
+
+# Flask HTTP server
+flask>=3.0
+flask-cors>=4.0
+
+# HTTP client (for MCP servers and LLM calls)
+httpx>=0.27
+
+# MCP server and client
+# Servers use the mcp.server.fastmcp.FastMCP API (1.x). That import path was
+# removed in mcp 2.0.0 (replaced by mcp.server.mcpserver.MCPServer) -- pin
+# below 2.0 so an unbounded lower bound can't silently pull in that breaking
+# major upgrade.
+mcp>=1.28.0,<2.0.0
+
+# Chart rendering (base_strategy_agent.py imports Pillow unconditionally for
+# render_bar_chart_png, even if a given specialist doesn't call it)
+Pillow>=10.1
+
+# Optional: loads .env automatically if present (llm_utils.py/mcp_client.py
+# degrade gracefully without it -- env vars still work via the shell/OS)
+python-dotenv>=1.0
+
+# Python standard library only beyond this point
+# (no additional dependencies for data parsing)

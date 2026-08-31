@@ -1,0 +1,35 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Shopping List Specialist",
+      "speakerUri": "http://127.0.0.1:8310/",
+      "serviceUrl": "http://127.0.0.1:8310/",
+      "organization": "Open Voice Network",
+      "role": "assistant",
+      "synopsis": "Aggregates a week's menu into ingredient quantities and estimated costs",
+      "openFloorRoles": { "information": true }
+    },
+    "capabilities": {
+      "keyphrases": [
+        "shopping list",
+        "grocery list",
+        "how much",
+        "ingredients needed",
+        "quantities",
+        "buy",
+        "order",
+        "purchase list"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Aggregates a week's menu into ingredient quantities and estimated costs.",
+        "Sums real per-dish ingredient quantities (TheMealDB) across a week's menu into one shopping list with estimated costs."
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

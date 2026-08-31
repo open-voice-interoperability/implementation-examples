@@ -11,7 +11,16 @@ flask-cors>=4.0
 httpx>=0.27
 
 # MCP server and client
-mcp>=1.0
+# Servers use the mcp.server.fastmcp.FastMCP API (1.x). That import path was
+# removed in mcp 2.0.0 (replaced by mcp.server.mcpserver.MCPServer) -- pin
+# below 2.0 so an unbounded lower bound can't silently pull in that breaking
+# major upgrade. Porting to the 2.x API is a deliberate future change, not
+# something that should happen via a routine dependency bump.
+mcp>=1.28.0,<2.0.0
+
+# Chart rendering (specialist agents draw PNG bar charts for Word/Office
+# compatibility -- SVG data URIs don't reliably paste as images into Word)
+Pillow>=10.1
 
 # Python standard library only beyond this point
 # (no additional dependencies for data parsing)

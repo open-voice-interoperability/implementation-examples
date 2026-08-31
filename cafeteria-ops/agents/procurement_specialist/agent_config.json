@@ -1,0 +1,37 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Procurement Specialist",
+      "speakerUri": "http://127.0.0.1:8306/",
+      "serviceUrl": "http://127.0.0.1:8306/",
+      "organization": "Open Voice Network",
+      "role": "assistant",
+      "synopsis": "Grounds sourcing decisions in real USDA wholesale commodity price data",
+      "openFloorRoles": { "information": true }
+    },
+    "capabilities": {
+      "keyphrases": [
+        "procurement",
+        "sourcing",
+        "purchase",
+        "purchasing",
+        "commodity",
+        "price",
+        "pricing",
+        "buy",
+        "contract",
+        "market"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Grounds sourcing decisions in real USDA wholesale commodity price data.",
+        "Advises on procurement timing and sourcing strategy using real USDA AMS commodity market data."
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

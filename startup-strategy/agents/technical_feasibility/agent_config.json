@@ -1,0 +1,36 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Technical Feasibility",
+      "speakerUri": "http://127.0.0.1:8208/",
+      "serviceUrl": "http://127.0.0.1:8208/",
+      "organization": "Open Voice Network",
+      "role": "assistant",
+      "synopsis": "Assesses technical feasibility by engineering domain and implementation risk.",
+      "openFloorRoles": { "information": true }
+    },
+    "capabilities": {
+      "keyphrases": [
+        "technical feasibility",
+        "engineering",
+        "prototype",
+        "implementation",
+        "chemistry",
+        "artificial intelligence",
+        "mechanical engineering",
+        "hardware",
+        "manufacturing"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Assesses technical feasibility by engineering domain and implementation risk.",
+        "Evaluates build complexity, key unknowns, dependencies, and near-term validation experiments."
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Inventory Specialist",
+      "speakerUri": "http://127.0.0.1:8305/",
+      "serviceUrl": "http://127.0.0.1:8305/",
+      "organization": "Open Voice Network",
+      "role": "assistant",
+      "synopsis": "Reasons about stock levels, par levels, and stockout/overstock risk",
+      "openFloorRoles": { "information": true }
+    },
+    "capabilities": {
+      "keyphrases": [
+        "inventory",
+        "stock",
+        "stockout",
+        "par level",
+        "overstock",
+        "reorder",
+        "shelf life",
+        "spoilage",
+        "count"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Reasons about stock levels, par levels, and stockout/overstock risk.",
+        "Evaluates par levels, reorder timing, and stockout/overstock risk for cafeteria ingredients."
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

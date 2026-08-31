@@ -1,0 +1,38 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Cafeteria Ops Convener",
+      "speakerUri": "http://127.0.0.1:8300/",
+      "serviceUrl": "http://127.0.0.1:8300/",
+      "organization": "Open Voice Network",
+      "role": "assistant",
+      "synopsis": "Coordinates a panel of cafeteria menu-planning and supply-chain specialist agents on the OFP floor",
+      "openFloorRoles": { "convener": true }
+    },
+    "capabilities": {
+      "keyphrases": [
+        "cafeteria",
+        "menu",
+        "lunch",
+        "nutrition",
+        "recipe",
+        "supply chain",
+        "procurement",
+        "inventory",
+        "menu planning",
+        "supply chain operations"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Routes cafeteria menu-planning and supply-chain queries across a panel of specialist agents.",
+        "Coordinates menu design, nutrition, recipe/portion, menu optimization, inventory, procurement, supplier, receiving/storage, and supply optimization analysis."
+      ],
+      "supportedLayers": {
+        "input": ["text"],
+        "output": ["text"]
+      }
+    }
+  }
+}

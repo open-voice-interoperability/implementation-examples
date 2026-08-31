@@ -120,3 +120,4 @@ startup-strategy/logs/startup/competitive.out.log
 startup-strategy/logs/startup/competitive.err.log
 startup-strategy/logs/startup/convener.err.log
 /startup-strategy/logs
+cafeteria-ops/logs/

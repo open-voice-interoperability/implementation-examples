@@ -1,0 +1,36 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Menu Optimization Specialist",
+      "speakerUri": "http://127.0.0.1:8304/",
+      "serviceUrl": "http://127.0.0.1:8304/",
+      "organization": "Open Voice Network",
+      "role": "assistant",
+      "synopsis": "Optimizes the menu mix for cost, variety, and waste reduction",
+      "openFloorRoles": { "information": true }
+    },
+    "capabilities": {
+      "keyphrases": [
+        "optimize",
+        "optimization",
+        "cost",
+        "waste",
+        "efficiency",
+        "ingredient reuse",
+        "variety",
+        "menu mix",
+        "budget"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Optimizes the menu mix for cost, variety, and waste reduction.",
+        "Evaluates a proposed menu across a planning period and recommends concrete cost, ingredient-reuse, and waste-reduction improvements."
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

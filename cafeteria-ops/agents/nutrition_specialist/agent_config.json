@@ -1,0 +1,37 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Nutrition Specialist",
+      "speakerUri": "http://127.0.0.1:8302/",
+      "serviceUrl": "http://127.0.0.1:8302/",
+      "organization": "Open Voice Network",
+      "role": "assistant",
+      "synopsis": "Assesses menu item nutrition using real USDA FoodData Central data",
+      "openFloorRoles": { "information": true }
+    },
+    "capabilities": {
+      "keyphrases": [
+        "nutrition",
+        "calories",
+        "protein",
+        "fat",
+        "carbs",
+        "sodium",
+        "healthy",
+        "macros",
+        "nutrient",
+        "nutritional"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Assesses menu item nutrition using real USDA FoodData Central data.",
+        "Analyzes calories, macronutrients, and sodium for menu items using real USDA nutrient data."
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Menu Designer",
+      "speakerUri": "http://127.0.0.1:8301/",
+      "serviceUrl": "http://127.0.0.1:8301/",
+      "organization": "Open Voice Network",
+      "role": "assistant",
+      "synopsis": "Designs lunch menu concepts balancing variety and theme",
+      "openFloorRoles": { "information": true }
+    },
+    "capabilities": {
+      "keyphrases": [
+        "menu",
+        "menu design",
+        "dish",
+        "dishes",
+        "lunch",
+        "theme",
+        "variety",
+        "rotation",
+        "offering",
+        "weekly menu"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Designs lunch menu concepts balancing variety and theme.",
+        "Proposes concrete lunch menu concepts with dish selection, weekly variety, and operational fit for a cafeteria setting."
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

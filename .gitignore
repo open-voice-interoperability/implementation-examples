@@ -74,6 +74,11 @@ verity/local-Pegasus.py
 verity/pipeline-Pegasus.log
 websockets/secondaryAssistantHTTP-Pegasus.py
 
+# Environment files (secrets) - any directory
+.env
+.env.local
+!.env.example
+
 # Python virtual environments
 .venv/
 gemini-agent/.venv/

@@ -61,6 +61,23 @@ def _requested_day_count(user_text: str) -> int | None:
 _DAY_LABEL_PREFIX = re.compile(r"^day\s*\d+:\s*", re.IGNORECASE)
 
 
+# Dessert / sweet-course cues -- a menu of these still gets a "cafeteria
+# lunch plate" image prompt otherwise, so the model plates a savoury main
+# instead of the sweet the Menu Designer actually named. Matched on this
+# agent's own dish wording, so it only needs to cover how desserts get
+# named, not every possible sweet.
+_DESSERT_RE = re.compile(
+    r"\b(dessert|cake|cupcake|cheesecake|shortcake|pie|tart|tartlet|galette|"
+    r"mousse|pudding|custard|flan|panna\s?cotta|tiramisu|trifle|parfait|"
+    r"cookie|biscotti|brownie|blondie|ice\s?cream|gelato|sorbet|sherbet|"
+    r"sundae|milkshake|eclair|éclair|profiterole|macaron|macaroon|"
+    r"baklava|cobbler|crumble|crisp|strudel|doughnut|donut|scone|muffin|"
+    r"compote|sticky\s?toffee|s'?mores?|lava\s?cake|torte|fondant|cannoli|"
+    r"churro|rice\s?pudding|bread\s?pudding|banoffee|affogato|semifreddo)\b",
+    re.IGNORECASE,
+)
+
+
 def _image_prompt(line: str) -> str:
     """Build an image-generation prompt from one line of this agent's own
     response (a "Day N: ..." entry, or the single dish/meal named in a
@@ -74,14 +91,18 @@ def _image_prompt(line: str) -> str:
     the picture entirely. The explicit "one cohesive plate, nothing
     repeated" instruction below fixes the actual problem (composition)
     instead, confirmed live to compose all of a multi-item line onto one
-    plate with each element appearing exactly once."""
+    plate with each element appearing exactly once. A dessert line is
+    plated as a dessert, not a lunch main."""
     dish = _DAY_LABEL_PREFIX.sub("", line).strip()
+    if _DESSERT_RE.search(dish):
+        kind, vessel = "cafeteria dessert serving", "dessert plate or bowl"
+    else:
+        kind, vessel = "cafeteria lunch plate", "plate"
     return (
         f"A professional, appetizing food-photography shot of one cohesive "
-        f"cafeteria lunch plate combining: {dish} Arrange all of this as ONE "
-        "single plate -- do not repeat or duplicate any item, each element "
-        "should appear exactly once. Realistic, natural lighting, no text or "
-        "watermarks."
+        f"{kind} combining: {dish} Arrange all of this as ONE single {vessel} "
+        "-- do not repeat or duplicate any item, each element should appear "
+        "exactly once. Realistic, natural lighting, no text or watermarks."
     )
 
 
@@ -177,6 +198,12 @@ If a prior conversation is included below, use it: a follow-up request
 there, not a fresh one -- revise/extend that specific menu rather than
 inventing an unrelated one.
 
+This system keeps NO history of past menus and has NO data on dish
+popularity or what diners chose. If the request asks about that (e.g.
+"what did we serve last week", "what's been most popular"), reply with one
+short sentence saying you don't have that history, and nothing else -- do
+not invent a past menu, and do not propose a different menu unless asked.
+
 If the request also asks about something outside menu design -- inventory/
 stock/par levels, nutrition, procurement/sourcing/cost, or a shopping
 list -- IGNORE that part entirely and answer ONLY the menu-design portion.
@@ -201,8 +228,19 @@ class MenuDesignerAgent(BaseStrategyAgent):
     AGENT_PORT = 8301
     AGENT_SYNOPSIS = "Designs lunch menu concepts balancing variety and theme"
     AGENT_CAPABILITY_DETAIL = "Proposes concrete lunch menu concepts with dish selection, weekly variety, and operational fit for a cafeteria setting."
-    AGENT_KEYPHRASES = ["menu", "menu design", "dish", "dishes", "lunch", "theme", "variety",
-                         "rotation", "offering", "weekly menu"]
+    # Deliberately phrase-level, not bare words like "menu"/"dish"/"lunch"/
+    # "variety" -- those are near-universal across cafeteria-ops utterances
+    # (a nutrition question about "this week's menu" mentions "menu" too),
+    # so as bare keyphrases they made the scope gate's fast-path treat any
+    # such utterance as automatically in-scope for the Menu Designer
+    # (confirmed live: "Flag any dishes on this week's menu that are over
+    # 1,000 mg of sodium" and "Is Friday's menu balanced across protein,
+    # carbs, and vegetables?" both got a menu answer instead of declining).
+    # See base_strategy_agent.py's _is_in_scope for how these are used.
+    AGENT_KEYPHRASES = ["menu design", "design a menu", "design the menu", "plan a menu",
+                         "plan the menu", "propose a menu", "weekly menu", "lunch menu",
+                         "menu rotation", "menu theme", "themed menu", "menu concept",
+                         "menu idea", "dish selection"]
     # BaseStrategyAgent's default of 50 words is a single-item budget --
     # divided across a five-day request via the per-day hint above, that's
     # only 10 words/day (floor-clamped up to 15), too tight for a real
@@ -211,6 +249,11 @@ class MenuDesignerAgent(BaseStrategyAgent):
     # per-day entry needs. Only takes effect when the UI's maxWords slider
     # value isn't otherwise supplied (e.g. a direct, non-UI request).
     MAX_RESPONSE_WORDS = 250
+    WORKING_LABEL = "designing the menu"
+
+    def working_label(self, user_text: str) -> str:
+        days = _requested_day_count(user_text)
+        return f"preparing a {days}-day set of meals" if days and days > 1 else self.WORKING_LABEL
 
     def process_utterance(self, user_text: str) -> dict:
         day_count = _requested_day_count(user_text)
@@ -228,7 +271,11 @@ class MenuDesignerAgent(BaseStrategyAgent):
 
 Please propose concrete lunch menu concept(s) for this request."""
 
-        raw = llm_utils.chat_sync(SYSTEM_PROMPT, user_message)
+        # Higher than llm_utils' 0.3 default -- this is the one agent in the
+        # project whose whole job is creative variety (dish selection, theme,
+        # rotation), not a grounded lookup, so it can afford more randomness
+        # than the fact-bound specialists.
+        raw = llm_utils.chat_sync(SYSTEM_PROMPT, user_message, temperature=0.9)
         # Stripped once here (rather than left to bot_on_utterance's own
         # later pass) so the "text" returned and the lines used to look
         # up images for "html" are guaranteed to match line-for-line --

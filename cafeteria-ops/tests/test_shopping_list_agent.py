@@ -24,6 +24,8 @@ from agents.shopping_list_specialist.shopping_list_agent import (
     _recompute_total_line,
     _render_html_from_sections,
     _render_text_from_sections,
+    _roll_up_line,
+    _to_one_serving,
     ShoppingListAgent,
 )
 
@@ -343,6 +345,63 @@ class ParseIngredientLinesTests(unittest.TestCase):
 
         self.assertEqual(total_line, "")
 
+    def test_model_summary_lines_are_dropped_not_parsed_as_ingredients(self):
+        # The model sometimes writes its own per-plate average / subtotal /
+        # restated total -- kept, "Average cost per plate: ~$2.31" was parsed
+        # as a fake ingredient and the response ended up with two disagreeing
+        # per-plate figures. The agent recomputes these deterministically.
+        text = (
+            "chicken breast: 5kg (~$40)\n"
+            "Average cost per plate: ~$2.31\n"
+            "Subtotal: ~$40\n"
+            "Cost per serving: ~$1.50\n"
+            "Estimated total: ~$40"
+        )
+        ingredient_lines, other_lines, total_line = _parse_ingredient_lines(text)
+
+        self.assertEqual([name for name, _ in ingredient_lines], ["chicken breast"])
+        self.assertEqual(other_lines, [])
+        self.assertEqual(total_line, "Estimated total: ~$40")
+
+    def test_bare_total_variants_are_captured_as_the_total_line(self):
+        for line in ["Total: ~$300", "Grand total ~$300", "Total cost: $300", "Overall total: ~$300"]:
+            _, _, total_line = _parse_ingredient_lines(f"onion: 3kg (~$6)\n{line}")
+            self.assertEqual(total_line, line, line)
+
+
+class ToOneServingTests(unittest.TestCase):
+    """A Recipe & Portion writeup that was already scaled to a headcount
+    ("Full service -- quantities to prepare N servings ...") is divided
+    back to one serving so this agent doesn't multiply by the headcount a
+    second time."""
+
+    def test_a_plain_writeup_is_returned_unchanged(self):
+        text = "Grilled salmon: 150 g salmon, 90 g rice; 220 g plate."
+        self.assertEqual(_to_one_serving(text), (text, 1))
+
+    def test_a_batch_writeup_is_divided_back_and_the_preamble_dropped(self):
+        text = (
+            "Full service -- quantities to prepare 4 servings of each dish, scaled from the one-serving amounts:\n\n"
+            "Grilled salmon: 600 g salmon, 1.2 L stock; sear 3-4 min, bake at 400 F; 220 g plate.\n"
+            "Chickpea stew: 720 g chickpeas; simmer 20 min; 300 g bowl."
+        )
+        out, n = _to_one_serving(text)
+        self.assertEqual(n, 4)
+        self.assertNotIn("Full service", out)
+        self.assertIn("150 g salmon", out)
+        self.assertIn("300 ml stock", out)          # 1.2 L / 4, rolled down
+        self.assertIn("180 g chickpeas", out)
+        self.assertIn("3-4 min", out)               # times untouched
+        self.assertIn("400 F", out)                 # temps untouched
+        self.assertIn("220 g plate", out)           # per-plate size untouched
+        self.assertIn("300 g bowl", out)            # per-bowl size untouched
+
+    def test_scaled_to_one_is_treated_as_not_a_batch(self):
+        text = "Full service -- quantities to prepare 1 serving:\n\nGrilled salmon: 150 g salmon."
+        out, n = _to_one_serving(text)
+        self.assertEqual(n, 1)
+        self.assertEqual(out, text)
+
 
 class CategorizeIngredientsTests(unittest.TestCase):
     def test_empty_list_makes_no_call(self):
@@ -445,6 +504,52 @@ class GroupByCategoryTests(unittest.TestCase):
         for category in sla.CATEGORIES:
             if category != "Meat & Poultry":
                 self.assertNotIn(f"{category}:", result)
+
+
+class RollUpLineTests(unittest.TestCase):
+    """The scaling model prints the raw scaled figure ("5000g", "100 tbsp");
+    _roll_up_line rewrites each line's quantity into a bulk unit, leaving
+    the ingredient name and the cost untouched, and leaving anything it
+    doesn't recognise exactly as written."""
+
+    def test_grams_over_a_kilo_become_kilograms(self):
+        self.assertEqual(_roll_up_line("scallops: 5000g (~$150)"), "scallops: 5 kg (~$150)")
+        self.assertEqual(_roll_up_line("salmon: 12000 g (~$180)"), "salmon: 12 kg (~$180)")
+
+    def test_millilitres_over_a_litre_become_litres(self):
+        self.assertEqual(_roll_up_line("olive oil: 1500 ml (~$15)"), "olive oil: 1.5 L (~$15)")
+
+    def test_spoons_convert_to_litres_or_cups(self):
+        self.assertEqual(_roll_up_line("butter: 100 tbsp (~$10)"), "butter: 1.48 L (~$10)")
+        self.assertEqual(_roll_up_line("lemon juice: 100 tsp (~$10)"), "lemon juice: 2.08 cups (~$10)")
+
+    def test_ounces_over_a_pound_become_pounds(self):
+        self.assertEqual(_roll_up_line("beef: 40 oz (~$30)"), "beef: 2.5 lb (~$30)")
+
+    def test_thousands_separator_is_handled(self):
+        self.assertEqual(_roll_up_line("flour: 12,000 g (~$9)"), "flour: 12 kg (~$9)")
+
+    def test_count_based_items_are_left_alone(self):
+        self.assertEqual(_roll_up_line("garlic: 100 cloves (~$5)"), "garlic: 100 cloves (~$5)")
+
+    def test_amounts_below_the_threshold_are_left_alone(self):
+        self.assertEqual(_roll_up_line("cream: 800 ml (~$4)"), "cream: 800 ml (~$4)")
+        self.assertEqual(_roll_up_line("sugar: 8 tbsp (~$1)"), "sugar: 8 tbsp (~$1)")
+        self.assertEqual(_roll_up_line("chicken breast: 5kg (~$40)"), "chicken breast: 5kg (~$40)")
+
+    def test_non_numeric_quantities_are_left_alone(self):
+        self.assertEqual(_roll_up_line("salt: Pinch (~$1)"), "salt: Pinch (~$1)")
+        self.assertEqual(_roll_up_line("lime: Juice of 50 limes (~$5)"), "lime: Juice of 50 limes (~$5)")
+
+    def test_a_line_with_no_cost_suffix_is_untouched(self):
+        self.assertEqual(_roll_up_line("milk: 3000 ml"), "milk: 3000 ml")
+
+    def test_roll_up_happens_in_build_category_sections(self):
+        text = "salmon: 12000g (~$180)\nEstimated total: ~$180"
+        sections, _other, total_line = _build_category_sections(text)
+        all_lines = [line for _cat, lines in sections for line in lines]
+        self.assertIn("salmon: 12 kg (~$180)", all_lines)
+        self.assertEqual(total_line, "Estimated total: ~$180")
 
 
 class DedupeIngredientLinesTests(unittest.TestCase):

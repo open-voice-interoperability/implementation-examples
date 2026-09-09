@@ -23,6 +23,12 @@ from agents.base_strategy_agent import BaseStrategyAgent, make_flask_app
 import mcp_client
 import llm_utils
 
+# This agent retrieves and formats data (USDA / TheMealDB lookups, portion
+# arithmetic) rather than doing open-ended creative work, so every LLM call
+# here runs on the smaller, cheaper "lookup" model tier. Only the Menu
+# Designer keeps the full analysis model. See llm_utils.LOOKUP_* / .env.
+_LOOKUP = {"ollama_model": llm_utils.LOOKUP_OLLAMA_MODEL, "openai_model": llm_utils.LOOKUP_LLM_MODEL}
+
 logger = logging.getLogger(__name__)
 
 # Hardcoded to match agents/menu_designer/menu_designer_agent.py's own
@@ -61,11 +67,21 @@ _BROAD_PLANNING_SIGNAL = re.compile(
     re.IGNORECASE,
 )
 
-_DISH_EXTRACTION_SYSTEM_PROMPT = """Extract the distinct dish names from a cafeteria menu.
+_DISH_EXTRACTION_SYSTEM_PROMPT = """Extract the main dishes from a cafeteria menu.
 
-Identify every distinct DISH (a specific food item someone would cook -- e.g.
-"Grilled Chicken Caesar Salad"). Ignore day labels ("Day 1:") and anything
-that isn't an actual dish name.
+Return ONE entry per dish (per day / per menu line) -- the whole meal as a
+single dish, named by its main or centerpiece component in 2-4 plain words
+("Grilled salmon", "Herb-crusted pork tenderloin", "Stuffed portobello").
+
+Do NOT:
+- break a meal into parts -- sides, starches, vegetables, salads, sauces,
+  glazes, dressings, marinades and garnishes belong to their dish, they
+  are not separate dishes ("... with wild rice pilaf and a lemon-pepper
+  crust" is still just "Grilled salmon")
+- include day labels ("Day 1:"), headcounts, serving or operational
+  notes, or anything that isn't a dish
+- keep plating flourishes ("pan-seared", "served over", "with a drizzle
+  of ...") -- name the dish, not how it is presented
 
 Respond with ONLY a single JSON object and no other text:
 {"dishes": ["<dish name>", ...]}
@@ -103,6 +119,12 @@ If no matching recipe data was retrieved for a dish, say so plainly and give
 your best LLM-derived recipe instead -- don't imply you found real data when
 you didn't.
 
+This system keeps NO record of recipes previously used or dishes previously
+made in this cafeteria. If asked "what recipe did we use last time" or
+similar, say plainly you don't have that history -- you can still give a
+standard one-serving recipe for the dish, but don't imply it is the one
+previously used here.
+
 Derive specifics from the actual dish(es) named, not a generic template.
 Write in plain prose only -- no markdown, bold, or bullet characters, no
 numbered-list markers -- just plain text lines. Keep the response focused;
@@ -121,6 +143,45 @@ def _dish_query(user_text: str) -> str | None:
     return cleaned
 
 
+# Preparation / plating / seasoning words that describe HOW a dish is cooked
+# or served, not WHAT it is. TheMealDB's title search (search.php?s=) matches
+# a query only as a substring of a recipe title, so the Menu Designer's
+# "Grilled salmon with a lemon-pepper crust" finds nothing while a bare
+# "salmon" finds several (confirmed live: 0 vs 7). Stripping these leaves the
+# identity noun to retry with.
+_PREP_PLATING_WORDS = frozenset("""
+grilled roasted seared sauteed sauteed baked braised fried pan stir steamed
+poached smoked charred blackened caramelized whipped mashed pureed crusted
+herb herbed spiced spice glazed marinated fresh creamy crispy crisp crunchy
+tender juicy homemade classic style rustic hearty light warm cold chilled
+served side sides topped drizzled dressed accompanied stuffed rolled wrapped
+with without and the a an of on in over under alongside plus atop
+lemon pepper peppered garlic butter buttered honey dijon mustard balsamic
+citrus soy teriyaki sesame ginger chili chilli paprika cumin rosemary thyme
+basil parsley cilantro oregano cinnamon
+sauce reduction glaze gravy vinaigrette dressing crust rub marinade jus
+caps cap fillet fillets breast breasts thigh thighs loin tenderloin cutlet
+strips bites medallions skewers
+one two three four five six seven eight nine ten
+serving servings portion portions recipe recipes amount amounts ingredient
+ingredients dish dishes meal meals menu menus day days week weeks whole full
+entire for from into please work give show find make
+""".split())
+
+
+def _core_term(dish_name: str) -> str:
+    """The single identity word to retry a lookup with when the dish name
+    as given found nothing -- the first word left after prep/plating and
+    generic request words are dropped ("Herb-crusted pork tenderloin" ->
+    "pork"). "" if nothing identifiable remains (e.g. a vague "one-serving
+    recipes for the whole menu"), which suppresses the retry rather than
+    matching junk."""
+    for word in re.findall(r"[A-Za-z]+", dish_name):
+        if len(word) > 2 and word.lower() not in _PREP_PLATING_WORDS:
+            return word.lower()
+    return ""
+
+
 def _extract_dishes(menu_text: str) -> list[str]:
     """LLM-based extraction of distinct dish names from a proposed menu.
     Free text like "Day 1: X, Day 2: Y, ..." has an unknown number of
@@ -128,7 +189,7 @@ def _extract_dishes(menu_text: str) -> list[str]:
     (and the same fix) as the Shopping List Specialist's own menu
     extraction, kept as a separate local copy since each cafeteria-ops
     agent is self-contained."""
-    raw = llm_utils.chat_sync(_DISH_EXTRACTION_SYSTEM_PROMPT, menu_text, temperature=0, timeout=15)
+    raw = llm_utils.chat_sync(_DISH_EXTRACTION_SYSTEM_PROMPT, menu_text, temperature=0, timeout=15, **_LOOKUP)
     match = re.search(r"\{[\s\S]*\}", raw)
     if not match:
         return []
@@ -193,21 +254,55 @@ def _fetch_all_recipes(dishes: list[str]) -> dict[str, str | None]:
     if not dishes:
         return {}
 
-    search_requests = [("themealdb", "search_by_name", {"name": dish[:60]}) for dish in dishes]
-    search_results = mcp_client.call_tools_parallel_sync(search_requests, timeout=10.0)
-
     top_match: dict[str, str] = {}  # dish -> meal_id
-    for dish, raw in zip(dishes, search_results):
-        raw = _non_empty_results(raw)
-        if not raw:
+
+    def _search_round(queries: dict[str, str]) -> None:
+        """queries: dish -> search term. Records a top_match for any hit."""
+        if not queries:
+            return
+        requests = [("themealdb", "search_by_name", {"name": term[:60]}) for term in queries.values()]
+        results = mcp_client.call_tools_parallel_sync(requests, timeout=10.0)
+        for dish, raw in zip(queries.keys(), results):
+            raw = _non_empty_results(raw)
+            if not raw:
+                continue
+            try:
+                parsed = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            hits = parsed.get("results") or []
+            if hits and hits[0].get("id"):
+                top_match[dish] = hits[0]["id"]
+
+    # Round 1: the dish name as given.
+    _search_round({dish: dish for dish in dishes})
+    # Round 2: for anything still unmatched, retry with just the core
+    # identity word -- TheMealDB's title search can't match the Menu
+    # Designer's full "Grilled salmon with a lemon-pepper crust" phrasing.
+    retry = {}
+    for dish in dishes:
+        if dish in top_match:
             continue
-        try:
-            parsed = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
+        term = _core_term(dish)
+        if term and term != dish.strip().lower():
+            retry[dish] = term
+    _search_round(retry)
+
+    # Dedupe by meal_id: several dishes can resolve to the SAME TheMealDB
+    # recipe -- especially after the core-term retry, where e.g. "Grilled
+    # chicken breast" and "Chicken tikka masala" both reduce to "chicken"
+    # and grab the same match. Keep the first dish (menu order) for each
+    # meal_id; the rest fall through to not_found so the model derives a
+    # dish-specific recipe rather than printing the identical one twice.
+    claimed: dict[str, str] = {}  # meal_id -> first dish that claimed it
+    for dish in dishes:
+        meal_id = top_match.get(dish)
+        if meal_id is None:
             continue
-        results = parsed.get("results") or []
-        if results and results[0].get("id"):
-            top_match[dish] = results[0]["id"]
+        if meal_id in claimed:
+            del top_match[dish]
+        else:
+            claimed[meal_id] = dish
 
     output: dict[str, str | None] = {dish: None for dish in dishes}
     if not top_match:
@@ -227,11 +322,257 @@ def _fetch_all_recipes(dishes: list[str]) -> dict[str, str | None]:
     return output
 
 
+# A question that asks what recipe was previously used / how a dish was
+# made here before is declined BEFORE any LLM call -- confirmed live that
+# qwen2.5:7b just answers with a standard recipe and never mentions it has
+# no such history. Substring match on the raw utterance. (A plain "give me
+# a recipe for chicken curry" has none of these and is answered normally.)
+_MISSING_DATA_MARKERS = (
+    "recipe did we use", "recipe we used", "recipe we've used",
+    "last time we made", "last time we cooked", "last time we served",
+    "last time we prepared", "how did we make", "how we made it",
+    "how we've made", "the version we used", "the one we used",
+    "what we did last time", "our recipe for", "recipe from last",
+    "recipe we had", "did we make it last",
+)
+_MISSING_DATA_DECLINE = (
+    "I don't have any record of recipes previously used or dishes previously "
+    "made in this cafeteria, so I can't tell you what was used last time."
+)
+
+
+def _needs_unavailable_data(user_text: str) -> bool:
+    lowered = (user_text or "").lower()
+    return any(marker in lowered for marker in _MISSING_DATA_MARKERS)
+
+
+# --- serving scale -----------------------------------------------------------
+#
+# The recipe/portion round-robin (the forwarded planning request) always
+# produces ONE-serving amounts -- the Nutrition Specialist runs right after
+# and needs one serving, and the Shopping List Specialist scales the
+# one-serving amounts itself. But a person can ALSO ask this agent directly
+# to "show the recipes", which they want scaled to the whole cafeteria, with
+# an explicit way to ask for a single serving instead. So:
+#   * "single serving" / "per serving" phrasing anywhere -> one serving.
+#   * an explicit request to SEE the recipes (whole menu) -> scale to the
+#     headcount.
+#   * an explicit "full service" / "batch" / "for everyone" -> scale, even
+#     for a single named dish.
+#   * anything else (including the round-robin planning request, which does
+#     say "for 450 people" but is not a request to view recipes) -> one
+#     serving, unchanged.
+DEFAULT_SERVINGS = 450
+_SINGLE_SERVING_RE = re.compile(
+    r"\b(?:single|one|1|per)[\s-]+serving\b|\bper[- ]serving\b|\bone portion\b|\bjust one\b", re.I)
+_RECIPE_VIEW_RE = re.compile(
+    r"\b(?:show|see|view|display|list|pull up|bring up|give me|what(?:'s| is| are))\b[^.?!]*\brecipe", re.I)
+_FULL_SERVICE_RE = re.compile(
+    r"\bfull[\s-]?service\b|\bfull batch\b|\bfull number of servings\b|\bscale(?:d)?\s*(?:it|them|up)\b"
+    r"|\bfor (?:all|everyone|the whole)\b|\bbatch (?:size|quantit)", re.I)
+# The leftover of _dish_query when the request names no real dish (just
+# "the recipes", "the menu", "a single serving", optionally trailing "for
+# 300 people" etc.) -- these route to the whole-menu path, not a TheMealDB
+# search.
+_VAGUE_DISH_RE = re.compile(
+    r"^\s*(?:please\s+)?"
+    r"(?:(?:show|see|view|display|list|give|get|pull up|bring up|what(?:'s| is| are))\s+)?(?:me\s+)?"
+    r"(?:the|a|an|all|all of the|every|our|those|these|it|them)?\s*"
+    r"(?:recipes?|menu|dishes|meals?)\b"
+    r"(?:\s+(?:for|to|of|please|now|scaled|full service|single serving|per serving)\b.*)?\s*[.?!]*$",
+    re.I)
+_VAGUE_SERVING_RE = re.compile(
+    r"^\s*(?:(?:the|a|an)\s+){0,3}"
+    r"(?:single serving|one serving|per serving|full service|full batch|batch|everything)"
+    r"(?:\s+\S.*)?\s*[.?!]*$", re.I)
+_SERVINGS_UNIT = (
+    r"people|persons?|servings?|diners?|guests?|lunches|meals?|covers|portions?|plates?"
+    r"|kids|children|students|staff|employees|attendees|adults|folks|heads?"
+)
+_WORD_NUMS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+    "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "dozen": 12, "thirteen": 13, "fourteen": 14,
+    "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+    "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+    "hundred": 100,
+}
+_SERVE_VERB = r"serves?|serving|feeds?|feed|to feed|to serve|cook(?:ing)? for|make(?:s)? for|meals? for|feeding"
+_SERVINGS_UNIT_RE = re.compile(rf"\b(\d{{1,6}})\s*(?:{_SERVINGS_UNIT})\b", re.I)
+_SERVINGS_VERB_RE = re.compile(rf"\b(?:{_SERVE_VERB})\s+(\d{{1,6}})\b", re.I)
+# A bare "for N" needs 2+ digits and must not sit before a day/dish word --
+# "for 5 days" and "for 3 dishes" are not headcounts.
+_SERVINGS_FOR_RE = re.compile(
+    r"\bfor\s+(\d{2,6})\b(?!\s*(?:day|week|hour|minute|min|dish|course|item|option|serving|of\b))", re.I)
+_SERVINGS_UNIT_WORD_RE = re.compile(rf"\b({'|'.join(_WORD_NUMS)})\s*(?:{_SERVINGS_UNIT})\b", re.I)
+_SERVINGS_VERB_WORD_RE = re.compile(rf"\b(?:{_SERVE_VERB}|for)\s+({'|'.join(_WORD_NUMS)})\b", re.I)
+# Trailing "for 4 people" / "for four" clause on a dish query, so
+# "chicken curry for 4 people" searches for "chicken curry".
+_STRIP_HEADCOUNT_RE = re.compile(
+    rf"[\s,]*\b(?:for|to\s+(?:feed|serve)|{_SERVE_VERB})\s+"
+    rf"(?:\d{{1,6}}|{'|'.join(_WORD_NUMS)})\s*(?:{_SERVINGS_UNIT})?\s*[.?!]*\s*$", re.I)
+# A dish query that is really just "food/a meal for N", not a dish.
+_GENERIC_FOOD_RE = re.compile(
+    r"^\s*(?:some\s+|a\s+)?(?:food|meals?|dinner|lunch|supper|brunch|something(?:\s+to\s+eat)?|a\s+meal|eats?)\b", re.I)
+
+_MASS_G = {"g": 1, "gram": 1, "grams": 1, "gm": 1, "gms": 1,
+           "kg": 1000, "kilo": 1000, "kilos": 1000, "kilogram": 1000, "kilograms": 1000, "mg": 0.001}
+_VOL_ML = {"ml": 1, "milliliter": 1, "milliliters": 1, "millilitre": 1, "millilitres": 1,
+           "l": 1000, "liter": 1000, "liters": 1000, "litre": 1000, "litres": 1000}
+_COUNT_UNITS = {"tsp", "tbsp", "teaspoon", "teaspoons", "tablespoon", "tablespoons", "cup", "cups",
+                "clove", "cloves", "slice", "slices", "sprig", "sprigs", "can", "cans", "stick", "sticks",
+                "oz", "ounce", "ounces", "lb", "lbs", "pound", "pounds"}
+_SCALE_UNIT_RE = re.compile(r"(\d+(?:\.\d+)?)(\s*)([A-Za-z]+)\b")
+
+
+def _fmt_amount(value: float) -> str:
+    return f"{value:.2f}".rstrip("0").rstrip(".") or "0"
+
+
+def _scale_recipe_text(text: str, n: int) -> str:
+    """Multiply every ingredient quantity in a one-serving writeup by ``n``,
+    rolling grams up to kg and millilitres up to litres. Times ("3 min"),
+    temperatures ("400 F"), and dimensions ("1 inch") carry no food unit and
+    pass through untouched; a per-plate / per-serving figure is left as
+    written."""
+    if n <= 1:
+        return text
+
+    def repl(match: re.Match) -> str:
+        after = text[match.end():match.end() + 18].lower()
+        if any(word in after for word in ("plate", "bowl", "per serving", "serving size", "portion size", "per plate", "per bowl")):
+            return match.group(0)
+        num, spacer, unit_raw = match.group(1), match.group(2), match.group(3)
+        unit = unit_raw.lower()
+        value = float(num) * n
+        if unit in _MASS_G:
+            grams = value * _MASS_G[unit]
+            return f"{_fmt_amount(grams / 1000)} kg" if grams >= 1000 else f"{_fmt_amount(grams)} g"
+        if unit in _VOL_ML:
+            millilitres = value * _VOL_ML[unit]
+            return f"{_fmt_amount(millilitres / 1000)} L" if millilitres >= 1000 else f"{_fmt_amount(millilitres)} ml"
+        if unit in _COUNT_UNITS:
+            return f"{_fmt_amount(value)}{spacer}{unit_raw}"
+        return match.group(0)
+
+    return _SCALE_UNIT_RE.sub(repl, text)
+
+
+def _explicit_servings(text: str) -> "int | None":
+    """A headcount the user actually stated ("for 4 people", "food for four",
+    "serves 12", "cook for six"), or None. Digits or number words."""
+    s = text or ""
+    for rx in (_SERVINGS_UNIT_RE, _SERVINGS_VERB_RE, _SERVINGS_FOR_RE):
+        m = rx.search(s)
+        if m:
+            n = int(m.group(1))
+            if 1 <= n <= 100000:
+                return n
+    for rx in (_SERVINGS_UNIT_WORD_RE, _SERVINGS_VERB_WORD_RE):
+        m = rx.search(s)
+        if m:
+            n = _WORD_NUMS.get(m.group(1).lower())
+            if n:
+                return n
+    return None
+
+
+def _servings_from(*sources: str) -> int:
+    for src in sources:
+        n = _explicit_servings(src or "")
+        if n is not None:
+            return n
+    return DEFAULT_SERVINGS
+
+
+# The browser board (public/cafeteria-ops.html) shows only the dish NAME for
+# each entry and opens the recipe in a popup -- it keys on each dish being a
+# single line "<dish name>: <amounts...>". The model mostly does that, but
+# sometimes wraps a long dish name or its amounts across two or three lines,
+# which the board would then read as extra (bogus) dishes. This folds every
+# non-dish-start line back onto the preceding dish line.
+_MENU_FIELD_LABEL_RE = re.compile(
+    r"^(prep(aration)?|ingredients?|method|directions?|instructions?|steps?|serving(\s*size)?|serves|"
+    r"portions?|plate|yield|amounts?|notes?|nutrition|calories?|makes)\b", re.I)
+_MENU_NOTE_RE = re.compile(r"^\s*(full[\s-]?service\b|dishes with no\b|no recipe data\b|here (is|are)\b|below\b)", re.I)
+_MENU_DISH_START_RE = re.compile(
+    r"^\s*(?:day\s*\d+\s*[:\-–—.)]*\s*|\d+[.)]\s*)?([^:\n]{1,64}):\s+\S")
+
+
+_MENU_PREP_VERB_RE = re.compile(
+    r"^(season|sear|cook|mix|combine|heat|add|serve|toss|whisk|simmer|bake|roast|grill|saute|"
+    r"sauté|fry|boil|steam|drain|stir|blend|marinate|chop|slice|dice|preheat|plate|garnish|"
+    r"top|drizzle|fold|reduce|deglaze|rest|set|arrange|spread|brush|coat|dress|assemble|use|scale|"
+    r"place|pour|cover|remove|transfer|cut|form|shape)\b", re.I)
+
+
+def _dish_name_from_line(line: str) -> str | None:
+    """The dish name if ``line`` starts a dish entry ("<name>: <amounts>"),
+    else None -- a leading "Day 3 - " / "1. " ordinal is ignored, and a
+    field label or a note line is not a dish."""
+    if _MENU_NOTE_RE.match(line):
+        return None
+    m = _MENU_DISH_START_RE.match(line)
+    if not m:
+        return None
+    name = m.group(1).strip(" .-–—")
+    if not name or _MENU_FIELD_LABEL_RE.match(name) or len(name.split()) > 9:
+        return None
+    return name
+
+
+def _looks_like_bare_dish_name(line: str) -> bool:
+    """A colon-less line that reads as a dish TITLE rather than amounts or a
+    prep sentence -- short, capitalised, no digits, not an imperative
+    cooking instruction. Used to recover a dish boundary when the model
+    ignored the "<name>: ..." format entirely."""
+    if not line or not line[0].isupper():
+        return False
+    if _MENU_FIELD_LABEL_RE.match(line) or _MENU_PREP_VERB_RE.match(line):
+        return False
+    if any(ch.isdigit() for ch in line):
+        return False
+    words = line.rstrip(".").split()
+    return 1 <= len(words) <= 7
+
+
+def _normalize_menu_recipe_lines(text: str) -> str:
+    """Collapse a whole-menu writeup to one line per dish. An explicit
+    "<name>: <amounts>" line starts a dish; a bare title line also starts
+    one (a synthetic colon is added); every other line is folded onto the
+    current dish. Note / marker lines stay on their own line."""
+    out: list[str] = []
+    have_dish = False
+    for raw in text.split("\n"):
+        line = raw.strip()
+        if not line:
+            continue
+        if _MENU_NOTE_RE.match(line):
+            out.append(line)
+            have_dish = False
+            continue
+        if _dish_name_from_line(line):
+            out.append(line)
+            have_dish = True
+        elif not have_dish and _looks_like_bare_dish_name(line):
+            out.append(line.rstrip(".") + ":")
+            have_dish = True
+        elif have_dish and out:
+            out[-1] = out[-1].rstrip() + " " + line
+        elif _looks_like_bare_dish_name(line):
+            out.append(line.rstrip(".") + ":")
+            have_dish = True
+        else:
+            out.append(line)
+            have_dish = True
+    return "\n".join(out)
+
+
 class RecipePortionAgent(BaseStrategyAgent):
     AGENT_NAME = "Recipe & Portion Specialist"
     AGENT_PORT = 8303
     AGENT_SYNOPSIS = "Finds real recipe ideas and grounds cafeteria portion sizing"
     AGENT_CAPABILITY_DETAIL = "Retrieves real recipes and ingredient data to propose cafeteria-scale portion guidance for a specific dish or a whole week's menu."
+    WORKING_LABEL = "working out the recipes and portions"
     AGENT_KEYPHRASES = ["recipe", "recipes", "portion", "portions", "serving", "serving size",
                          "ingredients", "preparation", "cook", "batch", "amounts needed"]
     # BaseStrategyAgent's default of 50 words is a single-item budget --
@@ -258,14 +599,52 @@ class RecipePortionAgent(BaseStrategyAgent):
             logger.info("[RecipePortion] Saved Menu Designer's proposed menu for conv %s", conv_id)
 
     def process_utterance(self, user_text: str) -> dict:
+        if _needs_unavailable_data(user_text):
+            logger.info("[RecipePortion] Declining -- question needs recipe/prep history this system lacks")
+            return {"text": _MISSING_DATA_DECLINE, "html": ""}
+
+        single_serving = bool(_SINGLE_SERVING_RE.search(user_text))
+        wants_full = bool(_FULL_SERVICE_RE.search(user_text))
+        wants_recipe_view = bool(_RECIPE_VIEW_RE.search(user_text))
+        # An explicit headcount the user stated ("for 4 people", "food for
+        # four", "serves 12") is itself a request to scale to that number --
+        # UNLESS this is the round-robin planning request, which also says
+        # "for 450" but must stay one serving for Nutrition / Shopping List.
+        is_planning = bool(_BROAD_PLANNING_SIGNAL.search(user_text))
+        explicit_servings = None if is_planning else _explicit_servings(user_text)
+        headcount_request = explicit_servings is not None
+
         single_dish_query = _dish_query(user_text)
+        if single_dish_query and headcount_request:
+            # "chicken curry for 4 people" -> search "chicken curry".
+            single_dish_query = _STRIP_HEADCOUNT_RE.sub("", single_dish_query).strip()
+        if single_dish_query and (
+            _VAGUE_DISH_RE.match(single_dish_query.strip())
+            or _VAGUE_SERVING_RE.match(single_dish_query.strip())
+            or (headcount_request and _GENERIC_FOOD_RE.match(single_dish_query.strip()))
+        ):
+            single_dish_query = None  # "show me the recipes" / "food for four" -> whole menu
+
         if single_dish_query:
+            scale = not single_serving and (wants_full or headcount_request)
+            servings = (explicit_servings or _servings_from(user_text)) if scale else 1
+            if servings > 1:
+                return self._respond_for_one_dish(user_text, single_dish_query, servings=servings)
             return self._respond_for_one_dish(user_text, single_dish_query)
 
         saved_menu = self._observed_menus.get(self._current_conv_id, "")
         if saved_menu:
             dishes = _extract_dishes(saved_menu)
             if dishes:
+                scale = not single_serving and (wants_full or wants_recipe_view or headcount_request)
+                if not scale:
+                    servings = 1
+                elif explicit_servings is not None:
+                    servings = explicit_servings
+                else:
+                    servings = _servings_from(user_text, saved_menu)
+                if servings > 1:
+                    return self._respond_for_whole_menu(saved_menu, dishes, servings=servings)
                 return self._respond_for_whole_menu(saved_menu, dishes)
 
         # No specific dish named and no usable saved menu -- fall back to
@@ -276,10 +655,21 @@ Data retrieved:
 No recipe or nutrient data found -- use general culinary knowledge.
 
 Please provide a concrete recipe with portion guidance for ONE serving of this dish."""
-        text = llm_utils.chat_sync(SYSTEM_PROMPT, user_message)
+        text = llm_utils.chat_sync(SYSTEM_PROMPT, user_message, **_LOOKUP)
         return {"text": text, "html": self._text_to_html_list(text)}
 
-    def _respond_for_one_dish(self, user_text: str, query: str) -> dict:
+    @staticmethod
+    def _apply_servings(text: str, servings: int) -> str:
+        """One-serving writeup -> batch writeup for ``servings`` servings, with
+        a leading marker the browser board keys on ("full service ...")."""
+        if servings <= 1:
+            return text
+        return (
+            f"Full service -- quantities to prepare {servings} servings of each dish, "
+            f"scaled from the one-serving amounts:\n\n"
+        ) + _scale_recipe_text(text, servings)
+
+    def _respond_for_one_dish(self, user_text: str, query: str, servings: int = 1) -> dict:
         recipe_summary, nutrient_data = mcp_client.call_tools_parallel_sync([
             ("themealdb", "search_by_name", {"name": query[:60]}),
             ("usda_fdc", "search_food", {"query": query[:80], "limit": 2}),
@@ -288,6 +678,14 @@ Please provide a concrete recipe with portion guidance for ONE serving of this d
         # search_by_name only found a candidate dish -- fetch that
         # match's real ingredients/instructions in a second lookup.
         recipe_data = _fetch_recipe_details(_non_empty_results(recipe_summary))
+        if not recipe_data:
+            # Retry with just the core identity word -- a full "Grilled
+            # salmon with a lemon-pepper crust" won't match a TheMealDB
+            # title, but "salmon" will.
+            term = _core_term(query)
+            if term and term != query.strip().lower():
+                retry_summary = mcp_client.call_tool_sync_or_none("themealdb", "search_by_name", {"name": term})
+                recipe_data = _fetch_recipe_details(_non_empty_results(retry_summary))
 
         gathered = []
         if recipe_data:
@@ -303,10 +701,11 @@ Data retrieved:
 
 Please provide a concrete recipe with portion guidance for ONE serving of this dish."""
 
-        text = llm_utils.chat_sync(SYSTEM_PROMPT, user_message)
+        text = llm_utils.chat_sync(SYSTEM_PROMPT, user_message, **_LOOKUP)
+        text = self._apply_servings(text, servings)
         return {"text": text, "html": self._text_to_html_list(text)}
 
-    def _respond_for_whole_menu(self, saved_menu: str, dishes: list[str]) -> dict:
+    def _respond_for_whole_menu(self, saved_menu: str, dishes: list[str], servings: int = 1) -> dict:
         recipe_data = _fetch_all_recipes(dishes)
 
         gathered = []
@@ -344,9 +743,17 @@ Real recipe data retrieved from TheMealDB (may be written for several servings -
 {not_found_note}
 {budget_hint}
 
-Please provide a concrete recipe with portion guidance (ingredient amounts needed) for ONE serving of EVERY dish in this week's menu."""
+Please provide a concrete recipe with portion guidance (ingredient amounts needed) for ONE serving of EVERY dish in this week's menu.
 
-        text = llm_utils.chat_sync(SYSTEM_PROMPT, user_message, timeout=45)
+Format: ONE line per dish -- the dish name, then a colon, then the
+one-serving ingredient amounts, a short prep note, and the plate size, all
+on that same line. The dish name before the colon must be 2 to 6 words with
+no colon, comma, or line break inside it. Do not put a dish's amounts, prep,
+or plate size on their own separate lines."""
+
+        text = llm_utils.chat_sync(SYSTEM_PROMPT, user_message, timeout=45, **_LOOKUP)
+        text = _normalize_menu_recipe_lines(text)
+        text = self._apply_servings(text, servings)
         return {"text": text, "html": self._text_to_html_list(text)}
 
 

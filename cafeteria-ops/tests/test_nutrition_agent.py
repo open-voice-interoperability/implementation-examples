@@ -354,5 +354,37 @@ class BuildWholeMenuHtmlTests(unittest.TestCase):
         self.assertIn("No notable problems.</p>", html)
 
 
+class NeedsUnavailableDataTests(unittest.TestCase):
+    """Questions about what diners actually ate/chose or historical menu
+    records are declined without an LLM call -- the system has no such
+    data and qwen2.5:7b otherwise invents a 'typical' range."""
+
+    def test_consumption_history_questions_are_flagged(self):
+        for q in [
+            "What's the average sodium of the lunches our diners actually chose last month?",
+            "How does this compare to what people usually eat here?",
+            "What did we serve last week and how much sodium was in it?",
+        ]:
+            self.assertTrue(na._needs_unavailable_data(q), q)
+
+    def test_ordinary_nutrition_questions_are_not_flagged(self):
+        for q in [
+            "How many calories are in a serving of grilled chicken breast?",
+            "Give me the macros for salmon with quinoa.",
+            "Is this menu high in sodium?",
+        ]:
+            self.assertFalse(na._needs_unavailable_data(q), q)
+
+    def test_a_flagged_question_is_declined_without_an_llm_call(self):
+        agent = NutritionAgent()
+        agent._current_conv_id = "conv-1"
+        with patch.object(na.llm_utils, "chat_sync") as chat_sync:
+            result = agent.process_utterance("What did our diners actually eat last month, on average, for sodium?")
+
+        chat_sync.assert_not_called()
+        self.assertIn("don't have data on what diners actually ate", result["text"])
+        self.assertEqual(result["html"], "")
+
+
 if __name__ == "__main__":
     unittest.main()

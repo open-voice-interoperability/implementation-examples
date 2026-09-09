@@ -28,6 +28,12 @@ from agents.base_strategy_agent import BaseStrategyAgent, make_flask_app, render
 import mcp_client
 import llm_utils
 
+# This agent retrieves and formats data (USDA / TheMealDB lookups, portion
+# arithmetic) rather than doing open-ended creative work, so every LLM call
+# here runs on the smaller, cheaper "lookup" model tier. Only the Menu
+# Designer keeps the full analysis model. See llm_utils.LOOKUP_* / .env.
+_LOOKUP = {"ollama_model": llm_utils.LOOKUP_OLLAMA_MODEL, "openai_model": llm_utils.LOOKUP_LLM_MODEL}
+
 logger = logging.getLogger(__name__)
 
 # Hardcoded to match agents/recipe_portion_specialist/recipe_portion_agent.py's
@@ -51,6 +57,14 @@ protein-to-calorie ratio).
 
 Derive your assessment from the actual food(s) named and the data retrieved
 -- don't reuse generic nutrition commentary that would apply to any dish.
+
+IMPORTANT: this system has NO data on what diners actually ate, chose, or
+were served in the past -- no consumption history, no historical menu
+records, no diner surveys. If the request depends on that (e.g. "average
+sodium of the lunches diners chose last month", "how does this compare to
+what people usually eat here"), say plainly in "text" that you don't have
+that data and cannot answer it, and set every "bars" value to 0 / "n/a".
+Never state a specific figure for data you don't have.
 
 Return your response as a single JSON object with exactly these two fields:
 {
@@ -100,15 +114,32 @@ out, say briefly that no notable problems were found rather than omitting
 the conclusion.
 
 Derive specifics from the actual dish(es) and one-serving ingredient
-amounts given, not a generic template. Write in plain prose only -- no
-markdown, bold, bullet characters, or JSON -- just plain text lines. Keep
-the response focused; overall length is guided by a separate instruction."""
+amounts given, not a generic template.
 
-_DISH_EXTRACTION_SYSTEM_PROMPT = """Extract the distinct dish names from a cafeteria recipe/portion writeup.
+IMPORTANT: this system has NO data on what diners actually ate, chose, or
+were served in the past -- no consumption history, no diner surveys. If the
+request depends on that, say plainly you don't have that data and cannot
+answer it rather than stating a figure.
 
-Identify every distinct DISH (a specific food item someone would cook -- e.g.
-"Grilled Chicken Caesar Salad"). Ignore day labels ("Day 1:") and anything
-that isn't an actual dish name.
+Write in plain prose only -- no markdown, bold, bullet characters, or JSON
+-- just plain text lines. Keep the response focused; overall length is
+guided by a separate instruction."""
+
+_DISH_EXTRACTION_SYSTEM_PROMPT = """Extract the main dishes from a cafeteria recipe/portion writeup.
+
+Return ONE entry per dish (per day / per meal) -- the whole meal as a
+single dish, named by its main or centerpiece component in 2-4 plain words
+("Grilled salmon", "Herb-crusted pork tenderloin", "Stuffed portobello").
+
+Do NOT:
+- break a meal into parts -- sides, starches, vegetables, salads, sauces,
+  glazes, dressings, marinades and garnishes belong to their dish, they
+  are not separate dishes ("... with wild rice pilaf and a lemon-pepper
+  crust" is still just "Grilled salmon")
+- include day labels ("Day 1:"), headcounts, serving or operational
+  notes, or anything that isn't a dish
+- keep plating flourishes ("pan-seared", "served over", "with a drizzle
+  of ...") -- name the dish, not how it is presented
 
 Respond with ONLY a single JSON object and no other text:
 {"dishes": ["<dish name>", ...]}
@@ -123,7 +154,7 @@ def _extract_dishes(recipe_text: str) -> list[str]:
     -- the same problem (and the same fix) as recipe_portion_agent.py's own
     menu extraction, kept as a separate local copy since each cafeteria-ops
     agent is self-contained."""
-    raw = llm_utils.chat_sync(_DISH_EXTRACTION_SYSTEM_PROMPT, recipe_text, temperature=0, timeout=15)
+    raw = llm_utils.chat_sync(_DISH_EXTRACTION_SYSTEM_PROMPT, recipe_text, temperature=0, timeout=15, **_LOOKUP)
     match = re.search(r"\{[\s\S]*\}", raw)
     if not match:
         return []
@@ -141,11 +172,20 @@ def _fetch_all_nutrients(dishes: list[str]) -> dict[str, str | None]:
     if not dishes:
         return {}
 
-    search_requests = [("usda_fdc", "search_food", {"query": dish[:80], "limit": 2}) for dish in dishes]
+    # Search FDC by each dish's core ingredient word, not its full composite
+    # name: FDC is an ingredient database, so "Herb-crusted pork tenderloin
+    # with garlic mashed potatoes" matches nothing while "pork" does -- and
+    # firing one doomed call per dish also burns through FDC's DEMO_KEY rate
+    # limit fast. Dedupe so a term several dishes share ("chicken") costs one
+    # lookup, not five.
+    dish_term: dict[str, str] = {dish: (_core_term(dish) or dish[:80]) for dish in dishes}
+    unique_terms = list(dict.fromkeys(dish_term.values()))
+
+    search_requests = [("usda_fdc", "search_food", {"query": term[:80], "limit": 2}) for term in unique_terms]
     search_results = mcp_client.call_tools_parallel_sync(search_requests, timeout=10.0)
 
-    top_match: dict[str, str] = {}  # dish -> fdcId
-    for dish, raw in zip(dishes, search_results):
+    term_fdc: dict[str, str] = {}  # search term -> fdcId
+    for term, raw in zip(unique_terms, search_results):
         if not raw:
             continue
         try:
@@ -154,17 +194,30 @@ def _fetch_all_nutrients(dishes: list[str]) -> dict[str, str | None]:
             continue
         results = parsed.get("results") or []
         if results and results[0].get("fdcId"):
-            top_match[dish] = results[0]["fdcId"]
+            term_fdc[term] = results[0]["fdcId"]
 
     output: dict[str, str | None] = {dish: None for dish in dishes}
-    if not top_match:
+    if not term_fdc:
         return output
 
-    detail_requests = [("usda_fdc", "get_food_details", {"fdc_id": fdc_id}) for fdc_id in top_match.values()]
+    unique_ids = list(dict.fromkeys(term_fdc.values()))
+    detail_requests = [("usda_fdc", "get_food_details", {"fdc_id": fdc_id}) for fdc_id in unique_ids]
     detail_results = mcp_client.call_tools_parallel_sync(detail_requests, timeout=10.0)
-    for (dish, _fdc_id), raw in zip(top_match.items(), detail_results):
-        if raw:
-            output[dish] = raw
+    id_detail = {fdc_id: raw for fdc_id, raw in zip(unique_ids, detail_results) if raw}
+
+    # Dedupe: dishes sharing a core term ("chicken") resolve to the same
+    # fdcId. The first dish (menu order) carries that nutrient data; the
+    # rest stay None -> not_found, so the model estimates from the recipe
+    # amounts rather than repeating an identical block.
+    claimed_ids: set[str] = set()
+    for dish in dishes:
+        fdc_id = term_fdc.get(dish_term[dish])
+        if not fdc_id or fdc_id in claimed_ids:
+            continue
+        detail = id_detail.get(fdc_id)
+        if detail:
+            output[dish] = detail
+            claimed_ids.add(fdc_id)
     return output
 
 
@@ -261,11 +314,79 @@ def _food_query(user_text: str) -> str | None:
     return cleaned
 
 
+# Preparation / plating / seasoning words that describe HOW a dish is cooked
+# or served, not WHAT it is. USDA FoodData Central is an ingredient database
+# -- the Menu Designer's composite "Herb-crusted pork tenderloin with garlic
+# mashed potatoes" matches no food entry, while the core "pork" does.
+# Stripping these leaves the identity noun to retry with. Kept as a local
+# copy (like _extract_dishes) since each cafeteria-ops agent is
+# self-contained; recipe_portion_agent.py has the same list.
+_PREP_PLATING_WORDS = frozenset("""
+grilled roasted seared sauteed sauteed baked braised fried pan stir steamed
+poached smoked charred blackened caramelized whipped mashed pureed crusted
+herb herbed spiced spice glazed marinated fresh creamy crispy crisp crunchy
+tender juicy homemade classic style rustic hearty light warm cold chilled
+served side sides topped drizzled dressed accompanied stuffed rolled wrapped
+with without and the a an of on in over under alongside plus atop
+lemon pepper peppered garlic butter buttered honey dijon mustard balsamic
+citrus soy teriyaki sesame ginger chili chilli paprika cumin rosemary thyme
+basil parsley cilantro oregano cinnamon
+sauce reduction glaze gravy vinaigrette dressing crust rub marinade jus
+caps cap fillet fillets breast breasts thigh thighs loin tenderloin cutlet
+strips bites medallions skewers
+one two three four five six seven eight nine ten
+serving servings portion portions recipe recipes amount amounts ingredient
+ingredients dish dishes meal meals menu menus day days week weeks whole full
+entire for from into please work give show find make
+""".split())
+
+
+def _core_term(dish_name: str) -> str:
+    """The single identity word to search/retry with -- the first word left
+    after prep/plating and generic request words are dropped ("Herb-crusted
+    pork tenderloin" -> "pork"). "" if nothing identifiable remains (e.g. a
+    vague "one-serving recipes for the whole menu"), which suppresses the
+    retry rather than matching junk."""
+    for word in re.findall(r"[A-Za-z]+", dish_name):
+        if len(word) > 2 and word.lower() not in _PREP_PLATING_WORDS:
+            return word.lower()
+    return ""
+
+
+# A question whose core answer depends on data this system does not have
+# (what diners actually ate/chose/were served, or historical menu records)
+# is declined BEFORE any LLM call -- confirmed live that qwen2.5:7b, even
+# told plainly it has no such data, still pads the reply with a made-up
+# "typical" sodium/calorie range. Substring match on the raw utterance.
+_MISSING_DATA_MARKERS = (
+    "diners chose", "diners ate", "diners selected", "diners picked",
+    "people chose", "people ate", "our diners", "what was eaten",
+    "what was chosen", "actually chose", "actually ate",
+    "served last week", "served last month", "serve last week",
+    "serve last month", "we served last", "we serve last",
+    "last week's menu", "last month's menu", "last week's lunch",
+    "consumption history", "consumption data", "what people usually eat",
+    "what people typically eat", "usually eat here", "typically eat here",
+    "how does this compare to what", "uptake",
+)
+_MISSING_DATA_DECLINE = (
+    "I don't have data on what diners actually ate, chose, or were served in "
+    "the past -- no consumption history or diner surveys -- so I can't answer "
+    "that."
+)
+
+
+def _needs_unavailable_data(user_text: str) -> bool:
+    lowered = (user_text or "").lower()
+    return any(marker in lowered for marker in _MISSING_DATA_MARKERS)
+
+
 class NutritionAgent(BaseStrategyAgent):
     AGENT_NAME = "Nutrition Specialist"
     AGENT_PORT = 8302
     AGENT_SYNOPSIS = "Assesses menu item nutrition using real USDA FoodData Central data"
     AGENT_CAPABILITY_DETAIL = "Analyzes calories, macronutrients, and sodium for menu items using real USDA nutrient data."
+    WORKING_LABEL = "checking the nutrition levels"
     AGENT_KEYPHRASES = ["nutrition", "calories", "protein", "fat", "carbs", "sodium",
                          "healthy", "macros", "nutrient", "nutritional"]
     # BaseStrategyAgent's default of 50 words is a single-item budget --
@@ -293,6 +414,10 @@ class NutritionAgent(BaseStrategyAgent):
             logger.info("[Nutrition] Saved Recipe & Portion's one-serving recipes for conv %s", conv_id)
 
     def process_utterance(self, user_text: str) -> dict | str:
+        if _needs_unavailable_data(user_text):
+            logger.info("[Nutrition] Declining -- question needs consumption/history data this system lacks")
+            return {"text": _MISSING_DATA_DECLINE, "html": ""}
+
         food_query = _food_query(user_text)
         if food_query:
             return self._respond_for_one_food(user_text, food_query)
@@ -310,21 +435,31 @@ class NutritionAgent(BaseStrategyAgent):
         )
 
     def _respond_for_one_food(self, user_text: str, food_query: str) -> dict | str:
-        search_result = mcp_client.call_tool_sync_or_none(
-            "usda_fdc", "search_food", {"query": food_query, "limit": 3}
-        )
-
-        details = None
-        if search_result:
+        def _lookup(query: str) -> tuple[str | None, str | None]:
+            """(details JSON, raw search JSON) for one FDC query."""
+            search_raw = mcp_client.call_tool_sync_or_none("usda_fdc", "search_food", {"query": query, "limit": 3})
+            if not search_raw:
+                return None, None
             try:
-                parsed = json.loads(search_result)
-                results = parsed.get("results") or []
-                if results and results[0].get("fdcId"):
-                    details = mcp_client.call_tool_sync_or_none(
-                        "usda_fdc", "get_food_details", {"fdc_id": results[0]["fdcId"]}
-                    )
-            except (json.JSONDecodeError, KeyError, IndexError):
-                pass
+                results = (json.loads(search_raw).get("results") or [])
+            except (json.JSONDecodeError, TypeError):
+                return None, search_raw
+            if results and results[0].get("fdcId"):
+                return mcp_client.call_tool_sync_or_none(
+                    "usda_fdc", "get_food_details", {"fdc_id": results[0]["fdcId"]}
+                ), search_raw
+            return None, search_raw
+
+        details, search_result = _lookup(food_query)
+        if not details:
+            # Retry with just the core identity word -- FDC won't match a
+            # composite "Grilled chicken breast with honey glaze", but
+            # "chicken" pulls a real nutrient entry.
+            term = _core_term(food_query)
+            if term and term != food_query.strip().lower():
+                retry_details, retry_search = _lookup(term)
+                details = details or retry_details
+                search_result = search_result or retry_search
 
         context = details or search_result or "No USDA nutrient data found -- use general nutrition knowledge."
         return self._respond_json_with_bars(user_text, context)
@@ -337,7 +472,7 @@ USDA nutrient data retrieved:
 
 Please provide a nutritional assessment as a JSON object."""
 
-        raw = llm_utils.chat_sync(SYSTEM_PROMPT, user_message)
+        raw = llm_utils.chat_sync(SYSTEM_PROMPT, user_message, **_LOOKUP)
         try:
             match = re.search(r'\{[\s\S]*\}', raw)
             if match:
@@ -402,7 +537,7 @@ Real USDA nutrient data retrieved (per ingredient):
 
 Please provide a one-serving nutritional assessment for EVERY dish in this week's menu, ending with a concluding note on any nutrition problems across the whole menu."""
 
-        text = llm_utils.chat_sync(_WHOLE_MENU_SYSTEM_PROMPT, user_message, timeout=45)
+        text = llm_utils.chat_sync(_WHOLE_MENU_SYSTEM_PROMPT, user_message, timeout=45, **_LOOKUP)
         return {"text": text, "html": _build_whole_menu_html(text)}
 
 

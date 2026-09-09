@@ -388,6 +388,22 @@ class FetchAllMarketDataTests(unittest.TestCase):
         self.assertEqual(third_search_requests, [("usda_ams", "search_reports", {"keyword": "cheese", "limit": 3})])
         self.assertEqual(result, {"cheddar cheese": report})
 
+    def test_two_ingredients_landing_on_the_same_report_do_not_both_carry_it(self):
+        # "chicken breast" and "chicken thigh" both fall back to the word
+        # "chicken" and match report 111. The first ingredient keeps it;
+        # the second, with no other candidate, ends up None -- the same
+        # pricing block is not printed twice.
+        search_results = [
+            json.dumps({"keyword": "chicken", "results": [{"slug_id": "111", "report_title": "Weekly Chicken Report"}]}),
+            json.dumps({"keyword": "chicken", "results": [{"slug_id": "111", "report_title": "Weekly Chicken Report"}]}),
+        ]
+        report = json.dumps({"slug_id": "111", "rows": [{"price": "$1.50/lb"}]})
+        with patch.object(pa.mcp_client, "call_tools_parallel_sync",
+                          side_effect=[search_results, [report, report]]) as call:
+            result = _fetch_all_market_data(["chicken breast", "chicken thigh"])
+
+        self.assertEqual(result, {"chicken breast": report, "chicken thigh": None})
+
 
 class UsableWebSearchResultTests(unittest.TestCase):
     """The web_search MCP tool returns a JSON {"error": ...} payload
@@ -709,6 +725,38 @@ class RenderIngredientGuidanceTests(unittest.TestCase):
         raw = json.dumps({"ingredients": [{"name": "", "guidance": ""}]})
         self.assertEqual(pa._render_ingredient_guidance(raw), raw)
 
+    def test_multiple_brand_entries_for_one_ingredient_collapse_to_one_line(self):
+        raw = json.dumps({"ingredients": [
+            {"name": "Le Sueur Very Young Small Sweet Peas", "guidance": "Buy local or online; organic preferred."},
+            {"name": "Great Value Organic Frozen Steamable Sweet Peas", "guidance": "Get from local grocery stores."},
+            {"name": "Del Monte No Salt Added Sweet Peas", "guidance": "Purchase from local grocery stores."},
+            {"name": "Chicken breast", "guidance": "Buy the 40 lb case."},
+        ]})
+        result = pa._render_ingredient_guidance(raw, ["peas", "chicken breast"])
+
+        self.assertEqual(
+            result,
+            "peas: Buy local or online; organic preferred.\nChicken breast: Buy the 40 lb case.",
+        )
+
+    def test_a_plain_name_matching_the_menu_keeps_its_own_casing(self):
+        raw = json.dumps({"ingredients": [{"name": "Chicken Breast", "guidance": "Buy spot."}]})
+        self.assertEqual(
+            pa._render_ingredient_guidance(raw, ["chicken breast"]),
+            "Chicken Breast: Buy spot.",
+        )
+
+    def test_near_duplicate_lines_in_the_raw_fallback_are_collapsed(self):
+        raw = (
+            "Le Sueur Very Young Small Sweet Peas - buy local or online.\n"
+            "Great Value Organic Frozen Sweet Peas - buy local or online.\n"
+            "Cheddar cheese - restaurant supply, 5 lb block."
+        )
+        self.assertEqual(
+            pa._render_ingredient_guidance("not json\n" + raw, ["peas", "cheddar cheese"]),
+            "not json\npeas: buy local or online.\nCheddar cheese: restaurant supply, 5 lb block.",
+        )
+
 
 class RespondForWholeMenuTests(unittest.TestCase):
     def test_asks_for_guidance_covering_every_ingredient(self):
@@ -795,6 +843,40 @@ class RespondForWholeMenuTests(unittest.TestCase):
             result["html"],
             "<ul><li>Chicken breast: Buy spot.</li><li>Beef sirloin: Lock in a contract.</li></ul>",
         )
+
+
+class NeedsUnavailableDataTests(unittest.TestCase):
+    """Questions about this cafeteria's own purchasing (past prices paid,
+    suppliers, contracts) are declined without an LLM call -- the system
+    has no such records and qwen2.5:7b otherwise pads with generic
+    'monitor the market' advice."""
+
+    def test_own_purchasing_record_questions_are_flagged(self):
+        for q in [
+            "What did we pay per pound for chicken breast last quarter?",
+            "Who is our current supplier for produce?",
+            "What's our contract price on beef?",
+            "How much have we spent so far this year on seafood?",
+        ]:
+            self.assertTrue(pa._needs_unavailable_data(q), q)
+
+    def test_plain_market_questions_are_not_flagged(self):
+        for q in [
+            "What's the current wholesale price of russet potatoes?",
+            "How have beef prices moved this quarter?",
+            "Should we buy chicken now or wait?",
+        ]:
+            self.assertFalse(pa._needs_unavailable_data(q), q)
+
+    def test_a_flagged_question_is_declined_without_an_llm_call(self):
+        agent = ProcurementAgent()
+        agent._current_conv_id = "conv-1"
+        with patch.object(pa.llm_utils, "chat_sync") as chat_sync:
+            result = agent.process_utterance("What did we pay for chicken breast last quarter, and who is our supplier?")
+
+        chat_sync.assert_not_called()
+        self.assertIn("don't have data on this cafeteria's own purchasing", result["text"])
+        self.assertEqual(result["html"], "")
 
 
 if __name__ == "__main__":

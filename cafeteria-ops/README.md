@@ -115,6 +115,8 @@ sequenceDiagram
 
 (Simplified for clarity -- exact Pass-Through fan-out to every invited conversant, and the private-vs-broadcast distinction on each hop, are elided; see "Current Routing Behavior" below.)
 
+Each specialist's turn can itself take 15-45s (LLM plus MCP lookups). With progress streaming enabled (`FLOOR_HOLDER`, off by default -- see "Agent Behaviour Toggles"), a specialist whose work overruns a short deadline first returns a transient status utterance ("checking the nutrition levels") that the gateway shows as a live "working on it" note, then hands back the finished answer when the gateway re-requests it. The work runs once; nothing is recomputed.
+
 Two more things every specialist gets automatically, beyond this targeted save-what-I-need pattern:
 
 - **Full conversation history.** `base_strategy_agent.py` records every utterance it observes (and its own replies) into a per-conversation transcript, and prepends it to every LLM prompt (`self._history_block()`) -- so a follow-up like "make day 3 vegetarian instead" is understood as revising the menu already on the table, not a fresh request.
@@ -133,6 +135,8 @@ The convener is a **stateless decision service**, not an orchestrator: it makes 
 - A question that doesn't name a team or a single specialist routes by keyword/LLM classification across all 7, same as any other convener-driven floor.
 
 **Directly addressing one specialist by name** (e.g. "Nutrition Specialist, how many calories in rice?") is still broadcast to every invited specialist -- each folds it into its own conversation history -- but the convener revokes floor from every OTHER currently-granted specialist first, so only the one actually addressed replies.
+
+**Scope gate.** Naming a specialist doesn't force it to answer something outside its domain. When a specialist is addressed directly by name, or handed a cold first-turn question with no conversation context yet, it checks the request against its own expertise before answering (`ENFORCE_SCOPE_GATE`, on by default). A hit in the agent's own keyphrases passes with no LLM call -- unless the text *also* hits another specialist's keyphrase (a `AGENT_KEYPHRASES_BY_PORT` registry, e.g. "is Friday's menu balanced across protein and carbs" matches Menu Designer's "menu" but also Nutrition's "protein"/"carbs"), in which case a one-word YES/NO classifier call decides, failing *open* on any timeout. An out-of-scope request gets a short decline when this agent is the only conversant on the floor, or silence when others are present (one of them can presumably handle it, and every specialist answering "not my department" would just be noise). A mid-round convener forward always carries prior context, so it is never gated -- that's what lets a specialist answer a broad "plan five days of lunches" from the menu already on the floor.
 
 **Round-robin order is deliberate, not alphabetical.** Recipe & Portion runs immediately after Menu Designer (before Nutrition), since it's the one that turns a proposed menu into real one-serving amounts that Nutrition, Procurement, and Shopping List all depend on -- see the sequence diagram above.
 
@@ -233,8 +237,17 @@ Key environment variables:
 - `LLM_API_KEY`
 - `LLM_MODEL`
 - `CLASSIFIER_LLM_MODEL` / `CLASSIFIER_OLLAMA_MODEL` -- optional smaller/faster model for the convener's own routing decisions only; falls back to a regex classifier on any failure.
+- `LOOKUP_LLM_MODEL` / `LOOKUP_OLLAMA_MODEL` -- optional mid ("lookup") tier for the six specialists that mostly retrieve and format data (Nutrition, Recipe & Portion, Menu Optimization, Inventory, Procurement, Shopping List) and for the per-agent scope classifier (see "Scope gate" above). Only the Menu Designer always uses the full `LLM_MODEL` / `OLLAMA_MODEL`.
 
 Image generation (Menu Designer only) is configured separately -- `HF_API_KEY`/`HF_IMAGE_MODEL`, `IMAGE_PROVIDER`, `IMAGE_MAX_DIMENSION` -- see `.env.example`. A line with no image just shows text if left unconfigured.
+
+## Agent Behaviour Toggles
+
+Sensible defaults; override in `.env` for tuning or isolated testing.
+
+- `ENFORCE_SCOPE_GATE` (default on) -- the domain scope gate described under "Scope gate" above.
+- `ENFORCE_FLOOR_GATE` (default on) -- require a `grantFloor` before an agent answers a directed utterance.
+- `FLOOR_HOLDER` (default **off**) -- opt into progress streaming: work that misses `FLOOR_HOLDER_DEADLINE` (seconds, default 1.5) returns a transient "checking the nutrition levels" status, and the finished answer is handed back when the gateway re-requests it (`FLOOR_HOLDER_RESUME_TIMEOUT`, default 180). Requires a matching web-floor gateway **and** browser client -- an older gateway forwards the status as if it were the answer, so turn it on across the whole stack at once.
 
 ## Data Sources
 

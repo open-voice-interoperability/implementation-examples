@@ -18,6 +18,7 @@ class _EchoAgent(BaseStrategyAgent):
 
     def __init__(self):
         super().__init__()
+        self._enforce_scope_gate = False  # these doubles don't test scope; keep bot_on_utterance offline
         self.process_utterance_calls = []
 
     def process_utterance(self, user_text: str) -> str:
@@ -84,6 +85,7 @@ class _ObservingAgent(BaseStrategyAgent):
 
     def __init__(self):
         super().__init__()
+        self._enforce_scope_gate = False  # these doubles don't test scope; keep bot_on_utterance offline
         self.observed = []  # (conv_id, speaker_uri, text)
 
     def on_observed_utterance(self, conv_id, speaker_uri, text):
@@ -96,6 +98,7 @@ class _RaisingObserverAgent(BaseStrategyAgent):
 
     def __init__(self):
         super().__init__()
+        self._enforce_scope_gate = False  # these doubles don't test scope; keep bot_on_utterance offline
         self.process_utterance_calls = []
 
     def on_observed_utterance(self, conv_id, speaker_uri, text):
@@ -378,6 +381,7 @@ class _HistoryCapturingAgent(BaseStrategyAgent):
 
     def __init__(self):
         super().__init__()
+        self._enforce_scope_gate = False  # these doubles don't test scope; keep bot_on_utterance offline
         self.captured_history = []
 
     def process_utterance(self, user_text: str) -> str:

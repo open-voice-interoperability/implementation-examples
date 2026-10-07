@@ -25,6 +25,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from agents.base_strategy_agent import BaseStrategyAgent, make_flask_app
 import llm_utils
 
+# This agent retrieves and formats data (USDA / TheMealDB lookups, portion
+# arithmetic) rather than doing open-ended creative work, so every LLM call
+# here runs on the smaller, cheaper "lookup" model tier. Only the Menu
+# Designer keeps the full analysis model. See llm_utils.LOOKUP_* / .env.
+_LOOKUP = {"ollama_model": llm_utils.LOOKUP_OLLAMA_MODEL, "openai_model": llm_utils.LOOKUP_LLM_MODEL}
+
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are the Inventory Specialist for a corporate cafeteria operations panel.
@@ -47,6 +53,21 @@ Menu Designer's proposed dishes, Recipe & Portion's ingredient amounts) --
 naming those specific ingredients beats generic categories like "fresh
 produce" whenever real ones are available.
 
+IMPORTANT: this system has NO live inventory data -- no current on-hand
+counts, no stock records, no purchase history. You reason from the
+ingredients and usage described plus general cafeteria knowledge only.
+Never state or invent a specific current stock level, on-hand quantity, or
+"what is below par right now".
+
+If a request CANNOT be answered without live counts you don't have (e.g.
+"what is below par right now", "how many cases of X do we have", "are we
+about to run out of Y"), DECLINE it: reply with one or two sentences
+saying this system has no live inventory data and so the question can't be
+answered -- then STOP. Do not substitute generic par-level advice that was
+not asked for. Only if the same request ALSO asks something answerable
+without live counts (e.g. "... and what par level should we set for X") do
+you answer that part, after noting what you can't.
+
 Be concrete and specific. Write in plain prose only -- no markdown, bold,
 or bullet characters, no numbered-list markers -- just plain text. Keep
 the response focused; overall length is guided by a separate instruction."""
@@ -57,6 +78,7 @@ class InventoryAgent(BaseStrategyAgent):
     AGENT_PORT = 8305
     AGENT_SYNOPSIS = "Reasons about stock levels, par levels, and stockout/overstock risk"
     AGENT_CAPABILITY_DETAIL = "Evaluates par levels, reorder timing, and stockout/overstock risk for cafeteria ingredients."
+    WORKING_LABEL = "checking stock and par levels"
     AGENT_KEYPHRASES = ["inventory", "stock", "stockout", "par level", "overstock",
                          "reorder", "shelf life", "spoilage", "count"]
 
@@ -65,7 +87,7 @@ class InventoryAgent(BaseStrategyAgent):
 
 Please assess stock/par-level risk for this situation."""
 
-        text = llm_utils.chat_sync(SYSTEM_PROMPT, user_message)
+        text = llm_utils.chat_sync(SYSTEM_PROMPT, user_message, **_LOOKUP)
         # This agent's response is normally one holistic paragraph, not a
         # per-item list -- _text_to_html_intro_and_list correctly returns
         # "" for that (< 2 lines). On the rarer occasion the model breaks

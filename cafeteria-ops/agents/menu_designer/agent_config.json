@@ -11,16 +11,20 @@
     },
     "capabilities": {
       "keyphrases": [
-        "menu",
         "menu design",
-        "dish",
-        "dishes",
-        "lunch",
-        "theme",
-        "variety",
-        "rotation",
-        "offering",
-        "weekly menu"
+        "design a menu",
+        "design the menu",
+        "plan a menu",
+        "plan the menu",
+        "propose a menu",
+        "weekly menu",
+        "lunch menu",
+        "menu rotation",
+        "menu theme",
+        "themed menu",
+        "menu concept",
+        "menu idea",
+        "dish selection"
       ],
       "languages": [
         "en-us"

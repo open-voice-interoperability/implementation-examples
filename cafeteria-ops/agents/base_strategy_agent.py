@@ -2,9 +2,9 @@
 """
 Base Strategy Agent — OpenFloor Template-Based Implementation
 
-All cafeteria-ops specialist agents inherit from StrategyBotAgent,
+All specialist agents inherit from StrategyBotAgent,
 which extends BotAgent (from the OpenFloor template) with Flask integration
-and cafeteria-operations-specific processing.
+and domain-specific processing.
 
 Separation of concerns:
 - BotAgent: OpenFloor event routing and lifecycle
@@ -19,7 +19,9 @@ import logging
 import os
 import re
 import sys
+import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from html import escape
 from typing import Any, Callable, Dict, List
 
@@ -37,29 +39,79 @@ from openfloor.events import (
 from openfloor.manifest import Manifest, Identification, Capability, SupportedLayers
 from openfloor.dialog_event import DialogEvent, Feature, TextFeature, Token
 
+import llm_utils
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
-# Port -> display name for every cafeteria-ops agent, used only to make the
+# --- floor-holder / "what I'm working on" progress ---------------------------
+#
+# A specialist's real work (LLM + MCP lookups) can take 15-45s. Rather than
+# leave the user staring at a silent "Working" lamp, the agent can race the
+# work against a short deadline: if it finishes fast, the answer comes
+# straight back (one round trip, unchanged); if not, the agent returns a
+# "floor holder" utterance ("checking the nutrition levels") NOW and the
+# gateway re-requests the finished answer with a resume event. The work keeps
+# running the whole time -- nothing is recomputed.
+#
+# OPT-IN: this only works when the gateway (floor_router.py) AND the browser
+# client are also updated -- an old gateway forwards the floor-holder as if
+# it were the answer. So it defaults OFF; set FLOOR_HOLDER=1 on the agent
+# processes once the whole stack has been refreshed.
+_FLOOR_HOLDER_ENABLED = os.getenv("FLOOR_HOLDER", "0").strip().lower() in {"1", "true", "yes", "on"}
+try:
+    _RACE_DEADLINE_S = max(0.2, float(os.getenv("FLOOR_HOLDER_DEADLINE", "1.5")))
+except ValueError:
+    _RACE_DEADLINE_S = 1.5
+# Ceiling for how long the resume request waits for the (already running)
+# work to finish. Kept near the gateway's own delivery timeout so a genuinely
+# hung process_utterance() can't pin the agent's request thread for minutes.
+try:
+    _RESUME_RESULT_TIMEOUT_S = max(30.0, float(os.getenv("FLOOR_HOLDER_RESUME_TIMEOUT", "180")))
+except ValueError:
+    _RESUME_RESULT_TIMEOUT_S = 180.0
+_RACE_POOL = ThreadPoolExecutor(max_workers=6, thread_name_prefix="floorrace")
+
+# Feature keys carried on the dialogEvent (features are extensible per the
+# OFP dialog-event spec). FLOOR_HOLDER_FEATURE marks an utterance as a
+# transient status, not the answer; RESUME_FEATURE marks the gateway's
+# follow-up request asking the agent to hand back the finished answer.
+FLOOR_HOLDER_FEATURE = "floorHolder"
+RESUME_FEATURE = "resumeAfterFloorHolder"
+
+# Port -> display name for this project's own agents, used only to make the
 # shared conversation-history transcript (see StrategyBotAgent's
 # _record_conversation_turn/_conversation_history_text below) readable --
-# "Menu Designer: Day 1: ..." rather than "http://127.0.0.1:8301/: Day 1:
-# ...". Hand-duplicated from convener_service/convener.py's AGENTS dict,
-# same "kept in sync by hand" tradeoff as every other cross-agent port
-# reference in this project (e.g. nutrition_agent.py's
-# _RECIPE_PORTION_SERVICE_URL) -- this project has no shared package
-# between the convener and the agents it addresses.
-_AGENT_LABELS_BY_PORT = {
-    8300: "Convener",
-    8301: "Menu Designer",
-    8302: "Nutrition Specialist",
-    8303: "Recipe & Portion Specialist",
-    8304: "Menu Optimization Specialist",
-    8305: "Inventory Specialist",
-    8306: "Procurement Specialist",
-    8310: "Shopping List Specialist",
-}
+# a name rather than "http://127.0.0.1:<port>/" in each recorded turn.
+# Defined per project in agents/agent_labels.py and hand-kept in sync with
+# convener_service/convener.py's AGENTS dict, the same "kept in sync by
+# hand" tradeoff as every other cross-agent port reference in these
+# projects -- there is no shared package between a convener and the agents
+# it addresses.
+from agents.agent_labels import AGENT_LABELS_BY_PORT, AGENT_KEYPHRASES_BY_PORT
+
+
+# Used by StrategyBotAgent._is_in_scope() -- a lightweight YES/NO classifier
+# call for the (comparatively rare) utterance that misses every one of an
+# agent's own AGENT_KEYPHRASES. Deliberately told to ignore direct address
+# ("Shopping List Specialist, ...") since a human or the convener naming this
+# agent by name doesn't make an off-topic question this agent's job to answer.
+_SCOPE_SYSTEM_PROMPT_TEMPLATE = """You are a strict scope classifier for one specialist agent in a multi-agent \
+cafeteria operations system. Decide whether the user's message is something \
+THIS specialist should attempt to answer, or whether it clearly belongs to a \
+different specialist's area of expertise.
+
+Specialist: {agent_name}
+What it does: {synopsis}. {capability_detail}
+
+The message may be directly addressed to this specialist by name -- ignore \
+that. Judge only whether the actual content of the request is this \
+specialist's domain.
+
+Respond with ONLY one word: YES if this specialist should attempt to answer, \
+or NO if the request is clearly about a different domain.
+"""
 
 
 # =============================================================================
@@ -375,12 +427,12 @@ def load_manifest_from_config(config_path: str) -> Manifest:
 
     return Manifest(
         identification=Identification(
-            conversationalName=identification_data.get("conversationalName", "CafeteriaOpsAgent"),
-            speakerUri=identification_data.get("speakerUri", identification_data.get("serviceUrl", "http://127.0.0.1:8300/")),
-            serviceUrl=identification_data.get("serviceUrl", "http://127.0.0.1:8300/"),
+            conversationalName=identification_data.get("conversationalName", "StrategyAgent"),
+            speakerUri=identification_data.get("speakerUri", identification_data.get("serviceUrl", "http://127.0.0.1:8000/")),
+            serviceUrl=identification_data.get("serviceUrl", "http://127.0.0.1:8000/"),
             organization=identification_data.get("organization", "Open Voice Network"),
             role=identification_data.get("role", "assistant"),
-            synopsis=identification_data.get("synopsis", "A cafeteria operations analysis agent"),
+            synopsis=identification_data.get("synopsis", "A specialist analysis agent"),
             department=identification_data.get("department"),
             openFloorRoles=identification_data.get("openFloorRoles"),
         ),
@@ -399,12 +451,17 @@ class StrategyBotAgent(BotAgent):
     """
 
     # Override these in subclasses
-    AGENT_NAME: str = "CafeteriaOpsAgent"
-    AGENT_PORT: int = 8300
-    AGENT_SYNOPSIS: str = "A cafeteria operations analysis agent"
-    AGENT_KEYPHRASES: list = ["cafeteria", "menu", "operations"]
-    AGENT_CAPABILITY_DETAIL: str = "Processes cafeteria operations inputs and returns a text analysis."
+    AGENT_NAME: str = "StrategyAgent"
+    AGENT_PORT: int = 8000
+    AGENT_SYNOPSIS: str = "A specialist analysis agent"
+    AGENT_KEYPHRASES: list = ["analysis"]
+    AGENT_CAPABILITY_DETAIL: str = "Processes inputs and returns a text analysis."
     MAX_RESPONSE_WORDS: int = 50
+    # Short present-tense phrase shown to the user while this agent works, if
+    # the real answer doesn't come back within the race deadline (see
+    # _FLOOR_HOLDER_ENABLED). Override per agent; override working_label()
+    # instead for something derived from the request.
+    WORKING_LABEL: str = "working on your request"
 
     def __init__(self):
         # Load or build manifest
@@ -418,6 +475,15 @@ class StrategyBotAgent(BotAgent):
         # floor is revoked are silently ignored. Set ENFORCE_FLOOR_GATE=0 to
         # allow answering direct utterances without a grantFloor first.
         self._enforce_floor_gate = os.getenv("ENFORCE_FLOOR_GATE", "1").strip().lower() in {"1", "true", "yes", "on"}
+
+        # Domain scope gate: an agent addressed directly (convener force-route,
+        # or a human/test client naming it) can still receive an utterance
+        # that has nothing to do with its expertise -- confirmed live,
+        # addressing the Shopping List Specialist with a nutrition question
+        # produced a fabricated shopping list instead of a decline. See
+        # _is_in_scope(). Set ENFORCE_SCOPE_GATE=0 to disable, e.g. while
+        # tuning a new agent's AGENT_KEYPHRASES against real phrasing.
+        self._enforce_scope_gate = os.getenv("ENFORCE_SCOPE_GATE", "1").strip().lower() in {"1", "true", "yes", "on"}
 
         # Effective word budget for the current utterance. Defaults to the class
         # cap but is overridden per-request when the caller (e.g. the convener,
@@ -441,6 +507,13 @@ class StrategyBotAgent(BotAgent):
         # watch for.
         self._conversation_histories: dict[str, list[tuple[str, str]]] = {}
         self._current_history_text = ""
+
+        # Floor-holder race state: conv_id -> (Future, user_text, max_words)
+        # for a request whose work is still running after the race deadline,
+        # waiting for the gateway's resume request to collect it. One slot per
+        # conversation; the gateway serializes a conversation's round.
+        self._pending_futures: dict[str, tuple] = {}
+        self._pending_lock = threading.Lock()
 
         # Backwards compatibility
         self.manifest = manifest
@@ -722,7 +795,7 @@ class StrategyBotAgent(BotAgent):
         client-chosen and not one of the fixed agent ports."""
         match = re.search(r":(\d{4,5})/?", speaker_uri or "")
         if match:
-            label = _AGENT_LABELS_BY_PORT.get(int(match.group(1)))
+            label = AGENT_LABELS_BY_PORT.get(int(match.group(1)))
             if label:
                 return label
         return "User"
@@ -766,6 +839,131 @@ class StrategyBotAgent(BotAgent):
             return ""
         return f"Prior conversation so far:\n{self._current_history_text}\n\n"
 
+    # Separate from any domain LLM call's own budget -- this is a single
+    # YES/NO judgment, not a generation task, so it stays cheap even when the
+    # domain call itself runs long.
+    _SCOPE_CHECK_TIMEOUT = 12
+
+    # Leading direct address this agent recognises as "you specifically",
+    # e.g. "Shopping List Specialist, ..." or "ask the Nutrition Specialist
+    # about ...". Mirrors convener_service/convener.py's own
+    # detect_addressed_agent start-of-string matching: an explicit address
+    # verb ("ask the X ...") needs no trailing punctuation, but a bare
+    # leading name does (so a sentence like "Widget Specialist recommends
+    # the burrito" isn't mistaken for someone addressing this agent).
+    _SELF_ADDRESS_RE_TMPL = (
+        r"^\s*(?:"
+        r"(?:ask|tell|hey|attention|attn|@)\s+(?:the\s+)?{name}\b[\s,:.!?]*"
+        r"|{name}\s*[,:.!?]+\s*"
+        r")"
+    )
+
+    def _self_address_prefix_len(self, user_text: str) -> int:
+        """Length of a leading "<this agent>, " style address on user_text,
+        or 0 if the utterance doesn't open by naming this agent."""
+        match = re.match(
+            self._SELF_ADDRESS_RE_TMPL.format(name=re.escape(self.AGENT_NAME)),
+            user_text,
+            re.IGNORECASE,
+        )
+        return match.end() if match else 0
+
+    def _is_in_scope(self, user_text: str) -> bool:
+        """Best-effort check that ``user_text`` is actually this agent's domain.
+
+        Called from bot_on_utterance's scope gate, which fires for an
+        utterance that directly addresses this agent by name OR is a cold
+        first-turn question with no conversation context yet -- a mid-round
+        convener forward always carries context (the Menu Designer's
+        proposed menu, earlier replies), which is what lets a specialist
+        answer a broad "plan five days of lunches" from the menu already on
+        the floor without ever reaching this check.
+
+        Fast path: any of AGENT_KEYPHRASES appearing in the text (after the
+        "<name>, " address is stripped -- AGENT_NAME itself can echo a
+        keyphrase, e.g. "shopping list") is treated as in-scope with no LLM
+        call -- UNLESS the text ALSO contains another agent's own keyphrase
+        (see AGENT_KEYPHRASES_BY_PORT in agent_labels.py), which is a strong
+        "wrong specialist" signal the fast-path must not paper over: e.g.
+        "is Friday's menu balanced across protein and carbs" matches the
+        Menu Designer's "menu" but also Nutrition's "protein"/"carbs" --
+        reusing every agent's own already-curated keyphrase list here (kept
+        in sync the same hand-maintained way as AGENT_LABELS_BY_PORT) means
+        this stays accurate as those lists evolve, instead of a second,
+        separately-maintained "other domains' terms" list silently drifting
+        out of date. Only text that misses every keyphrase (or trips that
+        other-domain check) pays for an LLM classification call, and
+        llm_utils' own chat_sync fails soft (returns an error string, never
+        raises) on any timeout/outage -- that string won't start with "NO",
+        so a broken classifier fails OPEN. Answering an ambiguous request
+        beats going silent because the classifier hiccuped.
+        """
+        scan_text = user_text[self._self_address_prefix_len(user_text):]
+        text_lower = scan_text.lower()
+        if any(phrase.lower() in text_lower for phrase in self.AGENT_KEYPHRASES):
+            own_keyphrases = {k.lower() for k in self.AGENT_KEYPHRASES}
+            other_domain_signal = any(
+                phrase.lower() in text_lower
+                for port, keyphrases in AGENT_KEYPHRASES_BY_PORT.items()
+                if port != self.AGENT_PORT
+                for phrase in keyphrases
+                if phrase.lower() not in own_keyphrases
+            )
+            if not other_domain_signal:
+                return True
+
+        prompt = _SCOPE_SYSTEM_PROMPT_TEMPLATE.format(
+            agent_name=self.AGENT_NAME,
+            synopsis=self.AGENT_SYNOPSIS,
+            capability_detail=self.AGENT_CAPABILITY_DETAIL,
+        )
+        # A single YES/NO judgment that fails open. Runs on the lookup tier,
+        # not the tiny classifier tier -- confirmed live that llama3.2:1b
+        # answers "YES" for a nutrition question addressed to the Menu
+        # Designer, where qwen2.5:7b correctly answers "NO".
+        verdict = llm_utils.chat_sync(
+            prompt, user_text,
+            temperature=0,
+            timeout=self._SCOPE_CHECK_TIMEOUT,
+            ollama_model=llm_utils.LOOKUP_OLLAMA_MODEL,
+            openai_model=llm_utils.LOOKUP_LLM_MODEL,
+        )
+        # Robust to a model that pads the answer: strip leading
+        # quotes/markdown/space, then test the first token for "no".
+        cleaned = re.sub(r"^[\s\"'`*_.\-]+", "", verdict or "")
+        first_token = cleaned.split(None, 1)[0].upper() if cleaned.split() else ""
+        return not first_token.startswith("NO")
+
+    def _is_alone_on_floor(self, in_envelope: Envelope) -> bool:
+        """True when no OTHER conversant is known to be on this floor.
+
+        Used to decide what an out-of-scope utterance (see _is_in_scope)
+        gets back: a decline message when this agent is the only one here
+        (there's nobody else to answer it, and silence would look
+        indistinguishable from a hang), or no reply at all when other
+        conversants are present (one of them presumably can, and every
+        specialist chiming in "not my department" would just be floor
+        noise on top of whichever one actually answers).
+
+        Reads conversation.conversants off the incoming envelope --
+        web-floor's floor_router.py populates this for every agent-facing
+        delivery (see _conversants_payload there); a caller that never
+        supplies a roster (e.g. the GUI test harness pointed at a single
+        agent directly) leaves it empty, which reads as "alone" -- the
+        useful default for that kind of isolated, direct test.
+        """
+        conversants = getattr(getattr(in_envelope, "conversation", None), "conversants", None) or []
+        my_speaker = self._normalize_endpoint_id(self.speakerUri)
+        my_service = self._normalize_endpoint_id(self.serviceUrl)
+        for conversant in conversants:
+            identification = self._get_attr(conversant, "identification")
+            speaker = self._normalize_endpoint_id(self._get_attr(identification, "speakerUri"))
+            service = self._normalize_endpoint_id(self._get_attr(identification, "serviceUrl"))
+            is_self = (speaker and speaker == my_speaker) or (service and service == my_service)
+            if not is_self:
+                return False
+        return True
+
     def _extract_max_words(self, event: UtteranceEvent) -> int:
         """Read an optional ``maxWords`` feature from the utterance.
 
@@ -799,6 +997,15 @@ class StrategyBotAgent(BotAgent):
     def bot_on_utterance(self, event: UtteranceEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
         """Handle utterance events using OpenFloor template pattern."""
         try:
+            # Gateway "resume" follow-up after we returned a floor-holder:
+            # hand back the answer whose work has been running since the
+            # first request. Short-circuits every other step (no re-record,
+            # no re-gate -- this is the same logical turn).
+            resume_conv_id = self._resume_conv_id(event)
+            if resume_conv_id is not None:
+                self._finish_pending(resume_conv_id, event, out_envelope)
+                return
+
             # Self-loop guard: never process an utterance this agent itself
             # spoke. _is_addressed_to_me() only checks the `to` recipient --
             # a `to`-less (broadcast) event addressed to nobody in particular
@@ -861,46 +1068,65 @@ class StrategyBotAgent(BotAgent):
 
             logger.info("[UTTERANCE] Processing: %s", user_text[:100])
 
-            # Call domain-specific logic
-            result = self.process_utterance(user_text)
-
-            # Support both plain string and {"text": ..., "html": ...} dict returns.
-            # Agents that produce a chart return a dict carrying an extra SVG/HTML
-            # feature; simpler agents just return a string.
-            if isinstance(result, dict):
-                response_text = self._limit_words(self._strip_markdown(result.get("text", "")), self._current_max_words)
-                html_content = (result.get("html") or "").strip()
-            else:
-                response_text = self._limit_words(self._strip_markdown(str(result)), self._current_max_words)
-                html_content = ""
-
-            if not response_text:
-                logger.debug("[UTTERANCE] No response generated")
-                return
-
-            logger.info("[UTTERANCE] Response: %s", response_text[:100])
-
-            # Record this agent's own reply into the same transcript. The
-            # self-loop guard above means this agent will never observe
-            # its own broadcast utterance the normal way (bot_on_utterance
-            # returns early for it), so without this explicit call an
-            # agent would lose track of its own past turns across a
-            # multi-round conversation even though every OTHER agent
-            # (which does see this broadcast reply normally) would not.
-            self._record_conversation_turn(conv_id, self.speakerUri, response_text, label=self.AGENT_NAME)
-
-            # Always include the text feature; attach an html feature only when
-            # the agent produced chart/visual markup.
-            features: dict = {"text": TextFeature(tokens=[Token(value=response_text)])}
-            if html_content:
-                features["html"] = Feature(mimeType="text/html", tokens=[Token(value=html_content)])
-
-            # Build OpenFloor response
-            dialog = DialogEvent(
-                speakerUri=self._manifest.identification.speakerUri,
-                features=features
+            # Scope gate. Fires when the utterance either (a) directly
+            # addresses this agent by name ("Shopping List Specialist, ...")
+            # or (b) is a COLD first-turn question with no conversation
+            # context yet. A mid-round forward from the convener always
+            # carries prior context (the Menu Designer's proposed menu,
+            # earlier specialists' replies) -- that's what lets a specialist
+            # answer a broad "plan five days of lunches" from the menu
+            # already on the floor -- so it is never gated. A bare question
+            # with no context, on the other hand, is exactly the "wrong
+            # agent" case: e.g. "find a supplier for fresh basil" sent to
+            # the Nutrition Specialist.
+            has_context = bool((self._current_history_text or "").strip())
+            gate = self._enforce_scope_gate and (
+                self._self_address_prefix_len(user_text) > 0 or not has_context
             )
-            out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
+            if gate and not self._is_in_scope(user_text):
+                if not self._is_alone_on_floor(in_envelope):
+                    logger.info(
+                        "[SCOPE] Utterance outside %s's expertise; other conversants "
+                        "are on the floor, staying silent", self.AGENT_NAME,
+                    )
+                    return
+                logger.info("[SCOPE] Utterance outside %s's expertise; declining instead of answering", self.AGENT_NAME)
+                result = (
+                    f"That's outside what I handle as the {self.AGENT_NAME} ({self.AGENT_SYNOPSIS}). "
+                    "Please direct that to the specialist for this topic instead."
+                )
+            elif _FLOOR_HOLDER_ENABLED:
+                # Race the real work against a short deadline. Fast -> answer
+                # now (one round trip, unchanged). Slow -> return a
+                # floor-holder status and let the gateway re-request with a
+                # resume event; the work keeps running, nothing recomputed.
+                future = _RACE_POOL.submit(
+                    self._run_processing, user_text,
+                    self._current_max_words, self._current_history_text, conv_id,
+                )
+                try:
+                    result = future.result(timeout=_RACE_DEADLINE_S)
+                except FuturesTimeout:
+                    if future.done():
+                        # process_utterance() itself finished right then --
+                        # take its value (or let its exception propagate to
+                        # the generic handler below), don't treat as a
+                        # deadline miss.
+                        result = future.result()
+                    else:
+                        with self._pending_lock:
+                            self._pending_futures[conv_id] = (future, user_text, self._current_max_words)
+                        self._append_floor_holder(out_envelope, user_text)
+                        logger.info(
+                            "[FLOOR-HOLDER] %s: work still running after %.1fs; sent status, awaiting resume",
+                            self.AGENT_NAME, _RACE_DEADLINE_S,
+                        )
+                        return
+            else:
+                # Call domain-specific logic
+                result = self.process_utterance(user_text)
+
+            self._emit_answer(result, out_envelope)
 
         except Exception as e:
             # Never crash the request loop: reply with a generic error utterance.
@@ -910,6 +1136,115 @@ class StrategyBotAgent(BotAgent):
                 features={"text": TextFeature(tokens=[Token(value="Error processing message")])}
             )
             out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
+
+    # -------------------------------------------------------------------------
+    # Floor-holder / progress helpers
+    # -------------------------------------------------------------------------
+
+    def working_label(self, user_text: str) -> str:
+        """A short present-tense phrase shown to the user while this agent
+        works, used only if the real answer doesn't come back within the
+        race deadline. Default is the class WORKING_LABEL; override for
+        something derived from the request (e.g. a day count)."""
+        return getattr(self, "WORKING_LABEL", "working on your request")
+
+    def _resume_conv_id(self, event) -> "str | None":
+        """The conv_id (possibly "") when `event` is the gateway's resume
+        follow-up after a floor-holder, else None."""
+        dialog = self._get_dialog_event(event)
+        features = self._get_attr(dialog, "features", {}) or {}
+        marker = self._get_attr(features, RESUME_FEATURE)
+        if marker is None:
+            return None
+        tokens = self._get_attr(marker, "tokens", []) or []
+        for tok in tokens:
+            val = tok if isinstance(tok, str) else self._get_attr(tok, "value", "")
+            if val:
+                return str(val)
+        return ""
+
+    def _run_processing(self, user_text: str, max_words: int, history_text: str, conv_id: str):
+        """Body of the raced work: restore the request-scoped context a
+        subclass's process_utterance() reads off self, then run it. The
+        gateway serializes a conversation's round, so nothing else mutates
+        these between here and the resume."""
+        self._current_max_words = max_words
+        self._current_history_text = history_text
+        self._current_conv_id = conv_id
+        return self.process_utterance(user_text)
+
+    def _append_floor_holder(self, out_envelope: Envelope, user_text: str) -> None:
+        """Append a transient status utterance ("checking the nutrition
+        levels") flagged so the gateway/client treat it as progress, not the
+        answer, and the gateway re-requests with a resume event."""
+        try:
+            label = self.working_label(user_text) or self.WORKING_LABEL
+        except Exception:
+            label = self.WORKING_LABEL
+        features = {
+            "text": TextFeature(tokens=[Token(value=label)]),
+            FLOOR_HOLDER_FEATURE: TextFeature(tokens=[Token(value="true")]),
+        }
+        out_envelope.events.append(UtteranceEvent(
+            dialogEvent=DialogEvent(speakerUri=self._manifest.identification.speakerUri, features=features)
+        ))
+
+    def _finish_pending(self, conv_id: str, event, out_envelope: Envelope) -> None:
+        """Resume handling: hand back the answer whose work started on the
+        first request. Recomputes synchronously only if the Future is gone
+        (e.g. the agent process restarted between the two requests)."""
+        with self._pending_lock:
+            entry = self._pending_futures.pop(conv_id, None)
+        if entry is not None:
+            future, _user_text, max_words = entry
+            self._current_conv_id = conv_id
+            self._current_max_words = max_words
+            try:
+                result = future.result(timeout=_RESUME_RESULT_TIMEOUT_S)
+            except Exception:
+                logger.exception("[FLOOR-HOLDER] raced work failed on resume")
+                result = "Error processing message"
+        else:
+            logger.warning("[FLOOR-HOLDER] no pending work for conv %s on resume; recomputing", conv_id)
+            self._current_conv_id = conv_id
+            user_text = self._extract_utterance_text(event)
+            if not user_text:
+                return
+            try:
+                result = self.process_utterance(user_text)
+            except Exception:
+                logger.exception("[FLOOR-HOLDER] recompute on resume failed")
+                result = "Error processing message"
+        self._emit_answer(result, out_envelope)
+
+    def _emit_answer(self, result, out_envelope: Envelope) -> None:
+        """Turn a process_utterance() return (str or {"text","html"}) into
+        this agent's reply UtteranceEvent -- markdown strip, word budget, and
+        recording the turn. Shared by the fast path and by resume."""
+        if isinstance(result, dict):
+            response_text = self._limit_words(self._strip_markdown(result.get("text", "")), self._current_max_words)
+            html_content = (result.get("html") or "").strip()
+        else:
+            response_text = self._limit_words(self._strip_markdown(str(result)), self._current_max_words)
+            html_content = ""
+
+        if not response_text:
+            logger.debug("[UTTERANCE] No response generated")
+            return
+
+        logger.info("[UTTERANCE] Response: %s", response_text[:100])
+
+        # Record this agent's own reply into the same transcript (the
+        # self-loop guard means it never observes its own broadcast the
+        # normal way).
+        self._record_conversation_turn(self._current_conv_id, self.speakerUri, response_text, label=self.AGENT_NAME)
+
+        features: dict = {"text": TextFeature(tokens=[Token(value=response_text)])}
+        if html_content:
+            features["html"] = Feature(mimeType="text/html", tokens=[Token(value=html_content)])
+        out_envelope.events.append(UtteranceEvent(
+            dialogEvent=DialogEvent(speakerUri=self._manifest.identification.speakerUri, features=features)
+        ))
 
     @staticmethod
     def _get_attr(obj, key, default=None):
@@ -991,7 +1326,7 @@ class StrategyBotAgent(BotAgent):
             logger.exception("[HANDLE] Error processing envelope")
             error_response = {
                 "openFloor": {
-                    "schema": {"version": "1.1", "url": "https://openvoicenetwork.org/schema"},
+                    "schema": {"version": "1.1.0", "url": "https://openvoicenetwork.org/schema"},
                     "conversation": {"id": str(uuid.uuid4())},
                     "sender": {
                         "speakerUri": self._manifest.identification.speakerUri,

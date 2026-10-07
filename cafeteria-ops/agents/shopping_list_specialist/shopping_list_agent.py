@@ -694,41 +694,283 @@ def _extract_dishes_from_recipes(recipe_text: str) -> list[str]:
     return [d.strip() for d in (parsed.get("dishes") or []) if isinstance(d, str) and d.strip()]
 
 
+# TheMealDB's title search matches a query only as an exact substring of a
+# recipe TITLE (not ingredients, not category), so a Menu-Designer-invented
+# "Herb-crusted pork tenderloin with garlic mashed potatoes" matches
+# nothing while the bare "pork" does -- some retry with a shorter term is
+# unavoidable. Deciding which term used to be a hand-rolled word-filtering
+# heuristic (patched three separate times), then a single LLM call asked
+# to both identify AND rank candidate terms -- confirmed live that the
+# ranking half was unreliable even on the full model tier (run to run, it
+# sometimes ranked a generic word above a far more specific one,
+# regenerating the exact wrong match this feature exists to avoid).
+#
+# Splitting the job fixes that: the LLM only EXTRACTS what's in the dish
+# name into typed slots (a much easier, more reliable task than ranking a
+# flat list), and _terms_from_slots below builds the actual search-term
+# priority order deterministically in code. Same shape as
+# recipe_portion_agent.py's own copy (kept separate: each cafeteria-ops
+# agent is self-contained, no cross-agent imports).
+_SLOT_EXTRACTION_SYSTEM_PROMPT = """Extract structured slots from each cafeteria dish name given, for looking
+it up in TheMealDB, a small recipe database whose search only matches a
+query as an exact substring of a recipe TITLE (not ingredients, not
+category, not cuisine metadata).
+
+For each dish, identify these slots (use null for any that don't apply):
+- "main_ingredient": the single primary protein or vegetable (e.g.
+  "chicken", "lamb", "salmon", "chickpea") -- the core food itself, not a
+  cut, preparation, or plating detail.
+- "secondary_ingredient": another SPECIFIC named ingredient that
+  distinguishes this dish from others sharing the same main ingredient
+  (e.g. "chorizo", "feta", "coconut") -- null if there isn't a clear
+  second one. Must be a specific food, never a generic category word like
+  "vegetable", "meat", "dairy", or "seafood" -- those are too broad to
+  usefully narrow a search (e.g. for "chicken and vegetable biryani", the
+  unnamed vegetables give no real second ingredient, so this is null).
+- "dish_type": the specific category or format of dish if the name
+  states one (e.g. "biryani", "quesadillas", "fajitas", "stew", "salad",
+  "casserole", "curry", "tagine") -- null if it doesn't name one.
+- "sauce_or_style": a named sauce or flavor profile (e.g. "teriyaki",
+  "honey garlic") -- NOT a plain cooking method like "grilled" or
+  "roasted" -- null if there isn't one.
+- "cooking_method": how it's cooked, if the name states one (e.g.
+  "grilled", "roasted", "baked", "fried", "stir-fried") -- null if not
+  named.
+- "cut": the specific cut or part of the animal named, if any (e.g.
+  "thigh", "breast", "wing", "shank", "chop", "loin", "drumstick",
+  "fillet") -- null if not named.
+- "cuisine": the cuisine or region if explicitly named (e.g. "Moroccan",
+  "Mediterranean", "Korean") -- null if not named.
+
+Respond with ONLY a single JSON object mapping each given dish name
+(exactly as given, as the key) to its slots: {"<dish name>":
+{"main_ingredient": ..., "secondary_ingredient": ..., "dish_type": ...,
+"sauce_or_style": ..., "cooking_method": ..., "cut": ..., "cuisine": ...}, ...}
+"""
+
+
+# Cut names that identify a dish as a STEAK even when the word "steak"
+# itself never appears -- fixed, unambiguous world knowledge, so it's
+# deterministic code rather than an LLM inference into dish_type (which
+# confirmed live ranked it too high: several different steak cuts across
+# a week's menu all reduced to the SAME generic "steak" term in the same
+# early round, and the dedupe-by-meal-id step then dropped every dish but
+# the first as a false collision, before their own more specific cut name
+# ever got a chance). Same set as recipe_portion_agent.py's own copy.
+_STEAK_CUTS = frozenset("""
+sirloin ribeye rib-eye filet tenderloin strip t-bone porterhouse flank
+skirt chuck
+""".split())
+
+# secondary_ingredient must be a SPECIFIC named food, never a generic
+# category word ("vegetable", "meat") -- confirmed live the model dodges
+# that instruction just by pluralizing ("vegetables"), a different string
+# the prompt wording never named. Enforced deterministically in code
+# instead of relying on wording. Same set as recipe_portion_agent.py's own
+# copy.
+_GENERIC_CATEGORY_WORDS = frozenset("""
+vegetable meat dairy seafood protein grain starch herb spice fruit legume
+nut green produce
+""".split())
+
+
+def _singular_candidates(word: str) -> list[str]:
+    # More than one stripping rule can apply to the same word (e.g.
+    # "vegetables" ends in both "s" and "es"), and only one of them is
+    # actually right ("vegetable", not "vegetabl") -- so every candidate is
+    # returned and checked against the blocklist, rather than committing to
+    # a single guessed singular form.
+    candidates = [word]
+    if word.endswith("ies") and len(word) > 3:
+        candidates.append(word[:-3] + "y")
+    if word.endswith("es") and len(word) > 2:
+        candidates.append(word[:-2])
+    if word.endswith("s") and not word.endswith("ss") and len(word) > 1:
+        candidates.append(word[:-1])
+    return candidates
+
+
+def _is_generic_category_word(value: str) -> bool:
+    lowered = value.strip().lower()
+    if not lowered:
+        return False
+    return any(c in _GENERIC_CATEGORY_WORDS for c in _singular_candidates(lowered))
+
+
+def _terms_from_slots(slots: dict) -> list[str]:
+    """Deterministic, priority-ordered TheMealDB search terms built from
+    one dish's extracted slots -- most to least likely to find a
+    genuinely relevant recipe. Same priority order and reasoning as
+    recipe_portion_agent.py's own copy:
+      1. dish_type + main_ingredient    6. "steak", same condition
+      2. secondary_ingredient alone     7. cooking_method + main_ingredient
+      3. main_ingredient + sauce        8. cuisine + main_ingredient, as an
+      4. main_ingredient + cut             absolute last resort
+      5. main_ingredient + "steak", if cut is a recognized steak cut (see
+         _STEAK_CUTS) -- tried only after the cut's own name (4 above)
+         has failed, since a cut like "sirloin" has zero TheMealDB
+         coverage on its own but the steak dish-type it implies does
+
+    Deliberately NOT included: main_ingredient alone, cuisine alone,
+    dish_type alone, or sauce_or_style alone. Confirmed live these
+    single-word fallbacks are exactly what produced every wrong match
+    found ("chicken" -> the unrelated "Chicken Handi"; "Moroccan" -> the
+    unrelated "Moroccan Carrot Soup"; "beef" -> "Beef pho" fed downstream
+    as if it were a seared ribeye steak's real ingredients; "tacos" -> the
+    unrelated "Breadfruit Tacos"; "pizza" -> the unrelated "Cassava
+    pizza"; "barbecue" -> the unrelated "Barbecue pork buns", even fed
+    downstream for a dish explicitly labeled Vegetarian). A dish-type or
+    sauce/style word turned out to be just as risky as a bare ingredient
+    or cuisine word -- each names a whole category ("tacos", "pizza",
+    "barbecue") that covers countless unrelated dishes, not a specific
+    one. A wrong "real" recipe silently misleading the shopping list is
+    worse than an honest "not found" falling through to clearly-labeled
+    general knowledge -- every remaining tier above still requires at
+    least two pieces of information to align in one title.
+
+    Non-string or blank slot values are treated as absent. Duplicates are
+    dropped, keeping first occurrence."""
+    def _s(key: str) -> str:
+        value = slots.get(key)
+        return value.strip() if isinstance(value, str) else ""
+
+    main, secondary = _s("main_ingredient"), _s("secondary_ingredient")
+    if _is_generic_category_word(secondary):
+        secondary = ""
+    dish_type, sauce, cuisine = _s("dish_type"), _s("sauce_or_style"), _s("cuisine")
+    cooking, cut = _s("cooking_method"), _s("cut")
+    # any() not an exact match -- confirmed live a multi-word cut like
+    # "filet mignon" never equals the single word "filet" in _STEAK_CUTS.
+    is_steak_cut = any(word in _STEAK_CUTS for word in cut.lower().split())
+
+    ordered_candidates = [
+        f"{dish_type} {main}".strip() if dish_type and main else "",
+        secondary,
+        f"{main} {sauce}".strip() if main and sauce else "",
+        f"{main} {cut}".strip() if main and cut else "",
+        cut,
+        f"{main} steak".strip() if main and is_steak_cut else "",
+        "steak" if is_steak_cut else "",
+        f"{cooking} {main}".strip() if cooking and main else "",
+        f"{cuisine} {main}".strip() if cuisine and main else "",
+    ]
+    seen: set[str] = set()
+    result: list[str] = []
+    for term in ordered_candidates:
+        key = term.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            result.append(term)
+    return result
+
+
+def _llm_candidate_terms(dishes: list[str]) -> dict[str, list[str]]:
+    """dish -> ordered TheMealDB search terms (best first): the exact dish
+    name (always prepended as the first, free attempt), followed by the
+    deterministic priority order built from that dish's LLM-extracted
+    slots (see _terms_from_slots). Falls back to [dish] alone for any
+    dish missing or malformed in the LLM response, so a parse failure
+    degrades to "just try the exact name" rather than losing the retry
+    entirely.
+
+    Uses the full model tier, not _LOOKUP -- confirmed live (same finding
+    as recipe_portion_agent.py's own copy) that the smaller lookup-tier
+    model was noticeably less reliable at this kind of attribute
+    extraction than the full model."""
+    if not dishes:
+        return {}
+    raw = llm_utils.chat_sync(_SLOT_EXTRACTION_SYSTEM_PROMPT, json.dumps(dishes), temperature=0, timeout=30)
+    match = re.search(r"\{[\s\S]*\}", raw)
+    parsed = {}
+    if match:
+        try:
+            parsed = json.loads(match.group())
+        except json.JSONDecodeError:
+            parsed = {}
+
+    result: dict[str, list[str]] = {}
+    for dish in dishes:
+        slots = parsed.get(dish)
+        candidates = [dish] + (_terms_from_slots(slots) if isinstance(slots, dict) else [])
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for term in candidates:
+            key = term.strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                ordered.append(term)
+        result[dish] = ordered
+    return result
+
+
 def _fetch_dish_ingredients(dishes: list[str]) -> dict[str, dict | None]:
     """dish name -> {"meal_name": str, "ingredients": [str, ...]}, or None
-    when no match was found. Two rounds are needed because TheMealDB's name
-    search only returns a summary (id/name/category) -- the real
-    ingredients list comes from a second, per-meal-id lookup."""
+    when no match was found. Two stages are needed because TheMealDB's
+    name search only returns a summary (id/name/category) -- the real
+    ingredients list comes from a second, per-meal-id lookup. The search
+    stage itself retries down each dish's LLM-ranked candidate-term list
+    (see _llm_candidate_terms) rather than giving up after one failed
+    search on the full dish name -- confirmed live that TheMealDB's small
+    catalog rarely has an exact title match for a Menu-Designer-invented
+    dish name, and this agent previously had no fallback at all (unlike
+    recipe_portion_agent.py's own matching, which already retried).
+
+    A dish that loses the meal-id dedupe (see below) is given back its
+    OWN remaining candidate terms and retried, rather than simply dropped
+    -- same fix as recipe_portion_agent.py's own copy, for the same
+    reason: two dishes both falling back to the same shared generic term
+    should each still get a real recipe if either has more candidates
+    of its own worth trying, not just whichever happened to go first."""
     if not dishes:
         return {}
 
-    search_requests = [("themealdb", "search_by_name", {"name": dish[:60]}) for dish in dishes]
-    search_results = mcp_client.call_tools_parallel_sync(search_requests, timeout=10.0)
-
+    remaining: dict[str, list[str]] = _llm_candidate_terms(dishes)
     top_match: dict[str, tuple[str, str]] = {}  # dish -> (meal_id, meal_name)
-    for dish, raw in zip(dishes, search_results):
-        if not raw:
-            continue
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        results = parsed.get("results") or []
-        if results and results[0].get("id"):
-            top_match[dish] = (results[0]["id"], results[0].get("name") or dish)
+    needs_attempt = list(dishes)  # a plain list, not a set -- request/result
+    # order below has to track ``dishes``' own order (via zip).
 
-    # Dedupe by meal_id: two dish names can match the same TheMealDB
-    # recipe. Keep the first dish (menu order); the rest stay None so the
-    # same ingredient list isn't summed into the shopping list twice.
-    claimed: set[str] = set()
-    for dish in dishes:
-        pair = top_match.get(dish)
-        if pair is None:
-            continue
-        if pair[0] in claimed:
-            del top_match[dish]
-        else:
-            claimed.add(pair[0])
+    while needs_attempt:
+        pending = {dish: remaining[dish] for dish in needs_attempt if remaining.get(dish)}
+        while pending:
+            attempt = {dish: terms[0] for dish, terms in pending.items()}
+            search_requests = [("themealdb", "search_by_name", {"name": term[:60]}) for term in attempt.values()]
+            search_results = mcp_client.call_tools_parallel_sync(search_requests, timeout=10.0)
+
+            next_pending: dict[str, list[str]] = {}
+            for (dish, _term), raw in zip(attempt.items(), search_results):
+                remaining[dish] = remaining[dish][1:]  # consumed either way
+                hit = None
+                if raw:
+                    try:
+                        results = json.loads(raw).get("results") or []
+                    except json.JSONDecodeError:
+                        results = []
+                    if results and results[0].get("id"):
+                        hit = (results[0]["id"], results[0].get("name") or dish)
+                if hit:
+                    top_match[dish] = hit
+                elif remaining[dish]:
+                    next_pending[dish] = remaining[dish]
+            pending = next_pending
+
+        # Dedupe by meal_id: two dish names can match the same TheMealDB
+        # recipe. Keep the first dish (menu order); re-queue any other
+        # dish claiming the same one (if it has candidates left) rather
+        # than dropping it outright, so the while loop above gives it
+        # another attempt with its next term.
+        claimed: dict[str, str] = {}  # meal_id -> first dish that claimed it
+        needs_attempt = []
+        for dish in dishes:
+            pair = top_match.get(dish)
+            if pair is None:
+                continue
+            meal_id = pair[0]
+            if meal_id in claimed:
+                del top_match[dish]
+                if remaining.get(dish):
+                    needs_attempt.append(dish)
+            else:
+                claimed[meal_id] = dish
 
     output: dict[str, dict | None] = {dish: None for dish in dishes}
     if not top_match:

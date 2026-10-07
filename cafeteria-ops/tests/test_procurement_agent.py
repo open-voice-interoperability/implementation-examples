@@ -17,8 +17,10 @@ from agents.procurement_specialist.procurement_agent import (
     _fetch_report_data,
     _fetch_web_price_context,
     _non_empty_results,
+    _rows_matching_type,
     _search_terms_for,
     _single_commodity_budget_hint,
+    _summarize_commodity_rows,
     _usable_web_search_result,
     ProcurementAgent,
 )
@@ -94,6 +96,18 @@ class CommodityQueryTests(unittest.TestCase):
     def test_empty_text_has_no_commodity_query(self):
         self.assertIsNone(_commodity_query(""))
 
+    def test_current_wholesale_price_question_extracts_the_commodity(self):
+        # Confirmed live: "current wholesale" sitting between "the" and
+        # "price" didn't match the old framing pattern at all, so the
+        # whole 8-word sentence either fell through as the "commodity" or
+        # got rejected by the 6-word cap -- either way, a real USDA AMS
+        # lookup for chicken thighs never happened.
+        text = "Procurement Specialist, what's the current wholesale price of chicken thighs?"
+        self.assertEqual(_commodity_query(text), "chicken thighs")
+
+    def test_current_price_question_extracts_the_commodity(self):
+        self.assertEqual(_commodity_query("What's the current price of quinoa?"), "quinoa")
+
 
 class NonEmptyResultsTests(unittest.TestCase):
     def test_empty_results_list_is_treated_as_no_data(self):
@@ -162,9 +176,9 @@ class FetchReportDataTests(unittest.TestCase):
         report = json.dumps({"slug_id": "2991", "rows": [{"commodity": "Beef", "price": "$4.50/lb"}]})
 
         with patch.object(pa.mcp_client, "call_tool_sync_or_none", return_value=report) as call:
-            result = _fetch_report_data(search_result)
+            result = _fetch_report_data(search_result, commodity_term="beef")
 
-        call.assert_called_once_with("usda_ams", "get_report", {"slug_id": "2991", "limit": 10})
+        call.assert_called_once_with("usda_ams", "get_report", {"slug_id": "2991", "commodity": "beef", "limit": 500})
         self.assertEqual(result, report)
 
     def test_report_lookup_with_no_rows_is_none(self):
@@ -214,6 +228,111 @@ class FetchReportDataTests(unittest.TestCase):
             result = _fetch_report_data(search_result)
 
         self.assertIsNone(result)
+
+
+class RowsMatchingTypeTests(unittest.TestCase):
+    """USDA AMS report data has no server-side filter for the specific
+    cut/item within a commodity -- confirmed live that asked about
+    "chicken thighs", the model was handed hundreds of raw price rows
+    across every cut/type/region and never found the one that said
+    "Thighs, Boneless/Skinless", defaulting to vague hedging instead of
+    the real $9.99/lb sitting right there in the data. The query passed
+    in here is the CUT residual (see _cut_residual) -- a row's "type"
+    field never names the commodity itself (that's a separate field), so
+    matching the full "chicken thighs" phrase against it would never hit."""
+
+    def test_matches_a_type_containing_all_significant_words(self):
+        rows = [
+            {"type": "Thighs, Boneless/Skinless", "region": "NATIONAL", "price_avg": 9.99},
+            {"type": "Breast, Boneless/Skinless", "region": "NATIONAL", "price_avg": 4.99},
+        ]
+        result = _rows_matching_type(rows, "thighs")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["type"], "Thighs, Boneless/Skinless")
+
+    def test_prefers_the_national_region_row_over_a_regional_one(self):
+        rows = [
+            {"type": "Thighs, Boneless/Skinless", "region": "Southeast", "price_avg": 8.50},
+            {"type": "Thighs, Boneless/Skinless", "region": "NATIONAL", "price_avg": 9.99},
+        ]
+        result = _rows_matching_type(rows, "thighs")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["region"], "NATIONAL")
+
+    def test_no_matching_type_returns_empty(self):
+        rows = [{"type": "Breast, Boneless/Skinless", "region": "NATIONAL", "price_avg": 4.99}]
+        self.assertEqual(_rows_matching_type(rows, "thighs"), [])
+
+    def test_short_words_are_not_treated_as_significant(self):
+        # "of"/"a"/"an" etc. (<=3 letters) would match almost any row's
+        # type field and defeat the whole point of filtering.
+        rows = [{"type": "Breast, Boneless/Skinless", "region": "NATIONAL"}]
+        self.assertEqual(_rows_matching_type(rows, "leg of lamb"), [])
+
+    def test_empty_query_returns_empty(self):
+        rows = [{"type": "Thighs, Boneless/Skinless", "region": "NATIONAL"}]
+        self.assertEqual(_rows_matching_type(rows, ""), [])
+
+
+class SummarizeCommodityRowsTests(unittest.TestCase):
+    def test_none_report_data_is_none(self):
+        self.assertEqual(_summarize_commodity_rows(None, "thighs"), (None, False))
+
+    def test_no_rows_is_none(self):
+        report = json.dumps({"slug_id": "2756", "rows": []})
+        self.assertEqual(_summarize_commodity_rows(report, "thighs"), (None, False))
+
+    def test_exact_match_returns_the_matching_rows_and_true(self):
+        report = json.dumps({"slug_id": "2756", "rows": [
+            {"type": "Thighs, Boneless/Skinless", "region": "NATIONAL", "price_avg": 9.99},
+            {"type": "Breast, Boneless/Skinless", "region": "NATIONAL", "price_avg": 4.99},
+        ]})
+        summary, exact_match = _summarize_commodity_rows(report, "thighs")
+        self.assertTrue(exact_match)
+        self.assertIn("Thighs, Boneless/Skinless", summary)
+        self.assertNotIn("Breast", summary)
+
+    def test_no_exact_match_falls_back_to_national_sample_and_false(self):
+        report = json.dumps({"slug_id": "2756", "rows": [
+            {"type": "Breast, Boneless/Skinless", "region": "NATIONAL", "price_avg": 4.99},
+            {"type": "Breast, Boneless/Skinless", "region": "Southeast", "price_avg": 4.50},
+        ]})
+        summary, exact_match = _summarize_commodity_rows(report, "thighs")
+        self.assertFalse(exact_match)
+        self.assertIn("Breast, Boneless/Skinless", summary)
+        self.assertNotIn("Southeast", summary)  # only the NATIONAL row, not the regional one
+
+    def test_no_national_rows_falls_back_to_whatever_rows_exist(self):
+        report = json.dumps({"slug_id": "2756", "rows": [
+            {"type": "Breast, Boneless/Skinless", "region": "Southeast", "price_avg": 4.50},
+        ]})
+        summary, exact_match = _summarize_commodity_rows(report, "thighs")
+        self.assertFalse(exact_match)
+        self.assertIn("Southeast", summary)
+
+
+class CutResidualTests(unittest.TestCase):
+    """The commodity word (used as get_report's server-side filter) has
+    to be stripped before matching a row's "type" field -- confirmed live
+    that "chicken" never appears in "type" (it's the separate "commodity"
+    field), so leaving it in made every single cut look like "no exact
+    match" regardless of what was actually in the data."""
+
+    def test_strips_the_matched_commodity_word(self):
+        self.assertEqual(pa._cut_residual("chicken thighs", "chicken"), "thighs")
+
+    def test_is_case_insensitive(self):
+        self.assertEqual(pa._cut_residual("Chicken Thighs", "chicken"), "Thighs")
+
+    def test_multi_word_commodity_term_is_fully_stripped(self):
+        self.assertEqual(pa._cut_residual("cheddar cheese block", "cheddar cheese"), "block")
+
+    def test_no_residual_left_falls_back_to_the_full_query(self):
+        # e.g. term == commodity_query itself (the full-name search
+        # attempt succeeded) -- there's no cut-specific residual to match
+        # against "type", so matching against the full query is the best
+        # available fallback rather than matching nothing at all.
+        self.assertEqual(pa._cut_residual("beef", "beef"), "beef")
 
 
 class ExtractIngredientsTests(unittest.TestCase):
@@ -269,28 +388,39 @@ class FetchAllMarketDataTests(unittest.TestCase):
             json.dumps({"keyword": "chicken", "results": [{"slug_id": "111", "report_title": "Weekly Chicken Report"}]}),
             json.dumps({"keyword": "beef", "results": [{"slug_id": "222", "report_title": "Weekly Beef Report"}]}),
         ]
+        chicken_rows = [{"price": "$1.50/lb"}]
+        beef_rows = [{"price": "$4.50/lb"}]
         detail_results = [
-            json.dumps({"slug_id": "111", "rows": [{"price": "$1.50/lb"}]}),
-            json.dumps({"slug_id": "222", "rows": [{"price": "$4.50/lb"}]}),
+            json.dumps({"slug_id": "111", "rows": chicken_rows}),
+            json.dumps({"slug_id": "222", "rows": beef_rows}),
         ]
         with patch.object(pa.mcp_client, "call_tools_parallel_sync", side_effect=[search_results, detail_results]) as call:
             result = _fetch_all_market_data(["chicken", "beef"])
 
         self.assertEqual(call.call_count, 2)
-        self.assertEqual(result, {"chicken": detail_results[0], "beef": detail_results[1]})
+        detail_requests = call.call_args_list[1].args[0]
+        self.assertEqual(detail_requests, [
+            ("usda_ams", "get_report", {"slug_id": "111", "commodity": "chicken", "limit": 500}),
+            ("usda_ams", "get_report", {"slug_id": "222", "commodity": "beef", "limit": 500}),
+        ])
+        # No "type"/"region" fields on these fixture rows, so the
+        # cut/NATIONAL matching in _summarize_commodity_rows finds
+        # nothing to narrow to and falls back to the rows as retrieved.
+        self.assertEqual(result, {"chicken": json.dumps(chicken_rows), "beef": json.dumps(beef_rows)})
 
     def test_ingredient_with_no_search_match_maps_to_none_without_a_detail_call(self):
         search_results = [
             json.dumps({"keyword": "chicken", "results": [{"slug_id": "111", "report_title": "Weekly Chicken Report"}]}),
             json.dumps({"keyword": "kumquat", "results": []}),
         ]
-        detail_results = [json.dumps({"slug_id": "111", "rows": [{"price": "$1.50/lb"}]})]
+        chicken_rows = [{"price": "$1.50/lb"}]
+        detail_results = [json.dumps({"slug_id": "111", "rows": chicken_rows})]
         with patch.object(pa.mcp_client, "call_tools_parallel_sync", side_effect=[search_results, detail_results]) as call:
             result = _fetch_all_market_data(["chicken", "kumquat"])
 
         detail_requests = call.call_args_list[1].args[0]
-        self.assertEqual(detail_requests, [("usda_ams", "get_report", {"slug_id": "111", "limit": 10})])
-        self.assertEqual(result, {"chicken": detail_results[0], "kumquat": None})
+        self.assertEqual(detail_requests, [("usda_ams", "get_report", {"slug_id": "111", "commodity": "chicken", "limit": 500})])
+        self.assertEqual(result, {"chicken": json.dumps(chicken_rows), "kumquat": None})
 
     def test_no_ingredient_found_at_all_skips_the_detail_round_entirely(self):
         search_results = [json.dumps({"keyword": "kumquat", "results": []})]
@@ -318,15 +448,16 @@ class FetchAllMarketDataTests(unittest.TestCase):
             {"slug_id": "1002", "report_title": "National Milk Review"},
         ]})]
         empty_report = json.dumps({"slug_id": "1001", "rows": []})
-        real_report = json.dumps({"slug_id": "1002", "rows": [{"price": "$3.50/gal"}]})
+        milk_rows = [{"price": "$3.50/gal"}]
+        real_report = json.dumps({"slug_id": "1002", "rows": milk_rows})
 
         with patch.object(pa.mcp_client, "call_tools_parallel_sync", side_effect=[search_results, [empty_report], [real_report]]) as call:
             result = _fetch_all_market_data(["milk"])
 
         self.assertEqual(call.call_count, 3)  # search round + 2 detail rounds
         second_detail_requests = call.call_args_list[2].args[0]
-        self.assertEqual(second_detail_requests, [("usda_ams", "get_report", {"slug_id": "1002", "limit": 10})])
-        self.assertEqual(result, {"milk": real_report})
+        self.assertEqual(second_detail_requests, [("usda_ams", "get_report", {"slug_id": "1002", "commodity": "milk", "limit": 500})])
+        self.assertEqual(result, {"milk": json.dumps(milk_rows)})
 
     def test_retry_rounds_do_not_affect_an_ingredient_that_already_found_data(self):
         # One ingredient needs a retry round; another finds data on its
@@ -338,9 +469,11 @@ class FetchAllMarketDataTests(unittest.TestCase):
                 {"slug_id": "1002", "report_title": "National Milk Review"},
             ]}),
         ]
-        chicken_report = json.dumps({"slug_id": "111", "rows": [{"price": "$1.50/lb"}]})
+        chicken_rows = [{"price": "$1.50/lb"}]
+        milk_rows = [{"price": "$3.50/gal"}]
+        chicken_report = json.dumps({"slug_id": "111", "rows": chicken_rows})
         empty_milk_report = json.dumps({"slug_id": "1001", "rows": []})
-        real_milk_report = json.dumps({"slug_id": "1002", "rows": [{"price": "$3.50/gal"}]})
+        real_milk_report = json.dumps({"slug_id": "1002", "rows": milk_rows})
 
         with patch.object(
             pa.mcp_client, "call_tools_parallel_sync",
@@ -349,8 +482,8 @@ class FetchAllMarketDataTests(unittest.TestCase):
             result = _fetch_all_market_data(["chicken", "milk"])
 
         second_detail_requests = call.call_args_list[2].args[0]
-        self.assertEqual(second_detail_requests, [("usda_ams", "get_report", {"slug_id": "1002", "limit": 10})])
-        self.assertEqual(result, {"chicken": chicken_report, "milk": real_milk_report})
+        self.assertEqual(second_detail_requests, [("usda_ams", "get_report", {"slug_id": "1002", "commodity": "milk", "limit": 500})])
+        self.assertEqual(result, {"chicken": json.dumps(chicken_rows), "milk": json.dumps(milk_rows)})
 
     def test_gives_up_only_after_every_candidate_has_no_rows(self):
         search_results = [json.dumps({"keyword": "milk", "results": [
@@ -375,7 +508,8 @@ class FetchAllMarketDataTests(unittest.TestCase):
         no_match_full = json.dumps({"keyword": "cheddar cheese", "results": []})
         no_match_first = json.dumps({"keyword": "cheddar", "results": []})
         real_match = json.dumps({"keyword": "cheese", "results": [{"slug_id": "5001", "report_title": "Cheese - Oceania"}]})
-        report = json.dumps({"slug_id": "5001", "rows": [{"price": "$2.10/lb"}]})
+        cheese_rows = [{"price": "$2.10/lb"}]
+        report = json.dumps({"slug_id": "5001", "rows": cheese_rows})
 
         with patch.object(
             pa.mcp_client, "call_tools_parallel_sync",
@@ -386,7 +520,9 @@ class FetchAllMarketDataTests(unittest.TestCase):
         self.assertEqual(call.call_count, 4)  # 3 search rounds (full, first, last word) + 1 detail round
         third_search_requests = call.call_args_list[2].args[0]
         self.assertEqual(third_search_requests, [("usda_ams", "search_reports", {"keyword": "cheese", "limit": 3})])
-        self.assertEqual(result, {"cheddar cheese": report})
+        fourth_detail_requests = call.call_args_list[3].args[0]
+        self.assertEqual(fourth_detail_requests, [("usda_ams", "get_report", {"slug_id": "5001", "commodity": "cheese", "limit": 500})])
+        self.assertEqual(result, {"cheddar cheese": json.dumps(cheese_rows)})
 
     def test_two_ingredients_landing_on_the_same_report_do_not_both_carry_it(self):
         # "chicken breast" and "chicken thigh" both fall back to the word
@@ -397,12 +533,36 @@ class FetchAllMarketDataTests(unittest.TestCase):
             json.dumps({"keyword": "chicken", "results": [{"slug_id": "111", "report_title": "Weekly Chicken Report"}]}),
             json.dumps({"keyword": "chicken", "results": [{"slug_id": "111", "report_title": "Weekly Chicken Report"}]}),
         ]
-        report = json.dumps({"slug_id": "111", "rows": [{"price": "$1.50/lb"}]})
+        chicken_rows = [{"price": "$1.50/lb"}]
+        report = json.dumps({"slug_id": "111", "rows": chicken_rows})
         with patch.object(pa.mcp_client, "call_tools_parallel_sync",
                           side_effect=[search_results, [report, report]]) as call:
             result = _fetch_all_market_data(["chicken breast", "chicken thigh"])
 
-        self.assertEqual(result, {"chicken breast": report, "chicken thigh": None})
+        self.assertEqual(result, {"chicken breast": json.dumps(chicken_rows), "chicken thigh": None})
+
+    def test_narrows_to_the_specific_cut_out_of_many_unrelated_rows(self):
+        # Confirmed live: asked to source "lamb" (via a whole-menu run),
+        # the report matched on "lamb" carried dozens of rows for OTHER
+        # cuts/items -- with no filtering, the model never found the one
+        # for lamb specifically and invented a fictional retailer instead.
+        # This proves the real fix: only the matching row(s) reach the LLM.
+        search_results = [json.dumps({"keyword": "lamb", "results": [{"slug_id": "9001", "report_title": "Weekly Lamb Report"}]})]
+        rows = [
+            {"type": "Leg, Bone-In", "region": "NATIONAL", "price_avg": 7.99},
+            {"type": "Loin Chops", "region": "NATIONAL", "price_avg": 12.99},
+            {"type": "Ground", "region": "Southeast", "price_avg": 6.49},
+        ]
+        detail_results = [json.dumps({"slug_id": "9001", "rows": rows})]
+        with patch.object(pa.mcp_client, "call_tools_parallel_sync", side_effect=[search_results, detail_results]):
+            result = _fetch_all_market_data(["lamb"])
+
+        # "lamb" itself matches no row's "type" (that word lives in the
+        # separate "commodity" field), so this falls back to a NATIONAL
+        # sample -- but critically, NOT the Southeast-only ground lamb row.
+        stored = json.loads(result["lamb"])
+        self.assertEqual(len(stored), 2)
+        self.assertTrue(all(row["region"] == "NATIONAL" for row in stored))
 
 
 class UsableWebSearchResultTests(unittest.TestCase):
@@ -497,6 +657,35 @@ class SystemPromptTests(unittest.TestCase):
         # actually showed -- the same anchoring failure mode already
         # fixed for Menu Designer's Caesar salad example.
         self.assertNotIn("e.g. lock in a contract", pa.SYSTEM_PROMPT)
+
+    def test_forbids_substituting_a_different_cut_than_the_one_asked_about(self):
+        # Confirmed live: asked about "chicken thighs", the model answered
+        # about "chicken breast" instead -- the retrieved USDA report
+        # covered the broader commodity with no cut-level detail, and
+        # nothing told the model to stick to the exact cut named in the
+        # question rather than substitute a different one.
+        self.assertIn("EXACT commodity/cut named in the question", pa.SYSTEM_PROMPT)
+
+    def test_forbids_inventing_a_retailer_name(self):
+        # Confirmed live: the model named a specific fictional supplier
+        # ("Local Meats R Us") that appears nowhere in real USDA AMS
+        # wholesale report data -- the whole-menu prompt already forbids
+        # inventing a retailer; the single-commodity prompt didn't.
+        self.assertIn("Never invent a specific retailer, supplier, or vendor name", pa.SYSTEM_PROMPT)
+
+    def test_forbids_claiming_real_data_grounding_when_none_was_retrieved(self):
+        # Confirmed live: the model opened with "Based on the recent USDA
+        # wholesale market data" while giving vague, ungrounded guidance --
+        # the existing "don't imply you found real data" instruction wasn't
+        # concrete enough to stop this specific framing.
+        self.assertIn('"based on recent USDA data"', pa.SYSTEM_PROMPT)
+
+    def test_forbids_vague_hedging_when_broader_commodity_data_exists(self):
+        # Confirmed live: told correctly that thighs weren't broken out
+        # separately, the model then padded the rest with generic hedge
+        # language ("prices are volatile, monitor closely") instead of
+        # citing the real numbers the broader-commodity report did show.
+        self.assertIn("do NOT then fall back to vague, generic language", pa.SYSTEM_PROMPT)
 
 
 class OnObservedUtteranceTests(unittest.TestCase):

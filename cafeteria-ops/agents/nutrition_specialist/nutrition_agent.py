@@ -277,8 +277,20 @@ def _build_whole_menu_html(text: str) -> str:
 # the ORIGINAL question names a specific food, not treated as part of it.
 _MAX_WORDS_INSTRUCTION = re.compile(r"\n\n\[Write approximately[\s\S]*$", re.IGNORECASE)
 _ADDRESS_PREFIX = re.compile(r"^[^,]{0,40},\s*", re.IGNORECASE)
+# A compound ask ("how many calories AND how much sodium is in X") joins two
+# framing clauses with "and" before the shared trailing "in" -- confirmed
+# live that only the second clause ("how much sodium is in") matched below,
+# leaving "how many calories and" attached to the food name. That pushed the
+# cleaned text over the 8-word cap, so _food_query returned None entirely
+# and the question silently fell through to a whole-menu nutrition dump
+# instead of answering about the food actually named. The first two
+# alternatives match the compound form (either nutrient first) as one
+# clause so it's fully stripped; the third/fourth remain for the plain
+# single-clause form.
 _REQUEST_FRAMING = re.compile(
-    r"\b(how many calories (are |is )?in|how much (protein|fat|sodium|carb\w*) (is |are )?in|"
+    r"\b(how many calories(?:,? and how much (?:protein|fat|sodium|carb\w*))? (are |is )?in|"
+    r"how much (?:protein|fat|sodium|carb\w*)(?:,? and how many calories)? (is |are )?in|"
+    r"how many calories (are |is )?in|how much (protein|fat|sodium|carb\w*) (is |are )?in|"
     r"what'?s the nutrition(al)? (value|profile|content)?\s*(of)?|nutrition(al)? (value|profile|content) of|"
     r"assess|evaluate|analy[sz]e|tell me about)\b",
     re.IGNORECASE,
@@ -292,6 +304,10 @@ _BROAD_PLANNING_SIGNAL = re.compile(
     re.IGNORECASE,
 )
 _VAGUE_REFERENT = re.compile(r"^(this|the|that)?\s*(menu item|dish|food|meal|item)s?\.?$", re.IGNORECASE)
+# Left over once _REQUEST_FRAMING strips "...is in" / "...are in" -- the
+# article right after "in" ("in A grilled chicken caesar wrap") isn't part
+# of the dish name.
+_LEADING_ARTICLE = re.compile(r"^(a|an|the)\s+", re.IGNORECASE)
 
 
 def _food_query(user_text: str) -> str | None:
@@ -304,6 +320,7 @@ def _food_query(user_text: str) -> str | None:
     cleaned = _MAX_WORDS_INSTRUCTION.sub("", user_text)
     cleaned = _ADDRESS_PREFIX.sub("", cleaned, count=1)
     cleaned = _REQUEST_FRAMING.sub("", cleaned)
+    cleaned = _LEADING_ARTICLE.sub("", cleaned.strip())
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" ?.!")
     if not cleaned or _VAGUE_REFERENT.match(cleaned):
         return None

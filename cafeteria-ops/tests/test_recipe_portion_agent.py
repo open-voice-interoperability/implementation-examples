@@ -14,6 +14,8 @@ from agents.recipe_portion_specialist.recipe_portion_agent import (
     _extract_dishes,
     _fetch_all_recipes,
     _fetch_recipe_details,
+    _llm_candidate_terms,
+    _multi_idea_request,
     _non_empty_results,
     RecipePortionAgent,
 )
@@ -53,6 +55,47 @@ class DishQueryTests(unittest.TestCase):
 
     def test_empty_text_has_no_dish_query(self):
         self.assertIsNone(_dish_query(""))
+
+    def test_standard_cafeteria_portion_question_extracts_the_dish_name(self):
+        # Confirmed live: this named no recipe-request phrase at all (no
+        # "recipe for"), so nothing stripped and the 9-word question blew
+        # past the 8-word cap -- returned None even though it plainly names
+        # a dish. With a menu already saved from an earlier round in the
+        # same conversation, that silently produced a whole-menu recipe
+        # dump instead of answering about grilled chicken breast.
+        text = "Recipe & Portion Specialist, what's a standard cafeteria portion for grilled chicken breast?"
+        self.assertEqual(_dish_query(text), "grilled chicken breast")
+
+    def test_portion_size_question_extracts_the_dish_name(self):
+        text = "What portion size should we use for the roasted potatoes?"
+        self.assertEqual(_dish_query(text), "the roasted potatoes")
+
+
+class MultiIdeaRequestTests(unittest.TestCase):
+    def test_three_different_ideas_extracts_count_and_dish(self):
+        # Confirmed live: without this, "three different ideas for" was
+        # never recognized as framing, so the whole sentence (quantity
+        # word included) fell through as one garbled TheMealDB search
+        # term that matched nothing -- with no real data to vary between,
+        # the model just wrote one recipe and repeated it three times.
+        text = "Recipe & Portion Specialist, give me three different ideas for inexpensive chicken curry recipes"
+        self.assertEqual(_multi_idea_request(text), (3, "chicken curry"))
+
+    def test_digit_count_and_recipe_ideas_wording(self):
+        self.assertEqual(_multi_idea_request("give me 2 recipe ideas for salmon"), (2, "salmon"))
+
+    def test_word_count_several_defaults_to_three(self):
+        self.assertEqual(_multi_idea_request("several options for lentil soup"), (3, "lentil soup"))
+
+    def test_count_is_capped_at_five(self):
+        count, _ = _multi_idea_request("give me 20 different ideas for tofu stir-fry")
+        self.assertEqual(count, 5)
+
+    def test_plain_single_recipe_request_is_not_a_multi_idea_request(self):
+        self.assertIsNone(_multi_idea_request("give me a recipe for chicken curry"))
+
+    def test_empty_text_has_no_multi_idea_request(self):
+        self.assertIsNone(_multi_idea_request(""))
 
 
 class NonEmptyResultsTests(unittest.TestCase):
@@ -152,10 +195,217 @@ class ExtractDishesTests(unittest.TestCase):
         self.assertEqual(result, ["Lentil Soup"])
 
 
+class TermsFromSlotsTests(unittest.TestCase):
+    """Deterministic priority order built from one dish's extracted slots
+    -- this is what replaced asking the LLM to also rank a flat term
+    list, which confirmed live was unreliable run to run even on the
+    full model tier."""
+
+    def test_dish_type_plus_main_ingredient_ranks_first(self):
+        slots = {"main_ingredient": "chicken", "dish_type": "biryani"}
+        self.assertEqual(rpa._terms_from_slots(slots)[0], "biryani chicken")
+
+    def test_dish_type_alone_is_not_a_candidate(self):
+        # Confirmed live: a bare dish-type word ("tacos", "pizza") matched
+        # an unrelated dish sharing only that category ("tacos" -> the
+        # unrelated "Breadfruit Tacos"; "pizza" -> the unrelated "Cassava
+        # pizza") -- same risk as a bare main_ingredient or cuisine word,
+        # so it's excluded the same way.
+        slots = {"dish_type": "tacos"}
+        self.assertEqual(rpa._terms_from_slots(slots), [])
+
+    def test_secondary_ingredient_ranks_above_main_plus_sauce(self):
+        # Confirmed live: "chorizo" alone matched a real, closely related
+        # dish while combined phrases matched nothing at all.
+        slots = {"main_ingredient": "chicken", "secondary_ingredient": "chorizo", "sauce_or_style": "spicy"}
+        terms = rpa._terms_from_slots(slots)
+        self.assertLess(terms.index("chorizo"), terms.index("chicken spicy"))
+
+    def test_sauce_or_style_alone_is_not_a_candidate(self):
+        # Confirmed live: a bare sauce/style word ("barbecue") matched an
+        # unrelated dish sharing only that word ("barbecue" -> the
+        # unrelated "Barbecue pork buns", even fed downstream for a dish
+        # explicitly labeled Vegetarian) -- same risk as a bare
+        # main_ingredient, cuisine, or dish_type word.
+        slots = {"sauce_or_style": "barbecue"}
+        self.assertEqual(rpa._terms_from_slots(slots), [])
+
+    def test_cuisine_ranks_below_the_dish_own_identity(self):
+        # Confirmed live: a bare cuisine word ("Moroccan") matched an
+        # unrelated dish from that same cuisine ("Moroccan Carrot Soup")
+        # -- it must never outrank the dish's own main ingredient. Bare
+        # cuisine alone is no longer a candidate at all (see
+        # test_cuisine_alone_is_not_a_candidate); cuisine+main is the
+        # weakest tier that's still allowed, since it requires both
+        # pieces of information to align in one title.
+        slots = {"main_ingredient": "lamb", "dish_type": "stew", "cuisine": "Moroccan"}
+        terms = rpa._terms_from_slots(slots)
+        self.assertLess(terms.index("stew lamb"), terms.index("Moroccan lamb"))
+
+    def test_cuisine_alone_is_not_a_candidate(self):
+        # Confirmed live: a bare cuisine word alone matched an unrelated
+        # dish from that same cuisine ("Moroccan" -> "Moroccan Carrot
+        # Soup") -- a wrong "real" recipe presented as grounded data is
+        # worse than admitting no match was found, so this (and bare
+        # main_ingredient alone) are deliberately never generated.
+        slots = {"cuisine": "Moroccan"}
+        self.assertEqual(rpa._terms_from_slots(slots), [])
+
+    def test_main_ingredient_alone_is_not_a_candidate(self):
+        slots = {"main_ingredient": "chicken"}
+        self.assertEqual(rpa._terms_from_slots(slots), [])
+
+    def test_generic_category_secondary_ingredient_is_dropped(self):
+        # Confirmed live: "Grilled salmon with ... vegetables ..." extracted
+        # secondary_ingredient="vegetables" (plural) -- the prompt's own
+        # wording only named the singular "vegetable", so the model dodged
+        # it just by pluralizing. Enforced in code instead of wording.
+        slots = {"main_ingredient": "chicken", "secondary_ingredient": "vegetables", "dish_type": "biryani"}
+        terms = rpa._terms_from_slots(slots)
+        self.assertNotIn("vegetables", terms)
+
+    def test_generic_category_secondary_ingredient_singular_is_also_dropped(self):
+        slots = {"main_ingredient": "chicken", "secondary_ingredient": "meat"}
+        self.assertEqual(rpa._terms_from_slots(slots), [])
+
+    def test_specific_secondary_ingredient_is_not_dropped(self):
+        slots = {"main_ingredient": "chicken", "secondary_ingredient": "berries"}
+        self.assertIn("berries", rpa._terms_from_slots(slots))
+
+    def test_cooking_method_plus_main_ranks_below_sauce(self):
+        # Confirmed live: "roasted chicken"/"fried chicken" occasionally
+        # land an exact-ish match, but it's a weaker signal than a named
+        # sauce/style -- most cooking-method + main searches come back
+        # empty, so it must never outrank main_ingredient + sauce_or_style.
+        slots = {"main_ingredient": "chicken", "sauce_or_style": "teriyaki", "cooking_method": "grilled"}
+        terms = rpa._terms_from_slots(slots)
+        self.assertLess(terms.index("chicken teriyaki"), terms.index("grilled chicken"))
+
+    def test_cut_ranks_above_cooking_method(self):
+        # Confirmed live: "lamb chop"/"pork chop"/"chicken wing" reliably
+        # found real, distinctively relevant matches, and "chop"/"wing"/
+        # "shank" alone did too (a cut name is rarely shared with an
+        # unrelated dish the way "chicken" is) -- more reliable than
+        # cooking-method combos, so it's ranked higher.
+        slots = {"main_ingredient": "lamb", "cooking_method": "grilled", "cut": "chop"}
+        terms = rpa._terms_from_slots(slots)
+        self.assertLess(terms.index("lamb chop"), terms.index("chop"))
+        self.assertLess(terms.index("chop"), terms.index("grilled lamb"))
+
+    def test_steak_fallback_is_tried_only_after_the_cut_itself(self):
+        # Confirmed live: "sirloin" alone has zero TheMealDB coverage, but
+        # "steak" does ("Steak Diane" etc.) -- "steak" must come AFTER the
+        # cut's own name, never before, so a cut that DOES have real
+        # coverage (e.g. "chop") still gets first crack at it.
+        slots = {"main_ingredient": "beef", "cut": "sirloin"}
+        terms = rpa._terms_from_slots(slots)
+        self.assertLess(terms.index("beef sirloin"), terms.index("beef steak"))
+        self.assertLess(terms.index("sirloin"), terms.index("steak"))
+        self.assertLess(terms.index("beef steak"), terms.index("steak"))
+
+    def test_steak_fallback_is_absent_for_a_non_steak_cut(self):
+        # "chop" is a real cut but not a steak cut -- no "steak" terms
+        # should be generated at all.
+        slots = {"main_ingredient": "lamb", "cut": "chop"}
+        terms = rpa._terms_from_slots(slots)
+        self.assertNotIn("steak", terms)
+        self.assertNotIn("lamb steak", terms)
+
+    def test_steak_fallback_ranks_below_sauce_and_cut(self):
+        slots = {"main_ingredient": "beef", "sauce_or_style": "peppercorn", "cut": "ribeye"}
+        terms = rpa._terms_from_slots(slots)
+        self.assertLess(terms.index("beef peppercorn"), terms.index("steak"))
+        self.assertLess(terms.index("ribeye"), terms.index("steak"))
+
+    def test_empty_slots_return_no_terms(self):
+        self.assertEqual(rpa._terms_from_slots({}), [])
+
+    def test_non_string_slot_values_are_treated_as_absent(self):
+        slots = {"main_ingredient": None, "dish_type": 5, "secondary_ingredient": "  "}
+        self.assertEqual(rpa._terms_from_slots(slots), [])
+
+    def test_duplicate_terms_are_not_repeated(self):
+        # dish_type alone and cut alone can coincide (e.g. an unusual
+        # extraction where both land on "chop") -- only one entry should
+        # survive, keeping the first (higher-priority) occurrence.
+        slots = {"main_ingredient": "lamb", "dish_type": "chop", "cut": "chop"}
+        terms = rpa._terms_from_slots(slots)
+        self.assertEqual(terms.count("chop"), 1)
+
+
+class LlmCandidateTermsTests(unittest.TestCase):
+    """The exact dish name is always prepended as the first, free
+    attempt, followed by the deterministic term order built from that
+    dish's LLM-extracted slots (see TermsFromSlotsTests)."""
+
+    def test_dish_name_is_prepended_before_the_slot_derived_terms(self):
+        raw = json.dumps({"Grilled Teriyaki Chicken": {"main_ingredient": "chicken", "sauce_or_style": "teriyaki"}})
+        with patch.object(rpa.llm_utils, "chat_sync", return_value=raw):
+            result = _llm_candidate_terms(["Grilled Teriyaki Chicken"])
+
+        # No trailing bare "chicken" or bare "teriyaki" -- main_ingredient
+        # alone and sauce_or_style alone are deliberately not candidates
+        # (see TermsFromSlotsTests).
+        self.assertEqual(
+            result["Grilled Teriyaki Chicken"],
+            ["Grilled Teriyaki Chicken", "chicken teriyaki"],
+        )
+
+    def test_dish_missing_from_the_llm_response_falls_back_to_itself_alone(self):
+        raw = json.dumps({"Chicken Curry": {"main_ingredient": "chicken"}})  # "Lentil Soup" omitted
+        with patch.object(rpa.llm_utils, "chat_sync", return_value=raw):
+            result = _llm_candidate_terms(["Chicken Curry", "Lentil Soup"])
+
+        self.assertEqual(result["Lentil Soup"], ["Lentil Soup"])
+
+    def test_malformed_json_response_falls_back_to_the_dish_name_alone(self):
+        with patch.object(rpa.llm_utils, "chat_sync", return_value="not json at all"):
+            result = _llm_candidate_terms(["Chicken Curry"])
+
+        self.assertEqual(result["Chicken Curry"], ["Chicken Curry"])
+
+    def test_non_dict_slots_for_a_dish_fall_back_to_the_dish_name_alone(self):
+        raw = json.dumps({"Chicken Curry": ["not", "a", "dict"]})
+        with patch.object(rpa.llm_utils, "chat_sync", return_value=raw):
+            result = _llm_candidate_terms(["Chicken Curry"])
+
+        self.assertEqual(result["Chicken Curry"], ["Chicken Curry"])
+
+    def test_empty_dish_list_makes_no_llm_call(self):
+        with patch.object(rpa.llm_utils, "chat_sync") as chat_sync:
+            result = _llm_candidate_terms([])
+
+        chat_sync.assert_not_called()
+        self.assertEqual(result, {})
+
+    def test_multiple_dishes_are_extracted_in_one_call(self):
+        raw = json.dumps({
+            "Chicken and Chorizo Quesadillas": {
+                "main_ingredient": "chicken", "secondary_ingredient": "chorizo", "dish_type": "quesadillas",
+            },
+            "Grilled Salmon": {"main_ingredient": "salmon"},
+        })
+        with patch.object(rpa.llm_utils, "chat_sync", return_value=raw) as chat_sync:
+            result = _llm_candidate_terms(["Chicken and Chorizo Quesadillas", "Grilled Salmon"])
+
+        chat_sync.assert_called_once()
+        self.assertEqual(
+            result["Chicken and Chorizo Quesadillas"],
+            ["Chicken and Chorizo Quesadillas", "quesadillas chicken", "chorizo"],
+        )
+        # "Grilled Salmon" has only a bare main_ingredient and nothing
+        # else distinguishing -- no fallback candidates beyond its own
+        # exact name (see TermsFromSlotsTests.test_main_ingredient_alone_is_not_a_candidate).
+        self.assertEqual(result["Grilled Salmon"], ["Grilled Salmon"])
+
+
 class FetchAllRecipesTests(unittest.TestCase):
-    """Batched two-round lookup (search round, then detail round) across
-    every dish in a whole week's menu -- same two-stage shape as
-    _fetch_recipe_details, but parallelized."""
+    """Batched round-based lookup (one parallel search round per candidate-
+    term rank, then one parallel detail round) across every dish in a
+    whole week's menu -- same two-stage shape as _fetch_recipe_details.
+    _llm_candidate_terms itself is mocked throughout (its own behavior is
+    covered by LlmCandidateTermsTests) so these tests isolate the round-
+    advancing/dedup mechanics from the term-ranking logic."""
 
     def test_empty_dish_list_makes_no_calls(self):
         with patch.object(rpa.mcp_client, "call_tools_parallel_sync") as call:
@@ -165,6 +415,7 @@ class FetchAllRecipesTests(unittest.TestCase):
         self.assertEqual(result, {})
 
     def test_every_dish_found_maps_to_its_real_detail(self):
+        terms = {"Chicken Curry": ["Chicken Curry"], "Lentil Soup": ["Lentil Soup"]}
         search_results = [
             json.dumps({"query": "Chicken Curry", "results": [{"id": "52", "name": "Chicken Curry"}]}),
             json.dumps({"query": "Lentil Soup", "results": [{"id": "77", "name": "Lentil Soup"}]}),
@@ -173,16 +424,18 @@ class FetchAllRecipesTests(unittest.TestCase):
             json.dumps({"id": "52", "name": "Chicken Curry", "ingredients": ["200g chicken breast"]}),
             json.dumps({"id": "77", "name": "Lentil Soup", "ingredients": ["100g lentils"]}),
         ]
-        with patch.object(rpa.mcp_client, "call_tools_parallel_sync", side_effect=[search_results, detail_results]) as call:
+        with patch.object(rpa, "_llm_candidate_terms", return_value=terms), \
+             patch.object(rpa.mcp_client, "call_tools_parallel_sync", side_effect=[search_results, detail_results]) as call:
             result = _fetch_all_recipes(["Chicken Curry", "Lentil Soup"])
 
         self.assertEqual(call.call_count, 2)
         self.assertEqual(result, {"Chicken Curry": detail_results[0], "Lentil Soup": detail_results[1]})
 
     def test_dish_with_no_search_match_maps_to_none_without_a_detail_call(self):
-        # Round 1: "Chicken Curry" hits, "Mystery Dish" misses.
-        # Round 2 (core-term retry): "mystery" also misses.
-        # Only the one real match should ever reach the detail round.
+        # "Chicken Curry" hits its first candidate term; "Mystery Dish"
+        # misses its first and its only fallback term. Only the one real
+        # match should ever reach the detail round.
+        terms = {"Chicken Curry": ["Chicken Curry"], "Mystery Dish": ["Mystery Dish", "mystery"]}
         round1 = [
             json.dumps({"query": "Chicken Curry", "results": [{"id": "52", "name": "Chicken Curry"}]}),
             json.dumps({"query": "Mystery Dish", "results": []}),
@@ -191,7 +444,8 @@ class FetchAllRecipesTests(unittest.TestCase):
         detail_results = [
             json.dumps({"id": "52", "name": "Chicken Curry", "ingredients": ["200g chicken breast"]}),
         ]
-        with patch.object(rpa.mcp_client, "call_tools_parallel_sync",
+        with patch.object(rpa, "_llm_candidate_terms", return_value=terms), \
+             patch.object(rpa.mcp_client, "call_tools_parallel_sync",
                           side_effect=[round1, round2_retry, detail_results]) as call:
             result = _fetch_all_recipes(["Chicken Curry", "Mystery Dish"])
 
@@ -199,60 +453,136 @@ class FetchAllRecipesTests(unittest.TestCase):
         self.assertEqual(detail_requests, [("themealdb", "get_recipe_details", {"meal_id": "52"})])
         self.assertEqual(result, {"Chicken Curry": detail_results[0], "Mystery Dish": None})
 
-    def test_full_name_miss_is_retried_with_the_core_ingredient_word(self):
-        # "Grilled salmon with a lemon-pepper crust" finds nothing as-is,
-        # but the core-term retry ("salmon") does, and that match's detail
-        # is what the dish maps to.
+    def test_full_name_miss_is_retried_down_the_candidate_term_list(self):
+        # The dish's full name finds nothing, nor do its first three
+        # LLM-ranked fallback terms -- but the fourth does, and that
+        # match's detail is what the dish maps to.
         dish = "Grilled salmon with a lemon-pepper crust"
+        terms = {dish: [dish, "salmon lemon pepper", "pepper", "lemon", "salmon"]}
         round1 = [json.dumps({"query": dish, "results": []})]
-        round2_retry = [json.dumps({"query": "salmon", "results": [{"id": "99", "name": "Salmon Dinner"}]})]
+        round2 = [json.dumps({"query": "salmon lemon pepper", "results": []})]
+        round3 = [json.dumps({"query": "pepper", "results": []})]
+        round4 = [json.dumps({"query": "lemon", "results": []})]
+        round5 = [json.dumps({"query": "salmon", "results": [{"id": "99", "name": "Salmon Dinner"}]})]
         detail_results = [json.dumps({"id": "99", "name": "Salmon Dinner", "ingredients": ["150g salmon"]})]
-        with patch.object(rpa.mcp_client, "call_tools_parallel_sync",
-                          side_effect=[round1, round2_retry, detail_results]) as call:
+        with patch.object(rpa, "_llm_candidate_terms", return_value=terms), \
+             patch.object(rpa.mcp_client, "call_tools_parallel_sync",
+                          side_effect=[round1, round2, round3, round4, round5, detail_results]) as call:
             result = _fetch_all_recipes([dish])
 
-        self.assertEqual(call.call_args_list[1].args[0], [("themealdb", "search_by_name", {"name": "salmon"})])
+        terms_tried = [c.args[0][0][2]["name"] for c in call.call_args_list[:5]]
+        self.assertEqual(terms_tried, [dish, "salmon lemon pepper", "pepper", "lemon", "salmon"])
         self.assertEqual(result, {dish: detail_results[0]})
 
     def test_no_dish_found_even_after_retry_skips_the_detail_round_entirely(self):
-        # Round 1 miss, round 2 (core-term "mystery") miss -> two search
-        # calls, still no detail round.
+        terms = {"Mystery Dish": ["Mystery Dish", "mystery"]}
         empty = [json.dumps({"query": "Mystery Dish", "results": []})]
-        with patch.object(rpa.mcp_client, "call_tools_parallel_sync", return_value=empty) as call:
+        with patch.object(rpa, "_llm_candidate_terms", return_value=terms), \
+             patch.object(rpa.mcp_client, "call_tools_parallel_sync", return_value=empty) as call:
             result = _fetch_all_recipes(["Mystery Dish"])
 
-        self.assertEqual(call.call_count, 2)  # full-name round + core-term retry, no detail round
+        self.assertEqual(call.call_count, 2)  # full-name round + one fallback term, no detail round
         self.assertEqual(result, {"Mystery Dish": None})
 
     def test_detail_lookup_with_no_ingredients_maps_to_none(self):
+        terms = {"Chicken Curry": ["Chicken Curry"]}
         search_results = [json.dumps({"query": "Chicken Curry", "results": [{"id": "52", "name": "Chicken Curry"}]})]
         detail_results = [json.dumps({"id": "52", "name": "Chicken Curry", "ingredients": []})]
-        with patch.object(rpa.mcp_client, "call_tools_parallel_sync", side_effect=[search_results, detail_results]):
+        with patch.object(rpa, "_llm_candidate_terms", return_value=terms), \
+             patch.object(rpa.mcp_client, "call_tools_parallel_sync", side_effect=[search_results, detail_results]):
             result = _fetch_all_recipes(["Chicken Curry"])
 
         self.assertEqual(result, {"Chicken Curry": None})
 
     def test_two_dishes_that_resolve_to_the_same_recipe_do_not_both_carry_it(self):
-        # "Grilled chicken breast" and "Chicken tikka masala" both fall to
-        # the core term "chicken" and grab meal 52. Only the first (menu
+        # Both dishes' candidate terms eventually reduce to the bare
+        # "chicken" and land on the same meal id. Only the first (menu
         # order) keeps the recipe; the second is left None so the model
         # doesn't print the identical block twice.
+        terms = {
+            "Grilled chicken breast": ["Grilled chicken breast", "chicken"],
+            "Chicken tikka masala": ["Chicken tikka masala", "chicken tikka masala", "chicken"],
+        }
         round1 = [
             json.dumps({"query": "Grilled chicken breast", "results": []}),
             json.dumps({"query": "Chicken tikka masala", "results": []}),
         ]
         round2 = [
             json.dumps({"query": "chicken", "results": [{"id": "52", "name": "Chicken"}]}),
+            json.dumps({"query": "chicken tikka masala", "results": []}),
+        ]
+        round3 = [
             json.dumps({"query": "chicken", "results": [{"id": "52", "name": "Chicken"}]}),
         ]
         detail = [json.dumps({"id": "52", "name": "Chicken", "ingredients": ["200g chicken"]})]
-        with patch.object(rpa.mcp_client, "call_tools_parallel_sync",
-                          side_effect=[round1, round2, detail]) as call:
+        with patch.object(rpa, "_llm_candidate_terms", return_value=terms), \
+             patch.object(rpa.mcp_client, "call_tools_parallel_sync",
+                          side_effect=[round1, round2, round3, detail]) as call:
             result = _fetch_all_recipes(["Grilled chicken breast", "Chicken tikka masala"])
 
         # exactly one detail lookup, for the single shared meal id
         self.assertEqual(call.call_args_list[-1].args[0], [("themealdb", "get_recipe_details", {"meal_id": "52"})])
         self.assertEqual(result, {"Grilled chicken breast": detail[0], "Chicken tikka masala": None})
+
+    def test_a_dish_that_loses_the_dedupe_retries_with_its_own_next_candidate(self):
+        # "Dish A" and "Dish B" both reduce to a shared "shared" term and
+        # collide on the same meal id -- but "Dish B" still has a further,
+        # more specific candidate ("unique") of its own. Confirmed live
+        # this exact scenario (two different steak cuts both falling back
+        # to a shared "steak" term) previously meant the SECOND dish was
+        # silently lost even though it had a real, different match of its
+        # own left to try -- both dishes must now end up with real,
+        # DIFFERENT recipes instead of the second one going to None.
+        terms = {
+            "Dish A": ["Dish A", "shared"],
+            "Dish B": ["Dish B", "shared", "unique"],
+        }
+        round1 = [
+            json.dumps({"query": "Dish A", "results": []}),
+            json.dumps({"query": "Dish B", "results": []}),
+        ]
+        round2 = [
+            json.dumps({"query": "shared", "results": [{"id": "99", "name": "Shared Recipe"}]}),
+            json.dumps({"query": "shared", "results": [{"id": "99", "name": "Shared Recipe"}]}),
+        ]
+        round3_retry = [json.dumps({"query": "unique", "results": [{"id": "100", "name": "Unique Recipe"}]})]
+        detail = [
+            json.dumps({"id": "99", "name": "Shared Recipe", "ingredients": ["1 shared thing"]}),
+            json.dumps({"id": "100", "name": "Unique Recipe", "ingredients": ["1 unique thing"]}),
+        ]
+        with patch.object(rpa, "_llm_candidate_terms", return_value=terms), \
+             patch.object(rpa.mcp_client, "call_tools_parallel_sync",
+                          side_effect=[round1, round2, round3_retry, detail]) as call:
+            result = _fetch_all_recipes(["Dish A", "Dish B"])
+
+        detail_requests = call.call_args_list[-1].args[0]
+        self.assertEqual(
+            detail_requests,
+            [("themealdb", "get_recipe_details", {"meal_id": "99"}),
+             ("themealdb", "get_recipe_details", {"meal_id": "100"})],
+        )
+        self.assertEqual(result, {"Dish A": detail[0], "Dish B": detail[1]})
+
+    def test_a_middle_ingredient_word_is_tried_when_the_full_phrase_matches_nothing(self):
+        # Confirmed live: TheMealDB's small catalog has no title matching
+        # the combined "chicken chorizo quesadillas" phrase, nor "chicken"
+        # alone landing on anything relevant -- but "chorizo" alone
+        # matches a real, closely related dish.
+        dish = "Chicken and Chorizo Quesadillas"
+        terms = {dish: [dish, "chicken chorizo quesadillas", "quesadillas", "chorizo", "chicken"]}
+        round1 = [json.dumps({"query": dish, "results": []})]
+        round2 = [json.dumps({"query": "chicken chorizo quesadillas", "results": []})]
+        round3 = [json.dumps({"query": "quesadillas", "results": []})]
+        round4 = [json.dumps({"query": "chorizo", "results": [{"id": "77", "name": "Chicken & chorizo rice pot"}]})]
+        detail = [json.dumps({"id": "77", "name": "Chicken & chorizo rice pot", "ingredients": ["200g chorizo"]})]
+        with patch.object(rpa, "_llm_candidate_terms", return_value=terms), \
+             patch.object(rpa.mcp_client, "call_tools_parallel_sync",
+                          side_effect=[round1, round2, round3, round4, detail]) as call:
+            result = _fetch_all_recipes([dish])
+
+        terms_tried = [c.args[0][0][2]["name"] for c in call.call_args_list[:4]]
+        self.assertEqual(terms_tried, [dish, "chicken chorizo quesadillas", "quesadillas", "chorizo"])
+        self.assertEqual(result, {dish: detail[0]})
 
 
 class OnObservedUtteranceTests(unittest.TestCase):
@@ -320,6 +650,20 @@ class ProcessUtteranceBranchingTests(unittest.TestCase):
         whole_menu.assert_not_called()
         self.assertEqual(result, "one-dish reply")
 
+    def test_multi_idea_request_takes_priority_over_the_single_dish_path(self):
+        # Confirmed live: before _multi_idea_request existed, this fell
+        # into the single-dish path with the whole garbled sentence as the
+        # search query, which matched nothing on TheMealDB.
+        agent = self._make_agent()
+        text = "Recipe & Portion Specialist, give me three different ideas for inexpensive chicken curry recipes"
+        with patch.object(agent, "_respond_with_multiple_ideas", return_value="multi-idea reply") as multi, \
+             patch.object(agent, "_respond_for_one_dish") as one_dish:
+            result = agent.process_utterance(text)
+
+        multi.assert_called_once_with(text, "chicken curry", 3)
+        one_dish.assert_not_called()
+        self.assertEqual(result, "multi-idea reply")
+
     def test_broad_request_with_saved_menu_and_extractable_dishes_uses_whole_menu(self):
         agent = self._make_agent(saved_menu="Day 1: Chicken Curry. Day 2: Lentil Soup.")
         broad_text = "Plan a five-day lunch menu for 450 people with itemized costs, budget of $7.00 per meal."
@@ -355,13 +699,71 @@ class ProcessUtteranceBranchingTests(unittest.TestCase):
         self.assertEqual(result["text"], "fallback reply")
 
 
+class RespondWithMultipleIdeasTests(unittest.TestCase):
+    """Ground each requested idea in a DIFFERENT real TheMealDB recipe
+    where possible, instead of asking the LLM to invent several
+    "distinct" versions of the one recipe it would otherwise settle on."""
+
+    def test_grounds_each_idea_in_a_different_real_recipe(self):
+        search_result = json.dumps({"query": "chicken curry", "results": [
+            {"id": "52", "name": "Chicken Curry"},
+            {"id": "53", "name": "Chicken Karahi"},
+            {"id": "54", "name": "Chicken Tikka Masala"},
+        ]})
+        detail_results = [
+            json.dumps({"id": "52", "name": "Chicken Curry", "ingredients": ["200g chicken breast"]}),
+            json.dumps({"id": "53", "name": "Chicken Karahi", "ingredients": ["200g chicken thigh"]}),
+            json.dumps({"id": "54", "name": "Chicken Tikka Masala", "ingredients": ["200g chicken breast", "yogurt"]}),
+        ]
+        agent = RecipePortionAgent()
+        with patch.object(rpa.mcp_client, "call_tool_sync_or_none", return_value=search_result), \
+             patch.object(rpa.mcp_client, "call_tools_parallel_sync", return_value=detail_results), \
+             patch.object(rpa.llm_utils, "chat_sync", return_value="ok") as chat_sync:
+            result = agent._respond_with_multiple_ideas(
+                "give me three different ideas for chicken curry", "chicken curry", 3)
+
+        self.assertEqual(chat_sync.call_args[0][0], rpa._MULTI_IDEA_SYSTEM_PROMPT)
+        user_message = chat_sync.call_args[0][1]
+        self.assertIn("3 real distinct recipe option(s) were found", user_message)
+        self.assertIn("Chicken Karahi", user_message)
+        self.assertIn("Chicken Tikka Masala", user_message)
+        self.assertIn("3 genuinely DIFFERENT recipe ideas", user_message)
+        self.assertEqual(result["text"], "ok")
+
+    def test_fewer_real_options_than_requested_notes_the_shortfall(self):
+        search_result = json.dumps({"query": "chicken curry", "results": [{"id": "52", "name": "Chicken Curry"}]})
+        detail_results = [json.dumps({"id": "52", "name": "Chicken Curry", "ingredients": ["200g chicken breast"]})]
+        agent = RecipePortionAgent()
+        with patch.object(rpa.mcp_client, "call_tool_sync_or_none", return_value=search_result), \
+             patch.object(rpa.mcp_client, "call_tools_parallel_sync", return_value=detail_results), \
+             patch.object(rpa.llm_utils, "chat_sync", return_value="ok") as chat_sync:
+            agent._respond_with_multiple_ideas("give me three ideas for chicken curry", "chicken curry", 3)
+
+        user_message = chat_sync.call_args[0][1]
+        self.assertIn("Only 1 real option(s) were found, fewer than the 3 requested", user_message)
+
+    def test_no_real_options_found_falls_back_to_general_knowledge(self):
+        agent = RecipePortionAgent()
+        with patch.object(rpa.mcp_client, "call_tool_sync_or_none", return_value=None), \
+             patch.object(rpa.mcp_client, "call_tools_parallel_sync", return_value=[]), \
+             patch.object(rpa.llm_utils, "chat_sync", return_value="ok") as chat_sync:
+            agent._respond_with_multiple_ideas("give me three ideas for zzz-nonexistent-dish", "zzz-nonexistent-dish", 3)
+
+        user_message = chat_sync.call_args[0][1]
+        self.assertIn("No distinct real recipe options were found", user_message)
+        self.assertIn("Provide all ideas from general culinary knowledge", user_message)
+
+
 class RespondForWholeMenuTests(unittest.TestCase):
     def test_asks_for_one_serving_not_a_headcount(self):
         agent = RecipePortionAgent()
         with patch.object(rpa, "_fetch_all_recipes", return_value={"Lentil Soup": None}), \
-             patch.object(rpa.llm_utils, "chat_sync", return_value="ok") as chat_sync:
+             patch.object(rpa.llm_utils, "chat_sync", return_value="Lentil Soup: 100g lentils.") as chat_sync:
             agent._respond_for_whole_menu("Day 1: Lentil Soup.", ["Lentil Soup"])
 
+        # The dish got its own line, so no missing-dish repair call fired --
+        # this asserts against the one and only call.
+        chat_sync.assert_called_once()
         user_message = chat_sync.call_args[0][1]
         self.assertIn("ONE serving of EVERY dish", user_message)
         self.assertNotIn("people", user_message)
@@ -373,13 +775,16 @@ class RespondForWholeMenuTests(unittest.TestCase):
         # covered (confirmed live with a 2-dish menu at a 300-word budget).
         agent = RecipePortionAgent()
         agent._current_max_words = 300
+        covering_reply = "Chicken Curry: a.\nLentil Soup: b.\nBeef Stew: c."
         with patch.object(rpa, "_fetch_all_recipes", return_value={"Chicken Curry": None, "Lentil Soup": None, "Beef Stew": None}), \
-             patch.object(rpa.llm_utils, "chat_sync", return_value="ok") as chat_sync:
+             patch.object(rpa.llm_utils, "chat_sync", return_value=covering_reply) as chat_sync:
             agent._respond_for_whole_menu(
                 "Day 1: Chicken Curry. Day 2: Lentil Soup. Day 3: Beef Stew.",
                 ["Chicken Curry", "Lentil Soup", "Beef Stew"],
             )
 
+        # Every dish got its own line, so no missing-dish repair call fired.
+        chat_sync.assert_called_once()
         user_message = chat_sync.call_args[0][1]
         self.assertIn("This menu has 3 dishes", user_message)
         self.assertIn("100 words", user_message)  # 300 // 3
@@ -388,19 +793,25 @@ class RespondForWholeMenuTests(unittest.TestCase):
         agent = RecipePortionAgent()
         agent._current_max_words = 20
         dishes = [f"Dish {i}" for i in range(7)]
+        covering_reply = "\n".join(f"{d}: x." for d in dishes)
         with patch.object(rpa, "_fetch_all_recipes", return_value={d: None for d in dishes}), \
-             patch.object(rpa.llm_utils, "chat_sync", return_value="ok") as chat_sync:
+             patch.object(rpa.llm_utils, "chat_sync", return_value=covering_reply) as chat_sync:
             agent._respond_for_whole_menu("a menu", dishes)
 
+        # Every dish got its own line, so no missing-dish repair call fired.
+        chat_sync.assert_called_once()
         user_message = chat_sync.call_args[0][1]
         self.assertIn("20 words", user_message)  # max(20, 20 // 7) == 20
 
     def test_dishes_with_no_recipe_data_are_named_not_silently_dropped(self):
         agent = RecipePortionAgent()
+        covering_reply = "Lentil Soup: no data, best guess.\nChicken Curry: 200g chicken."
         with patch.object(rpa, "_fetch_all_recipes", return_value={"Lentil Soup": None, "Chicken Curry": '{"ingredients": ["200g chicken"]}'}), \
-             patch.object(rpa.llm_utils, "chat_sync", return_value="ok") as chat_sync:
+             patch.object(rpa.llm_utils, "chat_sync", return_value=covering_reply) as chat_sync:
             agent._respond_for_whole_menu("Day 1: Lentil Soup. Day 2: Chicken Curry.", ["Lentil Soup", "Chicken Curry"])
 
+        # Both dishes got their own line, so no missing-dish repair call fired.
+        chat_sync.assert_called_once()
         user_message = chat_sync.call_args[0][1]
         self.assertIn("Dishes with no recipe data found: Lentil Soup", user_message)
         self.assertIn("Chicken Curry", user_message)
@@ -414,6 +825,39 @@ class RespondForWholeMenuTests(unittest.TestCase):
 
         self.assertEqual(result["text"], raw_reply)
         self.assertEqual(result["html"], "<ul><li>Chicken curry: 150g chicken.</li><li>Lentil soup: 100g lentils.</li></ul>")
+
+    def test_a_dish_merged_onto_another_dishs_line_is_repaired_with_its_own_line(self):
+        # Same live failure this whole mechanism exists for: "Pan-seared
+        # duck: No recipe data found: Caprese panini: 18 kg mozzarella..."
+        # all one line, so the Caprese panini popup would show nothing (or
+        # duck's) instead of its own data.
+        agent = RecipePortionAgent()
+        merged_reply = "Pan-seared duck: No recipe data found: Caprese panini: 40g mozzarella: grill: 200g"
+        repair_reply = "Caprese panini: 40g mozzarella, 20g tomato: grill: 200g"
+        with patch.object(rpa, "_fetch_all_recipes", return_value={"Pan-seared duck": None, "Caprese panini": None}), \
+             patch.object(rpa.llm_utils, "chat_sync", side_effect=[merged_reply, repair_reply]) as chat_sync:
+            result = agent._respond_for_whole_menu(
+                "Day 1: Pan-seared duck. Day 2: Caprese panini.", ["Pan-seared duck", "Caprese panini"],
+            )
+
+        self.assertEqual(chat_sync.call_count, 2)
+        lines = result["text"].split("\n")
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[1].startswith("Caprese panini:"))
+        self.assertIn("40g mozzarella, 20g tomato", lines[1])
+
+    def test_a_silently_dropped_dish_is_repaired_with_its_own_line(self):
+        agent = RecipePortionAgent()
+        dropped_reply = "Chicken curry: 150g chicken: fry: 200g"  # Lentil soup never appears
+        repair_reply = "Lentil soup: 100g lentils: simmer: 250g bowl"
+        with patch.object(rpa, "_fetch_all_recipes", return_value={"Chicken curry": None, "Lentil soup": None}), \
+             patch.object(rpa.llm_utils, "chat_sync", side_effect=[dropped_reply, repair_reply]) as chat_sync:
+            result = agent._respond_for_whole_menu(
+                "Day 1: Chicken curry. Day 2: Lentil soup.", ["Chicken curry", "Lentil soup"],
+            )
+
+        self.assertEqual(chat_sync.call_count, 2)
+        self.assertIn("Lentil soup: 100g lentils: simmer: 250g bowl", result["text"])
 
 
 class RespondForOneDishHtmlTests(unittest.TestCase):
@@ -519,6 +963,60 @@ class NormalizeMenuRecipeLinesTests(unittest.TestCase):
         lines = rpa._normalize_menu_recipe_lines(text).split("\n")
         self.assertEqual(len(lines), 1)
         self.assertIn("Season and sear", lines[0])
+
+
+class MissingDishesTests(unittest.TestCase):
+    """Confirmed live: under word-budget pressure the whole-menu writeup
+    LLM call sometimes drops a dish's entry entirely, or runs a terse "No
+    recipe data found:" stub for one dish onto the SAME line as the next
+    dish instead of a new line -- reported live as "Pan-seared duck: No
+    recipe data found: Caprese panini: 18 kg mozzarella..." all one line,
+    so the "Pan-seared duck" popup showed Caprese panini's ingredients."""
+
+    def test_a_dish_that_got_its_own_line_is_not_missing(self):
+        text = "Chicken curry: 150g chicken.\nLentil soup: 100g lentils."
+        self.assertEqual(rpa._missing_dishes(text, ["Chicken curry", "Lentil soup"]), [])
+
+    def test_a_dropped_dish_is_reported_missing(self):
+        text = "Chicken curry: 150g chicken."
+        self.assertEqual(rpa._missing_dishes(text, ["Chicken curry", "Lentil soup"]), ["Lentil soup"])
+
+    def test_a_dish_merged_onto_the_previous_dishs_line_is_reported_missing(self):
+        # The exact live failure shape: the second dish never starts its
+        # own line, so it never becomes a "covered" dish name even though
+        # its name and data appear somewhere in the text.
+        text = "Pan-seared duck: No recipe data found: Caprese panini: 40g mozzarella, 20g tomato: Grill: 200g"
+        self.assertEqual(rpa._missing_dishes(text, ["Pan-seared duck", "Caprese panini"]), ["Caprese panini"])
+
+    def test_matching_is_case_insensitive_and_tolerates_minor_rewording(self):
+        text = "GRILLED SALMON with lemon: 150g salmon."
+        self.assertEqual(rpa._missing_dishes(text, ["Grilled salmon"]), [])
+
+
+class RepairMissingDishLineTests(unittest.TestCase):
+    def test_a_clean_one_line_reply_is_used_as_is(self):
+        with patch.object(rpa.llm_utils, "chat_sync", return_value="Lentil soup: 100g lentils: simmer: 250g bowl"):
+            line = rpa._repair_missing_dish_line("Lentil soup", None)
+        self.assertEqual(line, "Lentil soup: 100g lentils: simmer: 250g bowl")
+
+    def test_only_the_first_line_of_a_multi_line_reply_is_kept(self):
+        # The repair call exists specifically because the main call
+        # couldn't be trusted to stay on one line -- the repair itself
+        # must not trust that either.
+        raw = "Lentil soup: 100g lentils: simmer: 250g bowl\nSome extra unwanted line"
+        with patch.object(rpa.llm_utils, "chat_sync", return_value=raw):
+            line = rpa._repair_missing_dish_line("Lentil soup", None)
+        self.assertEqual(line, "Lentil soup: 100g lentils: simmer: 250g bowl")
+
+    def test_a_reply_missing_the_dish_name_prefix_gets_it_prepended(self):
+        with patch.object(rpa.llm_utils, "chat_sync", return_value="100g lentils: simmer: 250g bowl"):
+            line = rpa._repair_missing_dish_line("Lentil soup", None)
+        self.assertEqual(line, "Lentil soup: 100g lentils: simmer: 250g bowl")
+
+    def test_a_blank_reply_falls_back_to_an_honest_no_data_line(self):
+        with patch.object(rpa.llm_utils, "chat_sync", return_value="   \n  "):
+            line = rpa._repair_missing_dish_line("Lentil soup", None)
+        self.assertEqual(line, "Lentil soup: No recipe data found -- use general culinary knowledge for this dish.")
 
 
 class VerbalRecipeViewTests(unittest.TestCase):

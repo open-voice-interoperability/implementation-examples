@@ -2,6 +2,8 @@
 
 An Open Floor Protocol (OFP) multi-agent system for corporate cafeteria lunch menu planning and supply-chain operations. A user asks about a menu, ingredient, or sourcing question, and the convener routes it to the right specialist(s).
 
+![Cafeteria Ops Planner UI](UI.png)
+
 ## What Runs
 
 The stack starts these services:

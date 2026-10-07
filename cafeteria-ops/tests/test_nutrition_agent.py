@@ -67,6 +67,20 @@ class FoodQueryTests(unittest.TestCase):
     def test_empty_text_has_no_food_query(self):
         self.assertIsNone(_food_query(""))
 
+    def test_compound_calories_and_sodium_question_extracts_the_food_name(self):
+        # Confirmed live: only the "how much sodium is in" half matched the
+        # old framing pattern, leaving "how many calories and" attached to
+        # the food name -- which pushed the cleaned text over the 8-word cap
+        # and returned None. With a menu already on the floor, that silently
+        # produced a whole-menu nutrition dump instead of answering about
+        # the food actually named.
+        text = "Nutrition Specialist, how many calories and how much sodium is in a grilled chicken caesar wrap?"
+        self.assertEqual(_food_query(text), "grilled chicken caesar wrap")
+
+    def test_compound_question_with_sodium_first_extracts_the_food_name(self):
+        text = "Nutrition Specialist, how much sodium and how many calories are in a grilled chicken caesar wrap?"
+        self.assertEqual(_food_query(text), "grilled chicken caesar wrap")
+
 
 class ExtractDishesTests(unittest.TestCase):
     def test_parses_dishes_from_llm_json_response(self):

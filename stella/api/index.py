@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Vercel-ready Flask server for StellaAgent.
+Vercel-ready Flask server for Stella.
+Runs the same TemplateAgent as flask_server.py (the local server), so local
+and Vercel deployments behave identically.
 Supports local testing (flask run) and deployment on Vercel.
 """
 from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
-import json
 import sys
 import os
 import traceback
@@ -31,10 +32,10 @@ def _get_agent():
     try:
         # Defer imports so module import failures are surfaced as runtime
         # startup errors instead of crashing Vercel entrypoint loading.
-        from stella_agent import load_manifest_from_config, StellaAgent
+        from template_agent import TemplateAgent, load_manifest_from_config
 
         manifest = load_manifest_from_config()
-        agent = StellaAgent(manifest)
+        agent = TemplateAgent(manifest)
         return agent, None
     except Exception as exc:
         startup_error = f"{exc.__class__.__name__}: {exc}"
@@ -54,28 +55,30 @@ def handle_request():
     if init_error:
         return Response(f"Agent startup error: {init_error}", status=500)
     
-    # Dynamically update the manifest serviceUrl
+    # Identify as whatever host this request reached (production alias or a
+    # preview URL), matching flask_server.py's _apply_runtime_identity, so
+    # TemplateAgent's _is_addressed_to_me recognizes events sent to it.
     host = request.headers.get("Host")
-    print(f"DEBUG server.py: Host header={host}", flush=True)
     if host:
-        current_agent._manifest.identification.serviceUrl = f"https://{host}"
-        print(f"DEBUG server.py: Updated serviceUrl to {current_agent._manifest.identification.serviceUrl}", flush=True)
+        base_url = f"https://{host}"
+        identification = current_agent._manifest.identification
+        identification.serviceUrl = base_url
+        speaker_uri = getattr(identification, "speakerUri", "") or ""
+        if speaker_uri.startswith("http://") or speaker_uri.startswith("https://"):
+            identification.speakerUri = base_url
+
+    import envelope_handler
 
     # Parse incoming envelope
     try:
-        from openfloor.envelope import Envelope
-        in_envelope = Envelope.from_json(payload_text, as_payload=True)
-    except Exception:
-        try:
-            from openfloor.envelope import Envelope
-            in_envelope = Envelope.from_json(json.dumps(request.get_json()), as_payload=True)
-        except Exception as e:
-            return Response(f"Invalid OpenFloor payload: {e}", status=400)
+        in_envelope = envelope_handler.parse_incoming_envelope(payload_text)
+    except Exception as e:
+        return Response(f"Invalid OpenFloor payload: {e}", status=400)
 
     # Process and serialize response
     try:
         out_envelope = current_agent.process_envelope(in_envelope)
-        payload_str = out_envelope.to_json(as_payload=True)
+        payload_str = envelope_handler.serialize_envelope(out_envelope)
     except Exception as exc:
         error_text = f"{exc.__class__.__name__}: {exc}"
         print(f"ERROR server.py: Envelope processing failed: {error_text}", flush=True)

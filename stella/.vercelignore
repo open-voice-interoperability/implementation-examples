@@ -1,0 +1,10 @@
+# Keep local secrets and dev clutter out of Vercel uploads (the CLI does not
+# read .gitignore). Production env vars live in the Vercel project settings.
+.env
+.env.*
+.venv
+__pycache__
+node_modules
+docs/_build
+*.png
+*.JPG

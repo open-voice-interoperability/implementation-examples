@@ -2,13 +2,13 @@
 """
 Base Strategy Agent — OpenFloor Template-Based Implementation
 
-All startup-strategy specialist agents inherit from StrategyBotAgent,
+All specialist agents inherit from StrategyBotAgent,
 which extends BotAgent (from the OpenFloor template) with Flask integration
-and strategy-specific processing.
+and domain-specific processing.
 
 Separation of concerns:
 - BotAgent: OpenFloor event routing and lifecycle
-- StrategyBotAgent: Strategy-specific utterance processing + Flask
+- StrategyBotAgent: Domain-agnostic utterance processing + Flask
 - Specialist agents: Domain-specific logic via process_utterance()
 """
 
@@ -20,6 +20,7 @@ import os
 import re
 import sys
 import uuid
+from html import escape
 from typing import Any, Callable, Dict, List
 
 from flask import Flask, request, Response, jsonify
@@ -39,6 +40,17 @@ from openfloor.dialog_event import DialogEvent, Feature, TextFeature, Token
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(name)s %(levelname)s %(message)s")
+
+# Port -> display name for this project's own agents, used only to make the
+# shared conversation-history transcript (see StrategyBotAgent's
+# _record_conversation_turn/_conversation_history_text below) readable --
+# a name rather than "http://127.0.0.1:<port>/" in each recorded turn.
+# Defined per project in agents/agent_labels.py and hand-kept in sync with
+# convener_service/convener.py's AGENTS dict, the same "kept in sync by
+# hand" tradeoff as every other cross-agent port reference in these
+# projects -- there is no shared package between a convener and the agents
+# it addresses.
+from agents.agent_labels import AGENT_LABELS_BY_PORT
 
 
 # =============================================================================
@@ -83,12 +95,12 @@ class BotAgent:
     Base class for OpenFloor agents using the template pattern.
     Provides event routing, manifest publishing, and lifecycle management.
     """
-    
+
     def __init__(self, manifest: Manifest):
         # The manifest describes this agent's identity (speakerUri/serviceUrl)
         # and capabilities; it is published in response to getManifests.
         self._manifest = manifest
-        
+
         # One hook per OpenFloor event type. Subclasses subscribe their own
         # handlers to these hooks instead of overriding a giant dispatch method.
         self.on_envelope = _EventHook()
@@ -355,11 +367,11 @@ def load_manifest_from_config(config_path: str) -> Manifest:
     return Manifest(
         identification=Identification(
             conversationalName=identification_data.get("conversationalName", "StrategyAgent"),
-            speakerUri=identification_data.get("speakerUri", identification_data.get("serviceUrl", "http://localhost:8200/")),
-            serviceUrl=identification_data.get("serviceUrl", "http://localhost:8200/"),
+            speakerUri=identification_data.get("speakerUri", identification_data.get("serviceUrl", "http://127.0.0.1:8000/")),
+            serviceUrl=identification_data.get("serviceUrl", "http://127.0.0.1:8000/"),
             organization=identification_data.get("organization", "Open Voice Network"),
             role=identification_data.get("role", "assistant"),
-            synopsis=identification_data.get("synopsis", "A startup strategy analysis agent"),
+            synopsis=identification_data.get("synopsis", "A specialist analysis agent"),
             department=identification_data.get("department"),
             openFloorRoles=identification_data.get("openFloorRoles"),
         ),
@@ -373,16 +385,16 @@ def load_manifest_from_config(config_path: str) -> Manifest:
 
 class StrategyBotAgent(BotAgent):
     """
-    Strategy-specific BotAgent using OpenFloor template pattern.
+    Domain-agnostic BotAgent using OpenFloor template pattern.
     Subclasses override AGENT_* attributes and process_utterance().
     """
 
     # Override these in subclasses
     AGENT_NAME: str = "StrategyAgent"
-    AGENT_PORT: int = 8200
-    AGENT_SYNOPSIS: str = "A startup strategy analysis agent"
-    AGENT_KEYPHRASES: list = ["startup", "strategy", "analysis"]
-    AGENT_CAPABILITY_DETAIL: str = "Processes startup strategy inputs and returns a text analysis."
+    AGENT_PORT: int = 8000
+    AGENT_SYNOPSIS: str = "A specialist analysis agent"
+    AGENT_KEYPHRASES: list = ["analysis"]
+    AGENT_CAPABILITY_DETAIL: str = "Processes inputs and returns a text analysis."
     MAX_RESPONSE_WORDS: int = 50
 
     def __init__(self):
@@ -403,10 +415,27 @@ class StrategyBotAgent(BotAgent):
         # driven by the UI slider) supplies a maxWords feature. Subclasses may
         # read this in process_utterance() to size their LLM prompt.
         self._current_max_words = self.MAX_RESPONSE_WORDS
-        
+
+        # Conversation id of the utterance currently being handled -- set
+        # right before on_observed_utterance()/process_utterance() run, so a
+        # subclass can scope anything it remembers (see on_observed_utterance)
+        # to the right conversation instead of leaking across them.
+        self._current_conv_id = ""
+
+        # Full-conversation transcript, per conv_id, recorded automatically
+        # for EVERY agent (not just ones that opted in with their own
+        # on_observed_utterance override) -- see _record_conversation_turn/
+        # _conversation_history_text. Set right before process_utterance()
+        # runs (self._current_history_text) so any subclass can fold the
+        # whole prior conversation into its prompt, not just the one prior
+        # utterance a bespoke on_observed_utterance override happened to
+        # watch for.
+        self._conversation_histories: dict[str, list[tuple[str, str]]] = {}
+        self._current_history_text = ""
+
         # Backwards compatibility
         self.manifest = manifest
-        
+
         # Register strategy-specific handlers
         self._register_handlers()
 
@@ -492,8 +521,8 @@ class StrategyBotAgent(BotAgent):
 
     def _default_manifest(self) -> Manifest:
         """Build default manifest."""
-        service_url = os.getenv("SERVICE_URL", f"http://localhost:{self.AGENT_PORT}/")
-        speaker_uri = os.getenv("SPEAKER_URI", f"tag:startup-strategy,2025:{self.AGENT_NAME.lower().replace(' ', '-')}")
+        service_url = os.getenv("SERVICE_URL", f"http://127.0.0.1:{self.AGENT_PORT}/")
+        speaker_uri = os.getenv("SPEAKER_URI", f"tag:cafeteria-ops,2026:{self.AGENT_NAME.lower().replace(' ', '-')}")
         return Manifest(
             identification=Identification(
                 conversationalName=self.AGENT_NAME,
@@ -512,26 +541,129 @@ class StrategyBotAgent(BotAgent):
             )],
         )
 
+    _BOLD_PATTERN = re.compile(r"\*\*(.+?)\*\*")
+    _ALT_BOLD_PATTERN = re.compile(r"__(.+?)__")
+    _HEADER_MARKER = re.compile(r"^[ \t]*#{1,6}[ \t]+")
+    _LEADING_LIST_MARKER = re.compile(r"^[ \t]*(?:\d+[.)]|[-*•])[ \t]+")
+
+    @staticmethod
+    def _strip_markdown(text: str) -> str:
+        """Best-effort removal of markdown formatting the model adds despite
+        every agent's SYSTEM_PROMPT explicitly asking for plain text --
+        confirmed live that the instruction alone ("no markdown, bold, or
+        bullets") is not reliably followed even when worded more strongly
+        (numbered lists with bold headers still appeared), so this is a
+        deterministic cleanup pass rather than relying purely on the
+        prompt, matching the project's existing approach of backing a soft
+        instruction with real arithmetic/logic wherever it kept failing."""
+        if not text:
+            return text
+        text = BaseStrategyAgent._BOLD_PATTERN.sub(r"\1", text)
+        text = BaseStrategyAgent._ALT_BOLD_PATTERN.sub(r"\1", text)
+        lines = text.split("\n")
+        cleaned_lines = []
+        for line in lines:
+            line = BaseStrategyAgent._HEADER_MARKER.sub("", line)
+            line = BaseStrategyAgent._LEADING_LIST_MARKER.sub("", line)
+            cleaned_lines.append(line)
+        return "\n".join(cleaned_lines)
+
+    @staticmethod
+    def _text_to_html_list(text: str) -> str:
+        """Convert a plain-text response where each line is already one
+        item (one day, one dish, one ingredient -- the "put each X on its
+        own line" convention several agent prompts in this project use
+        for the "text" feature) into a real HTML unordered list, for the
+        "html" feature shown in the browser's Analysis report popup.
+        Returns "" for text with fewer than two lines -- a single-item
+        response is plain prose, not a list, and forcing it into one
+        <li> would be misleading rather than helpful.
+
+        Runs _strip_markdown first -- confirmed live that without this, a
+        numbered-list marker the model added despite the "no numbered
+        lists" instruction (e.g. "1. Sirloin Steak: ...") survived into
+        each <li>, which is doubly redundant once real <li> bullets are
+        already doing that job. bot_on_utterance only ever ran
+        _strip_markdown on the "text" feature's own pipeline, never on
+        "html" -- calling it here, not at each call site, fixes every
+        agent's whole-menu/multi-item response in one place."""
+        text = BaseStrategyAgent._strip_markdown(text)
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
+        if len(lines) < 2:
+            return ""
+        items = "".join(f"<li>{escape(line)}</li>" for line in lines)
+        return f"<ul>{items}</ul>"
+
+    @staticmethod
+    def _text_to_html_intro_and_list(text: str) -> str:
+        """Like _text_to_html_list, but treats the FIRST line as an
+        introductory sentence (rendered as a plain <p>, not bulleted) and
+        every line after it as a real list item -- for agents (Inventory,
+        Menu Optimization) whose response is normally one holistic
+        paragraph but occasionally breaks into an opening framing sentence
+        followed by itemized specifics; confirmed live that opening
+        sentence was landing as just one more <li>, indistinguishable from
+        the specifics below it, even though it isn't one more item of the
+        same kind. Same "don't bullet a synthesis line" principle as
+        nutrition_agent.py's whole-menu closing note, mirrored at the
+        START of the response instead of the end. Returns "" for text with
+        fewer than two lines, same convention as _text_to_html_list."""
+        text = BaseStrategyAgent._strip_markdown(text)
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
+        if len(lines) < 2:
+            return ""
+        intro, *rest = lines
+        items = "".join(f"<li>{escape(line)}</li>" for line in rest)
+        return f"<p>{escape(intro)}</p><ul>{items}</ul>"
+
     @staticmethod
     def _limit_words(text: str, max_words: int = 50) -> str:
-        """Limit response to max words, extending to the end of the current sentence."""
+        """Limit response to max words, extending to the end of the current
+        sentence. Preserves the original line breaks between entries (e.g.
+        one line per day/dish/ingredient, as several agent prompts in this
+        project ask for) instead of collapsing everything to a single
+        space-joined blob -- confirmed live that a plain `" ".join(...)`
+        over the whole text was silently destroying that formatting even
+        when the response was well under budget and no truncation was
+        actually needed."""
         if not text:
             return ""
-        # Split on any run of non-whitespace to count words robustly.
-        words = re.findall(r"\S+", text.strip())
-        if len(words) <= max_words:
-            return " ".join(words)
-        # Hard cap at max_words...
-        result = words[:max_words]
-        # ...but if that lands mid-sentence, keep appending words until we hit
-        # sentence-ending punctuation so the reply doesn't stop abruptly.
+        lines = [ln for ln in text.strip("\n").split("\n")]
         _sentence_end = re.compile(r'[.!?]["\')]*$')
-        if not _sentence_end.search(result[-1]):
-            for word in words[max_words:]:
-                result.append(word)
-                if _sentence_end.search(word):
-                    break
-        return " ".join(result)
+
+        def _words(line: str) -> list[str]:
+            return re.findall(r"\S+", line)
+
+        total_words = sum(len(_words(ln)) for ln in lines)
+        if total_words <= max_words:
+            return "\n".join(" ".join(_words(ln)) for ln in lines if _words(ln))
+
+        result_lines = []
+        words_used = 0
+        for line in lines:
+            line_words = _words(line)
+            if not line_words:
+                continue
+            if words_used >= max_words:
+                break
+            remaining = max_words - words_used
+            if len(line_words) <= remaining:
+                result_lines.append(" ".join(line_words))
+                words_used += len(line_words)
+                continue
+            # This line needs to be cut -- take `remaining` words, then
+            # extend to the end of the current sentence (scoped to this one
+            # line/entry) just like the old single-block behavior did for
+            # the whole text.
+            kept = line_words[:remaining]
+            if not _sentence_end.search(kept[-1]):
+                for word in line_words[remaining:]:
+                    kept.append(word)
+                    if _sentence_end.search(word):
+                        break
+            result_lines.append(" ".join(kept))
+            break
+        return "\n".join(result_lines)
 
     def process_utterance(self, user_text: str) -> "str | dict":
         """Override in subclasses to implement domain logic.
@@ -541,6 +673,90 @@ class StrategyBotAgent(BotAgent):
         """
         return f"[{self.AGENT_NAME}] received: {user_text}"
 
+    def on_observed_utterance(self, conv_id: str, speaker_uri: str, text: str) -> None:
+        """Called for EVERY utterance this agent is shown -- including ones
+        it won't reply to itself, because it doesn't currently hold the
+        floor. Pass-Through delivery broadcasts a specialist's reply to
+        every other registered conversant (see floor_router.py), so an
+        agent invited alongside another specialist genuinely does see that
+        specialist's answers as they happen, not just its own turns.
+
+        Every observed utterance is ALSO recorded automatically into a
+        full per-conversation transcript regardless of whether this hook
+        is overridden (see _record_conversation_turn/
+        _conversation_history_text, read back via
+        self._current_history_text in process_utterance()) -- so every
+        agent gets the whole prior conversation with zero setup. Override
+        this hook only when a subclass wants something MORE targeted than
+        the full transcript -- e.g. Procurement pulling out just Recipe &
+        Portion's structured recipe data by watching for its specific
+        speaker_uri, rather than re-deriving that from free-text history
+        every time. No-op by default. Any exception raised here is caught
+        and logged by the caller -- it must never block this agent's own
+        floor-gated reply."""
+        pass
+
+    # How many recent turns to keep per conversation in
+    # _conversation_histories. Bounds prompt size/cost on a long-running
+    # conversation rather than growing the transcript without limit; 40
+    # comfortably covers a full round-robin sweep (one human request plus
+    # every specialist's reply) several times over.
+    _MAX_HISTORY_TURNS = 40
+
+    def _speaker_label(self, speaker_uri: str) -> str:
+        """A readable label for a conversation-history entry: the known
+        agent's display name if speaker_uri resolves to one of this
+        project's own agents (matched by port, since every agent here uses
+        serviceUrl == speakerUri == "http://127.0.0.1:<port>/"), else
+        "User" -- the only other kind of speaker in this system is the
+        human operating the browser client, whose speakerUri is
+        client-chosen and not one of the fixed agent ports."""
+        match = re.search(r":(\d{4,5})/?", speaker_uri or "")
+        if match:
+            label = AGENT_LABELS_BY_PORT.get(int(match.group(1)))
+            if label:
+                return label
+        return "User"
+
+    def _record_conversation_turn(self, conv_id: str, speaker_uri: str, text: str, label: str | None = None) -> None:
+        """Append one turn to this conversation's transcript, trimmed to
+        the most recent _MAX_HISTORY_TURNS. Called automatically for every
+        utterance this agent observes (see bot_on_utterance) and for its
+        own reply -- unlike on_observed_utterance, this always runs and
+        needs no subclass override, so every agent gets the full prior
+        conversation without having to opt in individually.
+
+        label: explicit override for the recorded speaker label, used when
+        recording this agent's own reply (self.AGENT_NAME is always known
+        directly, more robust than round-tripping through _speaker_label's
+        port-matching on this agent's own speakerUri)."""
+        if not conv_id or not text:
+            return
+        history = self._conversation_histories.setdefault(conv_id, [])
+        history.append((label or self._speaker_label(speaker_uri), text))
+        if len(history) > self._MAX_HISTORY_TURNS:
+            del history[: len(history) - self._MAX_HISTORY_TURNS]
+
+    def _conversation_history_text(self, conv_id: str) -> str:
+        """The recorded transcript for one conversation as "Speaker: text"
+        lines in chronological order, or "" if nothing has been recorded
+        yet (e.g. this is the first utterance in the conversation) --
+        ready to drop directly into a prompt. Available to any subclass's
+        process_utterance() via self._current_history_text, which is set
+        to this same value right before process_utterance() is called."""
+        history = self._conversation_histories.get(conv_id) or []
+        return "\n".join(f"{label}: {text}" for label, text in history)
+
+    def _history_block(self) -> str:
+        """self._current_history_text wrapped as a ready-to-prepend prompt
+        section (header + trailing blank line), or "" when there is no
+        prior conversation yet (e.g. this is the first utterance) -- so a
+        subclass can unconditionally prepend this to its user_message
+        without its own empty-history special-casing."""
+        if not self._current_history_text:
+            return ""
+        return f"Prior conversation so far:\n{self._current_history_text}\n\n"
+
     def _extract_max_words(self, event: UtteranceEvent) -> int:
         """Read an optional ``maxWords`` feature from the utterance.
 
@@ -548,38 +764,26 @@ class StrategyBotAgent(BotAgent):
         specialist can size both its LLM prompt and its truncation. Falls back
         to the class default and clamps to a sane range.
         """
-        dialog = getattr(event, "dialogEvent", None)
-        if dialog is None:
-            params = getattr(event, "parameters", None)
-            if params is not None:
-                dialog = getattr(params, "dialogEvent", None)
-                if dialog is None and hasattr(params, "get"):
-                    dialog = params.get("dialogEvent")
+        dialog = self._get_dialog_event(event)
         if not dialog:
             return self.MAX_RESPONSE_WORDS
 
-        features = getattr(dialog, "features", None)
-        if features is None and hasattr(dialog, "get"):
-            features = dialog.get("features")
+        features = self._get_attr(dialog, "features")
         if not features:
             return self.MAX_RESPONSE_WORDS
 
-        mw_feature = features.get("maxWords") if hasattr(features, "get") else None
+        mw_feature = self._get_attr(features, "maxWords")
         if not mw_feature:
             return self.MAX_RESPONSE_WORDS
 
-        tokens = getattr(mw_feature, "tokens", None)
-        if tokens is None and hasattr(mw_feature, "get"):
-            tokens = mw_feature.get("tokens")
+        tokens = self._get_attr(mw_feature, "tokens") or []
         if not tokens:
             return self.MAX_RESPONSE_WORDS
 
         first = tokens[0]
-        raw = first if isinstance(first, str) else getattr(first, "value", None)
-        if raw is None and hasattr(first, "get"):
-            raw = first.get("value")
+        raw = first if isinstance(first, str) else self._get_attr(first, "value")
         try:
-            return max(25, min(500, int(str(raw).strip())))
+            return max(25, min(1000, int(str(raw).strip())))
         except (ValueError, TypeError):
             return self.MAX_RESPONSE_WORDS
 
@@ -598,6 +802,34 @@ class StrategyBotAgent(BotAgent):
             if speaker_uri and self._normalize_endpoint_id(speaker_uri) == self._normalize_endpoint_id(self.speakerUri):
                 logger.info("[UTTERANCE] Ignored: speaker is this agent itself (self-loop guard)")
                 return
+
+            conv_id = ""
+            try:
+                conv_id = getattr(getattr(in_envelope, "conversation", None), "id", "") or ""
+            except Exception:
+                pass
+            self._current_conv_id = conv_id
+
+            # Let a subclass observe this utterance regardless of whether
+            # it's about to be answered (below) -- e.g. remembering another
+            # specialist's broadcast reply to fold into a later prompt. Must
+            # never break the floor-gated reply path even if it raises.
+            observed_text = self._extract_utterance_text(event)
+
+            # Snapshot the transcript recorded so far -- everything that
+            # happened UP TO this utterance, not including it (the
+            # utterance itself is passed separately as user_text below) --
+            # so process_utterance() sees the full prior conversation via
+            # self._current_history_text regardless of whether this
+            # specific agent has any bespoke on_observed_utterance override.
+            self._current_history_text = self._conversation_history_text(conv_id)
+
+            if observed_text:
+                self._record_conversation_turn(conv_id, speaker_uri or "", observed_text)
+                try:
+                    self.on_observed_utterance(conv_id, speaker_uri or "", observed_text)
+                except Exception:
+                    logger.exception("[UTTERANCE] on_observed_utterance hook raised")
 
             # Floor gate: only respond when we currently hold the floor, unless
             # the gate has been explicitly disabled for direct/testing use.
@@ -627,10 +859,10 @@ class StrategyBotAgent(BotAgent):
             # Agents that produce a chart return a dict carrying an extra SVG/HTML
             # feature; simpler agents just return a string.
             if isinstance(result, dict):
-                response_text = self._limit_words(result.get("text", ""), self._current_max_words)
+                response_text = self._limit_words(self._strip_markdown(result.get("text", "")), self._current_max_words)
                 html_content = (result.get("html") or "").strip()
             else:
-                response_text = self._limit_words(str(result), self._current_max_words)
+                response_text = self._limit_words(self._strip_markdown(str(result)), self._current_max_words)
                 html_content = ""
 
             if not response_text:
@@ -638,6 +870,15 @@ class StrategyBotAgent(BotAgent):
                 return
 
             logger.info("[UTTERANCE] Response: %s", response_text[:100])
+
+            # Record this agent's own reply into the same transcript. The
+            # self-loop guard above means this agent will never observe
+            # its own broadcast utterance the normal way (bot_on_utterance
+            # returns early for it), so without this explicit call an
+            # agent would lose track of its own past turns across a
+            # multi-round conversation even though every OTHER agent
+            # (which does see this broadcast reply normally) would not.
+            self._record_conversation_turn(conv_id, self.speakerUri, response_text, label=self.AGENT_NAME)
 
             # Always include the text feature; attach an html feature only when
             # the agent produced chart/visual markup.
@@ -729,11 +970,11 @@ class StrategyBotAgent(BotAgent):
         try:
             in_envelope = Envelope.from_json(json_payload, as_payload=True)
             out_envelope = self.process_envelope(in_envelope)
-            
+
             # Ensure events list exists
             if not hasattr(out_envelope, "events") or out_envelope.events is None:
                 out_envelope.events = []
-            
+
             return out_envelope.to_json(as_payload=True)
         except Exception as e:
             # On any parse/processing failure, return a well-formed but empty
@@ -754,10 +995,11 @@ class StrategyBotAgent(BotAgent):
 
 
 # =============================================================================
-# BACKWARDS COMPATIBILITY ALIAS
+# ALIAS
 # =============================================================================
 
-# For existing specialist agents: alias old class name
+# Specialist agents import BaseStrategyAgent, matching the name used across
+# this repo's other OFP example projects (e.g. startup-strategy).
 BaseStrategyAgent = StrategyBotAgent
 
 

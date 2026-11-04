@@ -41,6 +41,12 @@ from agents.base_strategy_agent import BaseStrategyAgent, make_flask_app
 import mcp_client
 import llm_utils
 
+# This agent retrieves and formats data (USDA / TheMealDB lookups, portion
+# arithmetic) rather than doing open-ended creative work, so every LLM call
+# here runs on the smaller, cheaper "lookup" model tier. Only the Menu
+# Designer keeps the full analysis model. See llm_utils.LOOKUP_* / .env.
+_LOOKUP = {"ollama_model": llm_utils.LOOKUP_OLLAMA_MODEL, "openai_model": llm_utils.LOOKUP_LLM_MODEL}
+
 logger = logging.getLogger(__name__)
 
 # Hardcoded to match agents/recipe_portion_specialist/recipe_portion_agent.py's
@@ -56,8 +62,16 @@ _RECIPE_PORTION_SERVICE_URL = "http://127.0.0.1:8303/"
 # commodity (if any) the ORIGINAL question names.
 _MAX_WORDS_INSTRUCTION = re.compile(r"\n\n\[Write approximately[\s\S]*$", re.IGNORECASE)
 _ADDRESS_PREFIX = re.compile(r"^[^,]{0,40},\s*", re.IGNORECASE)
+# Filler adjectives ("current", "today's", "latest", "wholesale", "market")
+# routinely sit between "the" and "price" ("what's the current wholesale
+# price of chicken thighs?") -- left unstripped, that phrasing didn't match
+# this pattern at all, so the whole sentence fell through as the
+# "commodity" (or got rejected outright by the 6-word cap below), never
+# reaching a real USDA AMS lookup for a commodity that plainly names one.
+# Zero or more of these, in any order/combination, are stripped as framing,
+# not treated as part of the commodity name.
 _REQUEST_FRAMING = re.compile(
-    r"\b(what'?s the (market )?price (of|for)|"
+    r"\b(what'?s the (?:(?:current|today'?s|latest|wholesale|market)\s+)*price (of|for)|"
     r"market (price|conditions|data) for|buying (guidance|advice) for|"
     r"sourcing (guidance|advice) for|assess|evaluate|analy[sz]e)\b",
     re.IGNORECASE,
@@ -158,15 +172,18 @@ def _search_terms_for(name: str) -> list[str]:
     return terms
 
 
-def _fetch_report_data(search_result_json: str | None) -> str | None:
+def _fetch_report_data(search_result_json: str | None, commodity_term: str = "") -> str | None:
     """search_reports only returns matching report names/slug_ids -- it
     never includes actual price data, so on its own it can't ground a
     procurement response despite the SYSTEM_PROMPT claiming "real USDA
-    wholesale commodity market data" whenever it's present (confirmed live:
-    the LLM was silently inventing every price figure even for commodities
-    that "were found"). The real pricing rows need a second lookup, by a
-    match's slug_id -- same two-stage shape as recipe_portion_agent.py's
+    market data" whenever it's present (confirmed live: the LLM was
+    silently inventing every price figure even for commodities that "were
+    found"). The real pricing rows need a second lookup, by a match's
+    slug_id -- same two-stage shape as recipe_portion_agent.py's
     _fetch_recipe_details and nutrition_agent.py's food-details lookup.
+    ``commodity_term`` filters get_report's response server-side (e.g.
+    "chicken") -- a report can carry hundreds of price rows per week
+    across every cut/type and region it tracks.
 
     Tries every candidate from the search results in rank order, not just
     the top one -- confirmed live that the top-ranked report for a given
@@ -186,7 +203,9 @@ def _fetch_report_data(search_result_json: str | None) -> str | None:
         slug_id = candidate.get("slug_id")
         if not slug_id:
             continue
-        raw = mcp_client.call_tool_sync_or_none("usda_ams", "get_report", {"slug_id": slug_id, "limit": 10})
+        raw = mcp_client.call_tool_sync_or_none(
+            "usda_ams", "get_report", {"slug_id": slug_id, "commodity": commodity_term, "limit": 500}
+        )
         if not raw:
             continue
         try:
@@ -196,6 +215,79 @@ def _fetch_report_data(search_result_json: str | None) -> str | None:
         if detail.get("rows"):
             return raw
     return None
+
+
+# USDA AMS report data has no server-side filter for the specific cut/item
+# within a commodity ("thighs" within "Chicken") -- confirmed live that
+# without this, the LLM was handed up to 500 raw JSON price rows across
+# every cut/type/region for the week and asked to find the one matching
+# "thighs" itself, which it reliably failed to do, falling back to vague
+# hedging ("prices are volatile, monitor closely") instead of a real
+# number that was sitting right there in the data.
+_SIGNIFICANT_WORD_RE = re.compile(r"[A-Za-z]+")
+
+
+def _cut_residual(commodity_query: str, commodity_term: str) -> str:
+    """``commodity_query`` with ``commodity_term``'s words removed --
+    e.g. ("chicken thighs", "chicken") -> "thighs". A USDA AMS row's
+    "type" field only names the cut (e.g. "Thighs, Boneless/Skinless"),
+    never the commodity itself (that's a separate "commodity" field,
+    already used as the server-side filter) -- matching the FULL query
+    against "type" would require "chicken" to appear there too, which it
+    never does, so every single-word cut would wrongly look like "no
+    exact match" and fall back to a vague broader-commodity answer."""
+    residual = commodity_query
+    for word in commodity_term.split():
+        residual = re.sub(rf"\b{re.escape(word)}\b", "", residual, flags=re.IGNORECASE)
+    residual = re.sub(r"\s+", " ", residual).strip()
+    return residual or commodity_query
+
+
+def _rows_matching_type(rows: list[dict], query: str) -> list[dict]:
+    """Rows whose 'type' field mentions every significant word (>3 letters)
+    of ``query`` (e.g. "thighs" -> matches "Thighs, Boneless/Skinless").
+    One row per distinct matching type, preferring the NATIONAL-region row
+    over a single region's -- more representative, and the LLM doesn't
+    need several near-duplicate regional rows to ground one answer."""
+    sig_words = [w.lower() for w in _SIGNIFICANT_WORD_RE.findall(query) if len(w) > 3]
+    if not sig_words:
+        return []
+    best: dict[str, dict] = {}
+    for row in rows:
+        row_type = (row.get("type") or "").lower()
+        if not row_type or not all(w in row_type for w in sig_words):
+            continue
+        key = row["type"]
+        if key not in best or row.get("region") == "NATIONAL":
+            best[key] = row
+    return list(best.values())
+
+
+def _summarize_commodity_rows(report_data_json: str | None, cut_query: str) -> tuple[str | None, bool]:
+    """Turn get_report's raw rows (every cut/type/region for one commodity,
+    for the week) into a short, LLM-ready context string, matched to the
+    specific item asked about -- see _rows_matching_type. Returns
+    (context_json, exact_match); (None, False) if there's nothing usable.
+
+    When nothing matches the specific cut, falls back to a small
+    NATIONAL-region sample of the broader commodity, so there's still a
+    real number to cite -- ``exact_match=False`` tells the caller to be
+    explicit that this is broader-commodity data, not the exact item."""
+    if not report_data_json:
+        return None, False
+    try:
+        rows = json.loads(report_data_json).get("rows") or []
+    except (json.JSONDecodeError, TypeError):
+        return None, False
+    if not rows:
+        return None, False
+
+    exact = _rows_matching_type(rows, cut_query)
+    if exact:
+        return json.dumps(exact[:5]), True
+
+    national = [r for r in rows if r.get("region") == "NATIONAL"][:8]
+    return json.dumps(national or rows[:8]), False
 
 
 _INGREDIENT_EXTRACTION_SYSTEM_PROMPT = """Extract the distinct named ingredients from this list of cafeteria recipe ingredients.
@@ -222,7 +314,7 @@ def _extract_ingredients(recipe_text: str) -> list[str]:
     rarely matches on its own. Same extraction shape as
     recipe_portion_agent.py's own _extract_dishes, kept as a separate
     local copy since each cafeteria-ops agent is self-contained."""
-    raw = llm_utils.chat_sync(_INGREDIENT_EXTRACTION_SYSTEM_PROMPT, recipe_text, temperature=0, timeout=15)
+    raw = llm_utils.chat_sync(_INGREDIENT_EXTRACTION_SYSTEM_PROMPT, recipe_text, temperature=0, timeout=15, **_LOOKUP)
     match = re.search(r"\{[\s\S]*\}", raw)
     if not match:
         return []
@@ -233,22 +325,26 @@ def _extract_ingredients(recipe_text: str) -> list[str]:
     return [i.strip() for i in (parsed.get("ingredients") or []) if isinstance(i, str) and i.strip()]
 
 
-def _search_candidates_with_fallback(ingredients: list[str]) -> dict[str, list[str]]:
-    """ingredient -> [slug_id, ...] in rank order -- searches with each
-    ingredient's full name first, then falls back to its first/last word
-    (see _search_terms_for) for any ingredient that found nothing on a
-    more specific term. Each round is a single parallel batch across
-    whichever ingredients still need one, bounded to at most 3 rounds
-    (the max length of _search_terms_for's output)."""
+def _search_candidates_with_fallback(ingredients: list[str]) -> dict[str, tuple[str, list[str]]]:
+    """ingredient -> (search_term_that_matched, [slug_id, ...] in rank
+    order) -- searches with each ingredient's full name first, then falls
+    back to its first/last word (see _search_terms_for) for any ingredient
+    that found nothing on a more specific term. The matched search term is
+    kept, not just the slug_ids, so the detail round can filter get_report
+    server-side to that commodity and the specific cut/item can still be
+    matched client-side afterward (see _cut_residual). Each round is a
+    single parallel batch across whichever ingredients still need one,
+    bounded to at most 3 rounds (the max length of _search_terms_for's
+    output)."""
     pending: dict[str, list[str]] = {ingredient: _search_terms_for(ingredient) for ingredient in ingredients}
-    found: dict[str, list[str]] = {}
+    found: dict[str, tuple[str, list[str]]] = {}
     while pending:
         attempt = {ingredient: terms[0] for ingredient, terms in pending.items()}
         search_requests = [("usda_ams", "search_reports", {"keyword": term, "limit": 3}) for term in attempt.values()]
         search_results = mcp_client.call_tools_parallel_sync(search_requests, timeout=10.0)
 
         next_pending: dict[str, list[str]] = {}
-        for (ingredient, _term), raw in zip(attempt.items(), search_results):
+        for (ingredient, term), raw in zip(attempt.items(), search_results):
             raw = _non_empty_results(raw)
             slug_ids: list[str] = []
             if raw:
@@ -258,7 +354,7 @@ def _search_candidates_with_fallback(ingredients: list[str]) -> dict[str, list[s
                 except (json.JSONDecodeError, TypeError):
                     pass
             if slug_ids:
-                found[ingredient] = slug_ids
+                found[ingredient] = (term, slug_ids)
             else:
                 rest = pending[ingredient][1:]
                 if rest:
@@ -268,47 +364,68 @@ def _search_candidates_with_fallback(ingredients: list[str]) -> dict[str, list[s
 
 
 def _fetch_all_market_data(ingredients: list[str]) -> dict[str, str | None]:
-    """ingredient -> real USDA AMS market-data JSON (pricing rows), or
-    None if not found. Same batched two-round shape (parallel search
-    round, then parallel detail round) as recipe_portion_agent.py's
-    _fetch_all_recipes and nutrition_agent.py's _fetch_all_nutrients --
-    except the search round itself falls back across search terms (see
-    _search_candidates_with_fallback), and the detail round retries with
-    the NEXT candidate slug_id for any ingredient whose current candidate
-    had no rows, up to as many rounds as search_reports returned
-    candidates (limit=3). Confirmed live that the top-ranked report for a
-    keyword sometimes has zero rows for the current day, which previously
-    made the whole ingredient look like "no data found" even though a
-    real match existed further down the same search results -- each
-    retry round is still fully parallel across whichever ingredients
-    still need one."""
+    """ingredient -> a short, LLM-ready market-data summary (see
+    _summarize_commodity_rows), or None if not found. Same batched
+    two-round shape (parallel search round, then parallel detail round) as
+    recipe_portion_agent.py's _fetch_all_recipes and nutrition_agent.py's
+    _fetch_all_nutrients -- except the search round itself falls back
+    across search terms (see _search_candidates_with_fallback), and the
+    detail round retries with the NEXT candidate slug_id for any
+    ingredient whose current candidate had no rows, up to as many rounds
+    as search_reports returned candidates (limit=3). Confirmed live that
+    the top-ranked report for a keyword sometimes has zero rows for the
+    current day, which previously made the whole ingredient look like "no
+    data found" even though a real match existed further down the same
+    search results -- each retry round is still fully parallel across
+    whichever ingredients still need one.
+
+    get_report's data is filtered server-side to the matched commodity
+    term and client-side to the ingredient's specific cut/item -- confirmed
+    live that handing the model up to 500 raw, unfiltered rows per
+    ingredient (every cut/type/region a report tracks) meant it never
+    actually found the one row for THIS ingredient, and fell back to
+    inventing a retailer and generic guidance instead."""
     if not ingredients:
         return {}
 
     candidates = _search_candidates_with_fallback(ingredients)
 
     output: dict[str, str | None] = {ingredient: None for ingredient in ingredients}
+    # Dedupe by slug_id: after the search-term fallback, several
+    # ingredients ("chicken breast", "chicken thigh") can land on the same
+    # USDA AMS report. The first ingredient claims it; any other whose top
+    # candidate is that same report advances to its next candidate (or
+    # falls through to not_found) rather than printing the identical
+    # pricing block twice.
+    claimed_slugs: set[str] = set()
     remaining = candidates
     while remaining:
-        attempt = {ingredient: slug_ids[0] for ingredient, slug_ids in remaining.items()}
-        detail_requests = [("usda_ams", "get_report", {"slug_id": slug_id, "limit": 10}) for slug_id in attempt.values()]
+        attempt = {ingredient: (term, slug_ids[0]) for ingredient, (term, slug_ids) in remaining.items()}
+        detail_requests = [
+            ("usda_ams", "get_report", {"slug_id": slug_id, "commodity": term, "limit": 500})
+            for term, slug_id in attempt.values()
+        ]
         detail_results = mcp_client.call_tools_parallel_sync(detail_requests, timeout=10.0)
 
-        next_remaining: dict[str, list[str]] = {}
-        for (ingredient, _slug_id), raw in zip(attempt.items(), detail_results):
+        next_remaining: dict[str, tuple[str, list[str]]] = {}
+        for (ingredient, (term, slug_id)), raw in zip(attempt.items(), detail_results):
             found_rows = False
-            if raw:
+            if slug_id in claimed_slugs:
+                pass  # another ingredient already used this exact report
+            elif raw:
                 try:
                     detail = json.loads(raw)
                     if detail.get("rows"):
-                        output[ingredient] = raw
+                        summary, _exact_match = _summarize_commodity_rows(raw, _cut_residual(ingredient, term))
+                        output[ingredient] = summary
+                        claimed_slugs.add(slug_id)
                         found_rows = True
                 except (json.JSONDecodeError, TypeError):
                     pass
             if not found_rows:
-                rest = remaining[ingredient][1:]
+                rest = remaining[ingredient][1][1:]
                 if rest:
-                    next_remaining[ingredient] = rest
+                    next_remaining[ingredient] = (term, rest)
         remaining = next_remaining
 
     return output
@@ -371,13 +488,14 @@ Your job is to advise on sourcing decisions for the commodity or situation
 described.
 
 You will be given real retrieved market data where available -- either
-USDA wholesale commodity data, or (for specialty/manufactured items USDA
-doesn't track, e.g. quinoa, shrimp, soy sauce) real current retail
-pricing found via web search. Use whichever was retrieved to ground
-price-sensitivity commentary in actual market conditions rather than
-guessing; if it's web-sourced retail pricing rather than USDA wholesale
-data, say so plainly (the two aren't the same thing) rather than
-implying it's a wholesale/bulk price.
+USDA market data, or (for specialty/manufactured items USDA doesn't
+track, e.g. quinoa, shrimp, soy sauce) real current retail pricing found
+via web search. Use whichever was retrieved to ground price-sensitivity
+commentary in actual market conditions rather than guessing. USDA data is
+NOT always wholesale -- each row carries its own "market_type" field
+(e.g. "Retail - Livestock/Poultry/Egg" is retail, not wholesale); read
+that field and describe the price as whatever it actually is, rather
+than assuming or implying it's a wholesale/bulk price by default.
 
 Cover: current price/market conditions if data was found, buying-timing
 guidance (buy now vs. wait, given typical volatility for that commodity),
@@ -390,7 +508,39 @@ stop and re-derive one specific to what was actually retrieved.
 
 If no matching market data was retrieved (from either source), say so
 plainly and give your best general procurement guidance instead -- don't
-imply you found real data when you didn't.
+imply you found real data when you didn't. Never open with a phrase like
+"based on recent USDA data" or "according to current market data" unless
+real data was actually retrieved and given to you below -- if none was,
+open by saying plainly that you have no current market data for this
+commodity.
+
+Answer about the EXACT commodity/cut named in the question -- if asked
+about chicken thighs, do not substitute chicken breast or any other cut
+just because the retrieved USDA report covers the broader commodity
+without cut-level detail. If the data doesn't distinguish cuts, say so
+plainly rather than picking a specific one that wasn't actually in it --
+but do NOT then fall back to vague, generic language ("prices are
+volatile, monitor closely," "consider placing larger orders if prices
+stabilize") that ignores the numbers actually in front of you. Instead,
+pull the real figures the retrieved data DOES show for the broader
+commodity (an actual price, a specific direction, a percentage change)
+and use those as your grounding -- concrete numbers for the broader
+commodity beat a vague hedge every time.
+
+Never invent a specific retailer, supplier, or vendor name. USDA market
+data reports on regional wholesale market conditions, not named local
+businesses -- if you don't have a real named source for a price, don't
+name one.
+
+IMPORTANT: this system has NO data on THIS cafeteria's own purchasing --
+no purchase history, no prices you previously paid, no supplier or vendor
+records, no contracts, no year-to-date spend. You have only current market
+data retrieved for the commodity asked about. If the request depends on
+the cafeteria's own records (e.g. "what did we pay last quarter", "who is
+our supplier", "our contract price", "our spend so far this year"), say
+plainly you don't have that data and cannot answer it -- do NOT pivot to
+generic advice like "review your internal records" or "negotiate with your
+current supplier".
 
 Ground your recommendation in the specific commodity/situation described.
 This is a single, focused answer about ONE commodity, not a full report
@@ -413,18 +563,22 @@ overall length is guided by a separate instruction."""
 _WHOLE_MENU_SYSTEM_PROMPT = """You are the Procurement Specialist for a corporate cafeteria operations panel.
 
 You have been given a set of ingredients used in a week's menu, each with
-whatever real market data was actually retrieved for it: USDA wholesale
-commodity data, real current retail prices found via web search (for
-specialty/manufactured items USDA doesn't track, e.g. quinoa, shrimp, soy
-sauce), or neither if nothing was found. Your job is to determine
-practical grocery-store or food-service procurement options for EVERY
-ingredient, using ONLY the data actually given to you below -- you have
-no ability to look anything up yourself.
+whatever real market data was actually retrieved for it: USDA market
+data, real current retail prices found via web search (for specialty/
+manufactured items USDA doesn't track, e.g. quinoa, shrimp, soy sauce),
+or neither if nothing was found. Your job is to determine practical
+grocery-store or food-service procurement options for EVERY ingredient,
+using ONLY the data actually given to you below -- you have no ability to
+look anything up yourself.
+
+This system also has NO data on this cafeteria's own purchasing history,
+past prices paid, suppliers, or contracts. If the request depends on those
+records, say plainly you don't have them and can't answer that part.
 
 For EVERY ingredient:
 
-* Use the retrieved grocery-store/food-service web search data where given -- it reflects actual current retail products and prices, more directly useful for a cafeteria buyer than a USDA wholesale/bulk commodity figure.
-* If only USDA wholesale data was retrieved for an ingredient (no web search result), you may still use it for market-condition/timing context, but say plainly that it's a wholesale figure, not a retail price.
+* Use the retrieved grocery-store/food-service web search data where given -- it reflects actual current retail products and prices.
+* If only USDA data was retrieved for an ingredient (no web search result), use it, but check its own "market_type" field (e.g. "Retail - Livestock/Poultry/Egg" is retail, not wholesale) rather than assuming it's a wholesale/bulk figure by default -- describe the price as whatever the data actually says it is.
 * Identify a suitable product and package size when possible.
 * Report the current price when a reliable current price is available.
 * Calculate or estimate the number of packages needed when the required quantity is provided.
@@ -436,7 +590,18 @@ For EVERY ingredient:
 * Never invent a product, price, package size, retailer, or other procurement information.
 * Never silently omit an ingredient.
 
-Your sourcing guidance should be specific to the individual ingredient and the information retrieved, not generic advice that could apply to any ingredient.
+Output EXACTLY ONE entry per ingredient in the "Ingredients identified"
+list -- never two or more entries for the same ingredient (e.g. do not
+list several brands or package variants of peas as separate entries; pick
+one and describe it inside that single entry's fields).
+
+The "name" field MUST be the plain ingredient name exactly as it appears in
+"Ingredients identified" (e.g. "peas", "cheddar cheese") -- NOT a brand
+name, product name, or packaging description (not "Le Sueur Very Young
+Small Sweet Peas", not "Great Value Organic Frozen Peas"). Put any specific
+product name in the "product" field, not "name".
+
+Your sourcing guidance should be specific to the individual ingredient and the information retrieved, not generic advice that could apply to any ingredient. Do not repeat the same guidance sentence across ingredients.
 
 Respond with ONLY a single JSON object and no other text.
 
@@ -481,37 +646,177 @@ def _single_commodity_budget_hint(max_words: int) -> str:
     return f"\n\nThis is about ONE commodity, not a whole menu -- aim for roughly {target} words, not a full report."
 
 
-def _render_ingredient_guidance(raw: str) -> str:
+def _dedup_repeated_lines(text: str) -> str:
+    """Drop exact-duplicate lines (whitespace/case-insensitive), keeping the
+    first -- confirmed live that qwen2.5:7b sometimes loops, emitting the
+    same two or three ingredient lines over and over ("Canola Oil - ...\\n
+    Sugar - ...\\nCorn - ...\\nCanola Oil - ..."). Blank lines are kept as-is
+    so paragraph spacing survives."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for line in text.split("\n"):
+        key = re.sub(r"\s+", " ", line.strip().lower())
+        if not key:
+            out.append(line)
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(line)
+    return "\n".join(out)
+
+
+# Brand names and packaging qualifiers the model sometimes puts in the
+# ingredient "name" instead of the plain ingredient -- confirmed live that
+# one menu ingredient ("peas") came back as four near-identical entries:
+# "Le Sueur Very Young Small Sweet Peas", "Great Value Organic Frozen
+# Steamable Sweet Peas", "Del Monte No Salt Added Sweet Peas", ...  Stripping
+# these leaves the core ingredient words, so the four collapse to one.
+_ING_QUALIFIER_RE = re.compile(
+    r"\b(le sueur|great value|del monte|green giant|birds eye|bird's eye|kirkland|365|"
+    r"signature select|private label|store brand|generic|organic|frozen|fresh|canned|tinned|"
+    r"steamable|no salt added|low sodium|reduced sodium|unsalted|whole|baby|very|young|small|"
+    r"large|extra|premium|natural|brand|value|select)\b",
+    re.I)
+
+
+def _norm_ingredient_key(name: str) -> str:
+    """A core-ingredient key: brand/packaging words, parentheticals and
+    punctuation removed, so "Del Monte No Salt Added Sweet Peas" and
+    "Great Value Organic Frozen ... Sweet Peas" both key to "sweet peas"."""
+    n = re.sub(r"\([^)]*\)", " ", name.lower())
+    n = _ING_QUALIFIER_RE.sub(" ", n)
+    n = re.sub(r"[^a-z\s]", " ", n)
+    return re.sub(r"\s+", " ", n).strip()
+
+
+def _canonical_ingredient(entry_name: str, ingredients: list[str]) -> str | None:
+    """The menu ingredient `entry_name` actually refers to, or None -- a
+    match is every significant word of the menu ingredient appearing in the
+    entry name ("peas" -> "Le Sueur ... Sweet Peas"), or, failing that, the
+    menu ingredient's core noun appearing in it. The longest such menu
+    ingredient wins."""
+    lowered = entry_name.lower()
+    best: str | None = None
+    fallback: str | None = None
+    for ing in ingredients:
+        words = [w for w in re.findall(r"[a-z]+", ing.lower()) if len(w) > 2]
+        if not words:
+            continue
+        if all(w in lowered for w in words):
+            if best is None or len(ing) > len(best):
+                best = ing
+        elif words[-1] in re.findall(r"[a-z]+", lowered):
+            if fallback is None or len(ing) > len(fallback):
+                fallback = ing
+    return best or fallback
+
+
+def _render_ingredient_guidance(raw: str, ingredients: list[str] | None = None) -> str:
     """Parse the whole-menu JSON response into one guaranteed single line
-    per ingredient ("<name>: <guidance>"), regardless of how many
-    sentences the model's own guidance text contains -- the deterministic
-    assembly step _WHOLE_MENU_SYSTEM_PROMPT's docstring explains. Falls
-    back to the raw text unchanged if the JSON can't be parsed or yields
-    no usable entries, rather than losing the response outright."""
+    per ingredient ("<name>: <guidance>"). Collapses the model's occasional
+    multiple near-identical entries for one ingredient (different brands,
+    same boilerplate guidance) to a single line, relabelled to the plain
+    menu-ingredient name where one can be identified. Falls back to the raw
+    text (deduped) if the JSON can't be parsed or yields no usable
+    entries."""
+    ingredients = ingredients or []
     match = re.search(r"\{[\s\S]*\}", raw)
     if not match:
-        return raw
+        return _collapse_ingredient_lines(_dedup_repeated_lines(raw), ingredients)
     try:
         parsed = json.loads(match.group())
     except json.JSONDecodeError:
-        return raw
+        return _collapse_ingredient_lines(_dedup_repeated_lines(raw), ingredients)
     entries = parsed.get("ingredients") or []
-    lines = []
+    lines: list[str] = []
+    seen_keys: set[str] = set()
     for entry in entries:
         if not isinstance(entry, dict):
             continue
         name = str(entry.get("name") or "").strip()
         guidance = " ".join(str(entry.get("guidance") or "").split())
-        if name and guidance:
-            lines.append(f"{name}: {guidance}")
-    return "\n".join(lines) if lines else raw
+        if not (name and guidance):
+            continue
+        canonical = _canonical_ingredient(name, ingredients)
+        key = _norm_ingredient_key(canonical or name) or name.lower()
+        if key in seen_keys:  # same ingredient again, just a different brand/pack
+            continue
+        seen_keys.add(key)
+        lines.append(f"{_display_ingredient_name(name, canonical)}: {guidance}")
+    return "\n".join(lines) if lines else _collapse_ingredient_lines(_dedup_repeated_lines(raw), ingredients)
+
+
+def _display_ingredient_name(name: str, canonical: str | None) -> str:
+    """Keep the model's own name unless it is a brand/packaging string that
+    the plain menu ingredient name (canonical) doesn't share -- then use the
+    plain name."""
+    if canonical and _norm_ingredient_key(name) != _norm_ingredient_key(canonical):
+        return canonical
+    return name
+
+
+_NAME_GUIDANCE_RE = re.compile(r"^\s*([^\n]{1,60}?)\s*(?::\s+|\s[-–—]\s+)(\S.*)$")
+
+
+def _collapse_ingredient_lines(text: str, ingredients: list[str] | None = None) -> str:
+    """On a "<name>: <guidance>" / "<name> - <guidance>" line list, keep the
+    first line per core ingredient (see _norm_ingredient_key), relabelled to
+    the plain menu-ingredient name where identifiable. Lines that aren't in
+    that shape pass through untouched."""
+    ingredients = ingredients or []
+    out: list[str] = []
+    seen_keys: set[str] = set()
+    for line in text.split("\n"):
+        m = _NAME_GUIDANCE_RE.match(line)
+        if not m:
+            out.append(line)
+            continue
+        name, guidance = m.group(1).strip(), m.group(2).strip()
+        canonical = _canonical_ingredient(name, ingredients)
+        key = _norm_ingredient_key(canonical or name) or name.lower()
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        out.append(f"{_display_ingredient_name(name, canonical)}: {guidance}")
+    return "\n".join(out)
+
+
+# A question that depends on THIS cafeteria's own purchasing records
+# (past prices paid, suppliers, contracts, spend) is declined BEFORE any
+# LLM call -- confirmed live that qwen2.5:7b, even told it has no such
+# data, still pads the reply with generic "monitor market trends,
+# negotiate with suppliers" advice. Substring match on the raw utterance;
+# each marker pairs a possessive/first-person cue with a records concept
+# so a plain market question ("how have beef prices moved this quarter")
+# is not caught.
+_MISSING_DATA_MARKERS = (
+    "did we pay", "we paid", "we spent", "we spend", "did we spend",
+    "our supplier", "our suppliers", "current supplier", "our vendor",
+    "our vendors", "who supplies us", "who is our", "who's our",
+    "our contract", "contract price", "contracted price", "negotiated price",
+    "our purchase history", "purchase history", "our spend", "spend to date",
+    "spent so far", "our records", "internal records", "previously paid",
+    "price we paid", "cost we paid", "last invoice", "our last order",
+)
+_MISSING_DATA_DECLINE = (
+    "I don't have data on this cafeteria's own purchasing -- no purchase "
+    "history, prices previously paid, supplier records, or contracts -- so I "
+    "can't answer that."
+)
+
+
+def _needs_unavailable_data(user_text: str) -> bool:
+    lowered = (user_text or "").lower()
+    return any(marker in lowered for marker in _MISSING_DATA_MARKERS)
 
 
 class ProcurementAgent(BaseStrategyAgent):
     AGENT_NAME = "Procurement Specialist"
     AGENT_PORT = 8306
-    AGENT_SYNOPSIS = "Grounds sourcing decisions in real USDA wholesale commodity price data"
+    AGENT_SYNOPSIS = "Grounds sourcing decisions in real USDA AMS commodity price data"
     AGENT_CAPABILITY_DETAIL = "Advises on procurement timing and sourcing strategy using real USDA AMS commodity market data."
+    WORKING_LABEL = "pricing ingredients and sourcing options"
     AGENT_KEYPHRASES = ["procurement", "sourcing", "purchase", "purchasing", "commodity",
                          "price", "pricing", "buy", "contract", "market"]
     # BaseStrategyAgent's default of 50 words is a single-item budget --
@@ -538,6 +843,10 @@ class ProcurementAgent(BaseStrategyAgent):
             logger.info("[Procurement] Saved Recipe & Portion's one-serving recipes for conv %s", conv_id)
 
     def process_utterance(self, user_text: str) -> dict:
+        if _needs_unavailable_data(user_text):
+            logger.info("[Procurement] Declining -- question needs this cafeteria's own purchasing records, which this system lacks")
+            return {"text": _MISSING_DATA_DECLINE, "html": ""}
+
         commodity_query = _commodity_query(user_text)
         if commodity_query:
             return self._respond_for_one_commodity(user_text, commodity_query)
@@ -559,18 +868,31 @@ class ProcurementAgent(BaseStrategyAgent):
         # (e.g. "cheddar cheese") rarely matches a USDA AMS report title
         # on its own.
         report_data = None
+        matched_term = ""
         for term in _search_terms_for(commodity_query):
             search_result = mcp_client.call_tool_sync_or_none(
                 "usda_ams", "search_reports", {"keyword": term, "limit": 3}
             )
             # search_reports only found a candidate report -- fetch that
-            # report's real pricing rows in a second lookup.
-            report_data = _fetch_report_data(_non_empty_results(search_result))
+            # report's real pricing rows in a second lookup, filtered
+            # server-side to this commodity term.
+            report_data = _fetch_report_data(_non_empty_results(search_result), commodity_term=term)
             if report_data:
+                matched_term = term
                 break
 
         if report_data:
-            context = f"USDA wholesale market data:\n{report_data}"
+            cut_query = _cut_residual(commodity_query, matched_term)
+            summary, exact_match = _summarize_commodity_rows(report_data, cut_query)
+            if exact_match:
+                context = f"USDA market data for the exact item asked about:\n{summary}"
+            elif summary:
+                context = (
+                    f"USDA market data for the broader commodity -- no row specifically "
+                    f"named '{commodity_query}':\n{summary}"
+                )
+            else:
+                context = "No matching USDA market data or web search results found -- use general procurement knowledge."
         else:
             # USDA AMS only tracks bulk commodities -- a specialty/
             # manufactured item (quinoa, shrimp, soy sauce) never matches
@@ -590,7 +912,7 @@ Retrieved market data:
 
 Please provide sourcing/procurement guidance for this situation."""
 
-        text = llm_utils.chat_sync(SYSTEM_PROMPT, user_message)
+        text = _dedup_repeated_lines(llm_utils.chat_sync(SYSTEM_PROMPT, user_message, **_LOOKUP))
         return {"text": text, "html": self._text_to_html_list(text)}
 
     def _respond_general(self, user_text: str) -> dict:
@@ -602,16 +924,16 @@ No matching USDA market data or web search results found -- use general procurem
 
 Please provide sourcing/procurement guidance for this situation."""
 
-        text = llm_utils.chat_sync(SYSTEM_PROMPT, user_message)
+        text = _dedup_repeated_lines(llm_utils.chat_sync(SYSTEM_PROMPT, user_message, **_LOOKUP))
         return {"text": text, "html": self._text_to_html_list(text)}
 
     def _respond_for_whole_menu(self, saved_recipes: str, ingredients: list[str]) -> dict:
         market_data = _fetch_all_market_data(ingredients)
 
-        # USDA AMS only tracks bulk commodities -- fall back to a real web
-        # search for retail pricing, but only for the ingredients USDA had
-        # nothing for, not the whole list (no point re-searching what's
-        # already grounded in real wholesale data).
+        # USDA AMS doesn't track every specialty/manufactured item -- fall
+        # back to a real web search for retail pricing, but only for the
+        # ingredients USDA had nothing for, not the whole list (no point
+        # re-searching what's already grounded in real USDA data).
         missing = [ingredient for ingredient in ingredients if not market_data.get(ingredient)]
         web_data = _fetch_all_web_prices(missing) if missing else {}
 
@@ -621,7 +943,7 @@ Please provide sourcing/procurement guidance for this situation."""
             usda_raw = market_data.get(ingredient)
             web_raw = web_data.get(ingredient)
             if usda_raw:
-                gathered.append(f"{ingredient} (USDA wholesale data):\n{usda_raw}")
+                gathered.append(f"{ingredient} (USDA market data -- check each row's own market_type field for retail vs. wholesale):\n{usda_raw}")
             elif web_raw:
                 gathered.append(f"{ingredient} (web search retail pricing):\n{web_raw}")
             else:
@@ -647,15 +969,15 @@ Please provide sourcing/procurement guidance for this situation."""
 
 Ingredients identified: {', '.join(ingredients)}
 
-Real market data retrieved (USDA wholesale where matched, web-searched retail pricing otherwise):
+Real market data retrieved (USDA where matched, web-searched retail pricing otherwise):
 {context}
 {not_found_note}
 {budget_hint}
 
 Please provide sourcing/procurement guidance covering EVERY ingredient used in this week's menu."""
 
-        raw = llm_utils.chat_sync(_WHOLE_MENU_SYSTEM_PROMPT, user_message, timeout=45)
-        text = _render_ingredient_guidance(raw)
+        raw = llm_utils.chat_sync(_WHOLE_MENU_SYSTEM_PROMPT, user_message, timeout=45, **_LOOKUP)
+        text = _render_ingredient_guidance(raw, ingredients)
         return {"text": text, "html": self._text_to_html_list(text)}
 
 

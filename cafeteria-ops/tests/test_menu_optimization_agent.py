@@ -56,6 +56,31 @@ class OnObservedUtteranceTests(unittest.TestCase):
         self.assertEqual(agent._observed_menus, {"conv-1": "menu for conv 1", "conv-2": "menu for conv 2"})
 
 
+class NeedsUnavailableDataTests(unittest.TestCase):
+    """Questions whose core metric depends on popularity / sales / uptake /
+    waste-history data this system doesn't have are recognised so they can
+    be declined without an LLM call."""
+
+    def test_cost_to_popularity_style_questions_are_flagged(self):
+        for q in [
+            "Find the two dishes with the worst cost-to-popularity ratio.",
+            "Which dishes are least popular?",
+            "Rank the menu by how well each dish sells.",
+            "How much was wasted last week?",
+            "What are the best sellers on this menu?",
+        ]:
+            self.assertTrue(moa._needs_unavailable_data(q), q)
+
+    def test_genuine_optimization_questions_are_not_flagged(self):
+        for q in [
+            "Where is ingredient reuse across this menu weakest?",
+            "Which dishes are most expensive per serving?",
+            "Suggest a lower-cost protein substitution for day 3.",
+            "Is there too much repetition of chicken this week?",
+        ]:
+            self.assertFalse(moa._needs_unavailable_data(q), q)
+
+
 class ProcessUtteranceTests(unittest.TestCase):
     def _make_agent(self, conv_id="conv-1", saved_menu=""):
         agent = MenuOptimizationAgent()
@@ -64,15 +89,27 @@ class ProcessUtteranceTests(unittest.TestCase):
             agent._observed_menus[conv_id] = saved_menu
         return agent
 
-    def test_uses_the_saved_menu_when_available_not_the_raw_request_text(self):
+    def test_a_missing_data_question_is_declined_without_any_llm_call(self):
+        agent = self._make_agent(saved_menu="Day 1: Chicken Curry. Day 2: Lentil Soup.")
+        with patch.object(moa.llm_utils, "chat_sync") as chat_sync:
+            result = agent.process_utterance("Find the two dishes with the worst cost-to-popularity ratio.")
+
+        chat_sync.assert_not_called()
+        self.assertIn("don't have data about dish popularity", result["text"])
+        self.assertEqual(result["html"], "")
+
+    def test_saved_menu_is_the_subject_and_the_utterance_is_still_carried_through(self):
+        # The saved menu is what gets evaluated, but a pointed question in
+        # the utterance must still reach the model rather than being
+        # dropped for a generic review.
         agent = self._make_agent(saved_menu="Day 1: Chicken Curry. Day 2: Lentil Soup.")
         with patch.object(moa.llm_utils, "chat_sync", return_value="ok") as chat_sync:
-            agent.process_utterance("Plan a two-day lunch menu for 300 people with a budget of $6 per meal.")
+            agent.process_utterance("Where is ingredient reuse across this menu weakest?")
 
         self.assertEqual(chat_sync.call_args[0][0], moa.SYSTEM_PROMPT)
         user_message = chat_sync.call_args[0][1]
         self.assertIn("Day 1: Chicken Curry. Day 2: Lentil Soup.", user_message)
-        self.assertNotIn("Plan a two-day lunch menu", user_message)
+        self.assertIn("ingredient reuse across this menu weakest", user_message)
 
     def test_falls_back_to_the_raw_request_text_when_no_menu_was_observed(self):
         agent = self._make_agent(saved_menu="")

@@ -19,11 +19,14 @@ from agents.shopping_list_specialist.shopping_list_agent import (
     _dedupe_ingredient_lines,
     _extract_dishes_from_recipes,
     _format_dollars,
+    _llm_candidate_terms,
     _parse_ingredient_lines,
     _parse_total_dollars,
     _recompute_total_line,
     _render_html_from_sections,
     _render_text_from_sections,
+    _roll_up_line,
+    _to_one_serving,
     ShoppingListAgent,
 )
 
@@ -105,6 +108,134 @@ class ExtractDishesFromRecipesTests(unittest.TestCase):
         self.assertEqual(result, ["Chicken Curry"])
 
 
+class TermsFromSlotsTests(unittest.TestCase):
+    """Deterministic priority order built from one dish's extracted slots
+    -- same fix as recipe_portion_agent.py's own copy, needed here because
+    this agent's own direct TheMealDB fallback (used when Recipe & Portion
+    hasn't replied yet in the conversation) had no retry logic at all
+    before the earlier fix, let alone one that reliably distinguishes
+    "chorizo" from "chicken"/"cheese"/"salad"."""
+
+    def test_dish_type_alone_is_not_a_candidate(self):
+        # Confirmed live: a bare dish-type word ("tacos", "pizza") matched
+        # an unrelated dish sharing only that category ("tacos" -> the
+        # unrelated "Breadfruit Tacos"; "pizza" -> the unrelated "Cassava
+        # pizza") -- same risk as a bare main_ingredient or cuisine word.
+        self.assertEqual(sla._terms_from_slots({"dish_type": "tacos"}), [])
+
+    def test_secondary_ingredient_ranks_above_main_plus_sauce(self):
+        slots = {"main_ingredient": "chicken", "secondary_ingredient": "chorizo", "sauce_or_style": "spicy"}
+        terms = sla._terms_from_slots(slots)
+        self.assertLess(terms.index("chorizo"), terms.index("chicken spicy"))
+
+    def test_sauce_or_style_alone_is_not_a_candidate(self):
+        # Confirmed live: a bare sauce/style word ("barbecue") matched an
+        # unrelated dish sharing only that word ("barbecue" -> the
+        # unrelated "Barbecue pork buns", even fed downstream for a dish
+        # explicitly labeled Vegetarian) -- same risk as a bare
+        # main_ingredient, cuisine, or dish_type word.
+        self.assertEqual(sla._terms_from_slots({"sauce_or_style": "barbecue"}), [])
+
+    def test_cuisine_ranks_below_the_dish_own_identity(self):
+        # Bare cuisine alone is not a candidate at all (see
+        # test_cuisine_alone_is_not_a_candidate); cuisine+main is the
+        # weakest tier still allowed, since it requires both pieces of
+        # information to align in one title.
+        slots = {"main_ingredient": "lamb", "dish_type": "stew", "cuisine": "Moroccan"}
+        terms = sla._terms_from_slots(slots)
+        self.assertLess(terms.index("stew lamb"), terms.index("Moroccan lamb"))
+
+    def test_cuisine_alone_is_not_a_candidate(self):
+        # Confirmed live: a bare cuisine word matched an unrelated dish
+        # from that same cuisine -- a wrong "real" recipe presented as
+        # grounded data is worse than admitting no match was found.
+        self.assertEqual(sla._terms_from_slots({"cuisine": "Moroccan"}), [])
+
+    def test_main_ingredient_alone_is_not_a_candidate(self):
+        self.assertEqual(sla._terms_from_slots({"main_ingredient": "chicken"}), [])
+
+    def test_generic_category_secondary_ingredient_is_dropped(self):
+        # Same fix as recipe_portion_agent.py's own copy -- confirmed live
+        # the model dodged the "not vegetable/meat/..." instruction just by
+        # pluralizing ("vegetables"), so this is enforced in code instead.
+        slots = {"main_ingredient": "chicken", "secondary_ingredient": "vegetables", "dish_type": "biryani"}
+        terms = sla._terms_from_slots(slots)
+        self.assertNotIn("vegetables", terms)
+
+    def test_generic_category_secondary_ingredient_singular_is_also_dropped(self):
+        slots = {"main_ingredient": "chicken", "secondary_ingredient": "meat"}
+        self.assertEqual(sla._terms_from_slots(slots), [])
+
+    def test_specific_secondary_ingredient_is_not_dropped(self):
+        slots = {"main_ingredient": "chicken", "secondary_ingredient": "berries"}
+        self.assertIn("berries", sla._terms_from_slots(slots))
+
+    def test_cooking_method_plus_main_ranks_below_sauce(self):
+        slots = {"main_ingredient": "chicken", "sauce_or_style": "teriyaki", "cooking_method": "grilled"}
+        terms = sla._terms_from_slots(slots)
+        self.assertLess(terms.index("chicken teriyaki"), terms.index("grilled chicken"))
+
+    def test_cut_ranks_above_cooking_method(self):
+        slots = {"main_ingredient": "lamb", "cooking_method": "grilled", "cut": "chop"}
+        terms = sla._terms_from_slots(slots)
+        self.assertLess(terms.index("lamb chop"), terms.index("chop"))
+        self.assertLess(terms.index("chop"), terms.index("grilled lamb"))
+
+    def test_steak_fallback_is_tried_only_after_the_cut_itself(self):
+        slots = {"main_ingredient": "beef", "cut": "sirloin"}
+        terms = sla._terms_from_slots(slots)
+        self.assertLess(terms.index("beef sirloin"), terms.index("beef steak"))
+        self.assertLess(terms.index("sirloin"), terms.index("steak"))
+
+    def test_steak_fallback_is_absent_for_a_non_steak_cut(self):
+        slots = {"main_ingredient": "lamb", "cut": "chop"}
+        terms = sla._terms_from_slots(slots)
+        self.assertNotIn("steak", terms)
+        self.assertNotIn("lamb steak", terms)
+
+    def test_empty_slots_return_no_terms(self):
+        self.assertEqual(sla._terms_from_slots({}), [])
+
+
+class LlmCandidateTermsTests(unittest.TestCase):
+    """The exact dish name is always prepended as the first, free
+    attempt, followed by the deterministic term order built from that
+    dish's LLM-extracted slots (see TermsFromSlotsTests)."""
+
+    def test_dish_name_is_prepended_before_the_slot_derived_terms(self):
+        raw = json.dumps({"Grilled Teriyaki Chicken": {"main_ingredient": "chicken", "sauce_or_style": "teriyaki"}})
+        with patch.object(sla.llm_utils, "chat_sync", return_value=raw):
+            result = _llm_candidate_terms(["Grilled Teriyaki Chicken"])
+
+        # No trailing bare "chicken" or bare "teriyaki" -- main_ingredient
+        # alone and sauce_or_style alone are deliberately not candidates
+        # (see TermsFromSlotsTests).
+        self.assertEqual(
+            result["Grilled Teriyaki Chicken"],
+            ["Grilled Teriyaki Chicken", "chicken teriyaki"],
+        )
+
+    def test_dish_missing_from_the_llm_response_falls_back_to_itself_alone(self):
+        raw = json.dumps({"Chicken Curry": {"main_ingredient": "chicken"}})
+        with patch.object(sla.llm_utils, "chat_sync", return_value=raw):
+            result = _llm_candidate_terms(["Chicken Curry", "Lentil Soup"])
+
+        self.assertEqual(result["Lentil Soup"], ["Lentil Soup"])
+
+    def test_malformed_json_response_falls_back_to_the_dish_name_alone(self):
+        with patch.object(sla.llm_utils, "chat_sync", return_value="not json at all"):
+            result = _llm_candidate_terms(["Chicken Curry"])
+
+        self.assertEqual(result["Chicken Curry"], ["Chicken Curry"])
+
+    def test_empty_dish_list_makes_no_llm_call(self):
+        with patch.object(sla.llm_utils, "chat_sync") as chat_sync:
+            result = _llm_candidate_terms([])
+
+        chat_sync.assert_not_called()
+        self.assertEqual(result, {})
+
+
 class FetchDishIngredientsTests(unittest.TestCase):
     def test_empty_dish_list_makes_no_calls(self):
         with patch.object(sla.mcp_client, "call_tools_parallel_sync") as parallel:
@@ -124,7 +255,8 @@ class FetchDishIngredientsTests(unittest.TestCase):
             "ingredients": ["200g chicken breast", "1 tbsp curry powder"],
         })
 
-        with patch.object(sla.mcp_client, "call_tools_parallel_sync") as parallel:
+        with patch.object(sla, "_llm_candidate_terms", return_value={"chicken curry": ["chicken curry"]}), \
+             patch.object(sla.mcp_client, "call_tools_parallel_sync") as parallel:
             parallel.side_effect = [[search_result], [detail_result]]
             result = sla._fetch_dish_ingredients(["chicken curry"])
 
@@ -140,37 +272,99 @@ class FetchDishIngredientsTests(unittest.TestCase):
         self.assertEqual(result["chicken curry"]["ingredients"], ["200g chicken breast", "1 tbsp curry powder"])
 
     def test_dish_not_found_in_search_is_none_and_skips_detail_lookup(self):
+        # Both of "totally made up dish"'s candidate terms miss -- no
+        # detail round should ever run.
+        terms = {"totally made up dish": ["totally made up dish", "made"]}
         no_match = json.dumps({"query": "xyz", "results": []})
 
-        with patch.object(sla.mcp_client, "call_tools_parallel_sync") as parallel:
-            parallel.side_effect = [[no_match]]
+        with patch.object(sla, "_llm_candidate_terms", return_value=terms), \
+             patch.object(sla.mcp_client, "call_tools_parallel_sync", return_value=[no_match]) as parallel:
             result = sla._fetch_dish_ingredients(["totally made up dish"])
 
-        parallel.assert_called_once()  # only the search round, no detail round
+        self.assertEqual(parallel.call_count, 2)
         self.assertIsNone(result["totally made up dish"])
 
     def test_mixed_found_and_not_found_dishes(self):
-        search_results = [
+        # "chicken curry" hits on the first (full-name) candidate term;
+        # "made up dish" misses on its full name and its only other
+        # candidate ("made") before giving up.
+        terms = {"chicken curry": ["chicken curry"], "made up dish": ["made up dish", "made"]}
+        round1 = [
             json.dumps({"query": "chicken curry", "results": [{"id": "52", "name": "Nutty Chicken Curry"}]}),
-            json.dumps({"query": "xyz", "results": []}),
+            json.dumps({"query": "made up dish", "results": []}),
         ]
+        round2 = [json.dumps({"query": "made", "results": []})]
         detail_results = [json.dumps({"id": "52", "name": "Nutty Chicken Curry", "ingredients": ["200g chicken"]})]
 
-        with patch.object(sla.mcp_client, "call_tools_parallel_sync") as parallel:
-            parallel.side_effect = [search_results, detail_results]
+        with patch.object(sla, "_llm_candidate_terms", return_value=terms), \
+             patch.object(sla.mcp_client, "call_tools_parallel_sync") as parallel:
+            parallel.side_effect = [round1, round2, detail_results]
             result = sla._fetch_dish_ingredients(["chicken curry", "made up dish"])
 
         self.assertIsNotNone(result["chicken curry"])
         self.assertIsNone(result["made up dish"])
 
     def test_detail_lookup_failure_leaves_dish_as_none(self):
+        terms = {"chicken curry": ["chicken curry"]}
         search_result = json.dumps({"query": "chicken curry", "results": [{"id": "52", "name": "Nutty Chicken Curry"}]})
 
-        with patch.object(sla.mcp_client, "call_tools_parallel_sync") as parallel:
+        with patch.object(sla, "_llm_candidate_terms", return_value=terms), \
+             patch.object(sla.mcp_client, "call_tools_parallel_sync") as parallel:
             parallel.side_effect = [[search_result], [None]]
             result = sla._fetch_dish_ingredients(["chicken curry"])
 
         self.assertIsNone(result["chicken curry"])
+
+    def test_a_dish_that_loses_the_dedupe_retries_with_its_own_next_candidate(self):
+        # Same regression as recipe_portion_agent.py's own copy: a dish
+        # that collides with another on a shared fallback term must still
+        # get its own real match if it has a further candidate left,
+        # instead of being dropped to None outright.
+        terms = {
+            "Dish A": ["Dish A", "shared"],
+            "Dish B": ["Dish B", "shared", "unique"],
+        }
+        round1 = [
+            json.dumps({"query": "Dish A", "results": []}),
+            json.dumps({"query": "Dish B", "results": []}),
+        ]
+        round2 = [
+            json.dumps({"query": "shared", "results": [{"id": "99", "name": "Shared Recipe"}]}),
+            json.dumps({"query": "shared", "results": [{"id": "99", "name": "Shared Recipe"}]}),
+        ]
+        round3_retry = [json.dumps({"query": "unique", "results": [{"id": "100", "name": "Unique Recipe"}]})]
+        detail = [
+            json.dumps({"id": "99", "name": "Shared Recipe", "ingredients": ["1 shared thing"]}),
+            json.dumps({"id": "100", "name": "Unique Recipe", "ingredients": ["1 unique thing"]}),
+        ]
+        with patch.object(sla, "_llm_candidate_terms", return_value=terms), \
+             patch.object(sla.mcp_client, "call_tools_parallel_sync",
+                          side_effect=[round1, round2, round3_retry, detail]):
+            result = sla._fetch_dish_ingredients(["Dish A", "Dish B"])
+
+        self.assertEqual(result["Dish A"]["meal_name"], "Shared Recipe")
+        self.assertEqual(result["Dish B"]["meal_name"], "Unique Recipe")
+
+    def test_a_middle_ingredient_word_is_tried_when_the_full_phrase_matches_nothing(self):
+        # Same real-world case as recipe_portion_agent.py's own fix:
+        # TheMealDB has no title matching "chicken chorizo quesadillas" or
+        # "quesadillas" alone, but "chorizo" matches a real, closely
+        # related dish.
+        dish = "Chicken and Chorizo Quesadillas"
+        terms = {dish: [dish, "chicken chorizo quesadillas", "quesadillas", "chorizo"]}
+        round1 = [json.dumps({"query": dish, "results": []})]
+        round2 = [json.dumps({"query": "chicken chorizo quesadillas", "results": []})]
+        round3 = [json.dumps({"query": "quesadillas", "results": []})]
+        round4 = [json.dumps({"query": "chorizo", "results": [{"id": "77", "name": "Chicken & chorizo rice pot"}]})]
+        detail = [json.dumps({"id": "77", "name": "Chicken & chorizo rice pot", "ingredients": ["200g chorizo"]})]
+        with patch.object(sla, "_llm_candidate_terms", return_value=terms), \
+             patch.object(sla.mcp_client, "call_tools_parallel_sync",
+                          side_effect=[round1, round2, round3, round4, detail]) as parallel:
+            result = sla._fetch_dish_ingredients([dish])
+
+        terms_tried = [c.args[0][0][2]["name"] for c in parallel.call_args_list[:4]]
+        self.assertEqual(terms_tried, [dish, "chicken chorizo quesadillas", "quesadillas", "chorizo"])
+        self.assertEqual(result[dish]["meal_name"], "Chicken & chorizo rice pot")
 
 
 class OnObservedUtteranceTests(unittest.TestCase):
@@ -343,6 +537,63 @@ class ParseIngredientLinesTests(unittest.TestCase):
 
         self.assertEqual(total_line, "")
 
+    def test_model_summary_lines_are_dropped_not_parsed_as_ingredients(self):
+        # The model sometimes writes its own per-plate average / subtotal /
+        # restated total -- kept, "Average cost per plate: ~$2.31" was parsed
+        # as a fake ingredient and the response ended up with two disagreeing
+        # per-plate figures. The agent recomputes these deterministically.
+        text = (
+            "chicken breast: 5kg (~$40)\n"
+            "Average cost per plate: ~$2.31\n"
+            "Subtotal: ~$40\n"
+            "Cost per serving: ~$1.50\n"
+            "Estimated total: ~$40"
+        )
+        ingredient_lines, other_lines, total_line = _parse_ingredient_lines(text)
+
+        self.assertEqual([name for name, _ in ingredient_lines], ["chicken breast"])
+        self.assertEqual(other_lines, [])
+        self.assertEqual(total_line, "Estimated total: ~$40")
+
+    def test_bare_total_variants_are_captured_as_the_total_line(self):
+        for line in ["Total: ~$300", "Grand total ~$300", "Total cost: $300", "Overall total: ~$300"]:
+            _, _, total_line = _parse_ingredient_lines(f"onion: 3kg (~$6)\n{line}")
+            self.assertEqual(total_line, line, line)
+
+
+class ToOneServingTests(unittest.TestCase):
+    """A Recipe & Portion writeup that was already scaled to a headcount
+    ("Full service -- quantities to prepare N servings ...") is divided
+    back to one serving so this agent doesn't multiply by the headcount a
+    second time."""
+
+    def test_a_plain_writeup_is_returned_unchanged(self):
+        text = "Grilled salmon: 150 g salmon, 90 g rice; 220 g plate."
+        self.assertEqual(_to_one_serving(text), (text, 1))
+
+    def test_a_batch_writeup_is_divided_back_and_the_preamble_dropped(self):
+        text = (
+            "Full service -- quantities to prepare 4 servings of each dish, scaled from the one-serving amounts:\n\n"
+            "Grilled salmon: 600 g salmon, 1.2 L stock; sear 3-4 min, bake at 400 F; 220 g plate.\n"
+            "Chickpea stew: 720 g chickpeas; simmer 20 min; 300 g bowl."
+        )
+        out, n = _to_one_serving(text)
+        self.assertEqual(n, 4)
+        self.assertNotIn("Full service", out)
+        self.assertIn("150 g salmon", out)
+        self.assertIn("300 ml stock", out)          # 1.2 L / 4, rolled down
+        self.assertIn("180 g chickpeas", out)
+        self.assertIn("3-4 min", out)               # times untouched
+        self.assertIn("400 F", out)                 # temps untouched
+        self.assertIn("220 g plate", out)           # per-plate size untouched
+        self.assertIn("300 g bowl", out)            # per-bowl size untouched
+
+    def test_scaled_to_one_is_treated_as_not_a_batch(self):
+        text = "Full service -- quantities to prepare 1 serving:\n\nGrilled salmon: 150 g salmon."
+        out, n = _to_one_serving(text)
+        self.assertEqual(n, 1)
+        self.assertEqual(out, text)
+
 
 class CategorizeIngredientsTests(unittest.TestCase):
     def test_empty_list_makes_no_call(self):
@@ -445,6 +696,52 @@ class GroupByCategoryTests(unittest.TestCase):
         for category in sla.CATEGORIES:
             if category != "Meat & Poultry":
                 self.assertNotIn(f"{category}:", result)
+
+
+class RollUpLineTests(unittest.TestCase):
+    """The scaling model prints the raw scaled figure ("5000g", "100 tbsp");
+    _roll_up_line rewrites each line's quantity into a bulk unit, leaving
+    the ingredient name and the cost untouched, and leaving anything it
+    doesn't recognise exactly as written."""
+
+    def test_grams_over_a_kilo_become_kilograms(self):
+        self.assertEqual(_roll_up_line("scallops: 5000g (~$150)"), "scallops: 5 kg (~$150)")
+        self.assertEqual(_roll_up_line("salmon: 12000 g (~$180)"), "salmon: 12 kg (~$180)")
+
+    def test_millilitres_over_a_litre_become_litres(self):
+        self.assertEqual(_roll_up_line("olive oil: 1500 ml (~$15)"), "olive oil: 1.5 L (~$15)")
+
+    def test_spoons_convert_to_litres_or_cups(self):
+        self.assertEqual(_roll_up_line("butter: 100 tbsp (~$10)"), "butter: 1.48 L (~$10)")
+        self.assertEqual(_roll_up_line("lemon juice: 100 tsp (~$10)"), "lemon juice: 2.08 cups (~$10)")
+
+    def test_ounces_over_a_pound_become_pounds(self):
+        self.assertEqual(_roll_up_line("beef: 40 oz (~$30)"), "beef: 2.5 lb (~$30)")
+
+    def test_thousands_separator_is_handled(self):
+        self.assertEqual(_roll_up_line("flour: 12,000 g (~$9)"), "flour: 12 kg (~$9)")
+
+    def test_count_based_items_are_left_alone(self):
+        self.assertEqual(_roll_up_line("garlic: 100 cloves (~$5)"), "garlic: 100 cloves (~$5)")
+
+    def test_amounts_below_the_threshold_are_left_alone(self):
+        self.assertEqual(_roll_up_line("cream: 800 ml (~$4)"), "cream: 800 ml (~$4)")
+        self.assertEqual(_roll_up_line("sugar: 8 tbsp (~$1)"), "sugar: 8 tbsp (~$1)")
+        self.assertEqual(_roll_up_line("chicken breast: 5kg (~$40)"), "chicken breast: 5kg (~$40)")
+
+    def test_non_numeric_quantities_are_left_alone(self):
+        self.assertEqual(_roll_up_line("salt: Pinch (~$1)"), "salt: Pinch (~$1)")
+        self.assertEqual(_roll_up_line("lime: Juice of 50 limes (~$5)"), "lime: Juice of 50 limes (~$5)")
+
+    def test_a_line_with_no_cost_suffix_is_untouched(self):
+        self.assertEqual(_roll_up_line("milk: 3000 ml"), "milk: 3000 ml")
+
+    def test_roll_up_happens_in_build_category_sections(self):
+        text = "salmon: 12000g (~$180)\nEstimated total: ~$180"
+        sections, _other, total_line = _build_category_sections(text)
+        all_lines = [line for _cat, lines in sections for line in lines]
+        self.assertIn("salmon: 12 kg (~$180)", all_lines)
+        self.assertEqual(total_line, "Estimated total: ~$180")
 
 
 class DedupeIngredientLinesTests(unittest.TestCase):

@@ -43,6 +43,18 @@ from agents.base_strategy_agent import BaseStrategyAgent, make_flask_app, render
 import mcp_client
 import llm_utils
 
+# Most LLM calls here just parse or classify text, so they run on the
+# smaller, cheaper "lookup" model tier. See llm_utils.LOOKUP_* / .env.
+_LOOKUP = {"ollama_model": llm_utils.LOOKUP_OLLAMA_MODEL, "openai_model": llm_utils.LOOKUP_LLM_MODEL}
+
+# The one exception: the consolidated shopping-list call multiplies every
+# one-serving amount by the headcount and sums matching ingredients across
+# every dish -- a dozen-plus multiply-and-add steps in a single pass. The
+# lookup model gets that arithmetic wrong (confirmed live: 120g/serving x
+# 100 people came back as 1.5kg instead of 12kg, and whole ingredients
+# were dropped from the list), so this call keeps the full analysis model.
+_SCALING = {}  # empty -> llm_utils defaults to the full OLLAMA_MODEL / LLM_MODEL
+
 logger = logging.getLogger(__name__)
 
 # Hardcoded to match agents/recipe_portion_specialist/recipe_portion_agent.py's
@@ -92,15 +104,22 @@ intermediate per-dish math, or scratch work; the visible response is the
 final list ONLY.
 
 Pass 1 (internal): build one merged ingredient list across ALL dishes.
+For EVERY ingredient of EVERY dish, multiply its one-serving amount by the
+headcount exactly -- total = per-serving amount x headcount (e.g. 120 g per
+serving x 100 people = 12000 g). Do this for every ingredient; never skip a
+dish or an ingredient, and never leave an amount near its one-serving size.
 Treat two ingredient names as the SAME ingredient whenever they refer to
 the same thing regardless of capitalization, singular/plural, or minor
 wording ("Onions", "onion", "diced onions" are all one ingredient: onions).
-Scale each dish's ingredients from one serving up to the full headcount,
 THEN add matching ingredients from different dishes into one running total
 each. There must be exactly one entry per distinct ingredient -- if you
 notice two entries that are the same ingredient, merge them (normalize
 compatible units first, e.g. grams and kg; only keep an ingredient as two
 lines if the units genuinely can't be combined, e.g. "2 cloves" vs "500g").
+Give each total in a sensible bulk unit: grams as kilograms once over
+1000 g, millilitres as litres once over 1000 ml, and teaspoons/tablespoons
+converted to cups or litres when the count is large. Keep count-based items
+(eggs, scallops, cloves of garlic, whole lemons) as plain counts.
 
 Pass 2 (internal): for each entry in that merged list, estimate a
 reasonable wholesale/bulk grocery cost for the total quantity, using your
@@ -170,7 +189,14 @@ Respond with ONLY a single JSON object mapping each given ingredient name
 no other text: {{"<ingredient name>": "<category>", ...}}
 """
 
-_TOTAL_LINE_PATTERN = re.compile(r"^Estimated total\b", re.IGNORECASE)
+# The final total line. "Estimated total: ~$X" is what SYSTEM_PROMPT asks
+# for, but the model also writes "Total: $X", "Grand total ~$X",
+# "Total cost: $X" -- all mean the same final figure and must be captured
+# as the total, not dropped as noise or parsed as an ingredient.
+_TOTAL_LINE_PATTERN = re.compile(
+    r"^\s*(?:estimated|grand|approx\.?|approximate|overall|final)?\s*total(?:\s+(?:estimated\s+)?cost)?\s*:?\s*~?\$?",
+    re.IGNORECASE,
+)
 # Matched by content ("could not be found" appearing anywhere in the
 # line), not just the exact "Dishes with no ingredient data found: ..."
 # phrasing the SYSTEM_PROMPT asks for -- confirmed live that the model
@@ -178,6 +204,22 @@ _TOTAL_LINE_PATTERN = re.compile(r"^Estimated total\b", re.IGNORECASE)
 # could not be found."), which still contains a colon and would otherwise
 # be treated as a real ingredient line and dumped into "Other".
 _NOT_FOUND_LINE_PATTERN = re.compile(r"^Dishes with no\b|could not be found", re.IGNORECASE)
+# Summary lines the model sometimes adds on its own -- a per-plate/per-
+# serving average, a running subtotal, a restated grand total. This agent
+# computes the total and the per-plate average deterministically (see
+# _recompute_total_line / _average_cost_per_plate_line), so any such line
+# from the model is dropped: kept, they were parsed as fake "ingredients"
+# ("Average cost per plate: ~$2.31" landing under a category) AND left the
+# response with two disagreeing per-plate figures next to the real total.
+_SUMMARY_NOISE_PATTERN = re.compile(
+    r"^\s*(?:the\s+)?(?:average|avg\.?|mean|approximate|approx\.?|overall|estimated)?\s*"
+    r"(?:cost|price|spend|amount)\s+per\s+"
+    r"(?:plate|serving|portion|meal|person|head|cover|dish|day|week)\b"
+    r"|^\s*(?:cost|price)\s+per\s+(?:plate|serving|portion|meal|person|head)\b"
+    r"|^\s*per[-\s](?:plate|serving|portion|person)\s+(?:cost|price)\b"
+    r"|^\s*(?:sub-?total|running\s+total)\b",
+    re.IGNORECASE,
+)
 
 
 def _parse_ingredient_lines(text: str) -> tuple[list[tuple[str, str]], list[str], str]:
@@ -198,6 +240,9 @@ def _parse_ingredient_lines(text: str) -> tuple[list[tuple[str, str]], list[str]
             continue
         if _NOT_FOUND_LINE_PATTERN.search(line):
             other_lines.append(line)
+            continue
+        if _SUMMARY_NOISE_PATTERN.match(line):
+            # the model's own per-plate/subtotal line -- we recompute these
             continue
         if ":" in line:
             name = line.split(":", 1)[0].strip()
@@ -231,12 +276,138 @@ def _dedupe_ingredient_lines(ingredient_lines: list[tuple[str, str]]) -> list[tu
 
 _LINE_COST_PATTERN = re.compile(r"\(~\$([\d,]+(?:\.\d+)?)\)\s*$")
 
+# Deterministic unit roll-up for a per-ingredient line's quantity. The
+# scaling model now multiplies reliably (see _SCALING) but still prints the
+# raw scaled figure -- "5000g", "100 tbsp" -- rather than a bulk unit. This
+# converts the leading "<number> <unit>" of a line's quantity into a
+# sensible bulk unit; anything it doesn't recognise (count-based items like
+# "100 cloves", or non-numeric amounts like "Pinch" / "Juice of 50 limes")
+# is left exactly as written.
+_QTY_SEGMENT_RE = re.compile(r"^(.*?:\s*)(.*?)(\s*\(~\$[\d,]+(?:\.\d+)?\)\s*)$")
+_LEADING_QTY_RE = re.compile(r"^(\d+(?:[.,]\d+)?)\s*([A-Za-z]+)\b(.*)$")
+_ML_PER_UNIT = {
+    "tsp": 4.92892, "teaspoon": 4.92892, "teaspoons": 4.92892,
+    "tbsp": 14.7868, "tablespoon": 14.7868, "tablespoons": 14.7868,
+    "cup": 236.588, "cups": 236.588,
+}
+
+
+def _fmt_qty_number(value: float) -> str:
+    """Trim a rolled-up quantity to at most 2 decimals, no trailing zeros."""
+    text = f"{value:.2f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _roll_up_amount(number: float, unit: str) -> tuple[float, str] | None:
+    """(new_number, new_unit) for a quantity worth expressing in a larger
+    unit, or None to leave it as written."""
+    u = unit.lower()
+    if u in ("g", "gram", "grams", "gm", "gms") and number >= 1000:
+        return number / 1000, "kg"
+    if u == "mg" and number >= 1000:
+        return number / 1000, "g"
+    if u in ("ml", "milliliter", "milliliters", "millilitre", "millilitres") and number >= 1000:
+        return number / 1000, "L"
+    if u in _ML_PER_UNIT:
+        millilitres = number * _ML_PER_UNIT[u]
+        if millilitres >= 1000:
+            return millilitres / 1000, "L"
+        if millilitres >= 240:
+            return millilitres / 236.588, "cups"
+        return None  # a small volume -- leave the spoons as written
+    if u in ("oz", "ounce", "ounces") and number >= 16:
+        return number / 16, "lb"
+    return None
+
+
+def _roll_up_line(line: str) -> str:
+    """Rewrite one "<ingredient>: <qty> (~$<cost>)" line's quantity into a
+    bulk unit where that helps; return it unchanged otherwise (no cost
+    suffix, non-numeric quantity, or a unit not worth converting)."""
+    segments = _QTY_SEGMENT_RE.match(line)
+    if not segments:
+        return line
+    prefix, quantity, cost = segments.groups()
+    leading = _LEADING_QTY_RE.match(quantity.strip())
+    if not leading:
+        return line
+    number_text, unit, rest = leading.groups()
+    try:
+        number = float(number_text.replace(",", ""))
+    except ValueError:
+        return line
+    rolled = _roll_up_amount(number, unit)
+    if rolled is None:
+        return line
+    new_number, new_unit = rolled
+    return f"{prefix}{_fmt_qty_number(new_number)} {new_unit}{rest}{cost}"
+
 
 def _format_dollars(amount: float) -> str:
     """"$23" for a whole number, "$23.50" for a fractional one -- never a
     trailing ".00"."""
     formatted = f"{amount:.2f}".rstrip("0").rstrip(".")
     return f"${formatted}"
+
+
+# The Recipe & Portion Specialist now hands back a whole-menu writeup that
+# is ALREADY scaled to a headcount when it was asked for one directly ("for
+# 4 people"), prefixed "Full service -- quantities to prepare N servings ...".
+# This agent's prompt then treats those amounts as one-serving and
+# multiplies by the headcount AGAIN -- a 4x-too-big shopping list. Detect
+# that marker and divide the amounts back to one serving first, so the
+# scaling pass multiplies exactly once from clean per-serving data.
+_BATCH_MARKER_RE = re.compile(r"\b(?:quantities to prepare|prepare)\s+(\d{1,6})\s+servings?\b", re.IGNORECASE)
+_BATCH_PREAMBLE_RE = re.compile(r"\A\s*full[\s-]?service\b[^\n]*(?:\n\s*)+", re.IGNORECASE)
+_RESCALE_MASS_G = {"g": 1, "gram": 1, "grams": 1, "gm": 1, "gms": 1,
+                   "kg": 1000, "kilo": 1000, "kilos": 1000, "kilogram": 1000, "kilograms": 1000, "mg": 0.001}
+_RESCALE_VOL_ML = {"ml": 1, "milliliter": 1, "milliliters": 1, "millilitre": 1, "millilitres": 1,
+                   "l": 1000, "liter": 1000, "liters": 1000, "litre": 1000, "litres": 1000}
+_RESCALE_COUNT = {"tsp", "tbsp", "teaspoon", "teaspoons", "tablespoon", "tablespoons", "cup", "cups",
+                  "clove", "cloves", "slice", "slices", "sprig", "sprigs", "can", "cans", "stick", "sticks",
+                  "oz", "ounce", "ounces", "lb", "lbs", "pound", "pounds"}
+_RESCALE_QTY_RE = re.compile(r"(\d+(?:\.\d+)?)(\s*)([A-Za-z]+)\b")
+
+
+def _rescale_amounts(text: str, factor: float) -> str:
+    """Multiply every "<number> <food-unit>" in a recipe writeup by factor
+    (used here with factor < 1 to divide a batch writeup back to one
+    serving), rolling mass/volume down to g/ml when the result drops below
+    1 kg / 1 L. Times ("3 min"), temperatures ("400 F"), dimensions ("1
+    inch") and a per-plate figure carry no food unit / are left alone."""
+    def repl(match: re.Match) -> str:
+        after = text[match.end():match.end() + 18].lower()
+        if any(w in after for w in ("plate", "bowl", "per serving", "serving size", "portion size", "per plate", "per bowl")):
+            return match.group(0)
+        num, spacer, unit_raw = match.group(1), match.group(2), match.group(3)
+        unit = unit_raw.lower()
+        value = float(num) * factor
+        if unit in _RESCALE_MASS_G:
+            grams = value * _RESCALE_MASS_G[unit]
+            return f"{_fmt_qty_number(grams / 1000)} kg" if grams >= 1000 else f"{_fmt_qty_number(grams)} g"
+        if unit in _RESCALE_VOL_ML:
+            millilitres = value * _RESCALE_VOL_ML[unit]
+            return f"{_fmt_qty_number(millilitres / 1000)} L" if millilitres >= 1000 else f"{_fmt_qty_number(millilitres)} ml"
+        if unit in _RESCALE_COUNT:
+            return f"{_fmt_qty_number(value)}{spacer}{unit_raw}"
+        return match.group(0)
+
+    return _RESCALE_QTY_RE.sub(repl, text)
+
+
+def _to_one_serving(recipe_text: str) -> tuple[str, int]:
+    """(one-serving writeup, N) -- if `recipe_text` was already scaled to N
+    servings (Recipe & Portion's "Full service -- quantities to prepare N
+    servings ..." preamble), divide it back and drop the preamble; N is 1
+    when it was not a batch writeup."""
+    m = _BATCH_MARKER_RE.search(recipe_text or "")
+    if not m:
+        return recipe_text, 1
+    n = int(m.group(1))
+    if n <= 1:
+        return recipe_text, 1
+    body = _BATCH_PREAMBLE_RE.sub("", recipe_text, count=1)
+    return _rescale_amounts(body, 1.0 / n), n
 
 
 def _recompute_total_line(ingredient_lines: list[tuple[str, str]]) -> str | None:
@@ -344,7 +515,7 @@ def _categorize_ingredients(names: list[str]) -> dict[str, str]:
     failure) is left for the caller to default to "Other"."""
     if not names:
         return {}
-    raw = llm_utils.chat_sync(_CATEGORIZE_SYSTEM_PROMPT, json.dumps(names), temperature=0, timeout=20)
+    raw = llm_utils.chat_sync(_CATEGORIZE_SYSTEM_PROMPT, json.dumps(names), temperature=0, timeout=20, **_LOOKUP)
     match = re.search(r"\{[\s\S]*\}", raw)
     if not match:
         return {}
@@ -373,7 +544,10 @@ def _build_category_sections(text: str) -> tuple[list[tuple[str, list[str]]], li
     deduped_lines = _dedupe_ingredient_lines(ingredient_lines)
     if len(deduped_lines) != len(ingredient_lines):
         total_line = _recompute_total_line(deduped_lines) or total_line
-    ingredient_lines = deduped_lines
+    # Roll each quantity up to a bulk unit AFTER dedup/total (costs are
+    # untouched, so the total stays correct) and BEFORE categorization
+    # (the ingredient name is unchanged, so grouping is unaffected).
+    ingredient_lines = [(name, _roll_up_line(line)) for name, line in deduped_lines]
     if not ingredient_lines:
         return [], other_lines, total_line
 
@@ -457,7 +631,7 @@ def _categorized_response(raw: str, headcount: int) -> dict:
 
 
 def _extract_menu(user_text: str) -> dict:
-    raw = llm_utils.chat_sync(_EXTRACTION_SYSTEM_PROMPT, user_text, temperature=0, timeout=15)
+    raw = llm_utils.chat_sync(_EXTRACTION_SYSTEM_PROMPT, user_text, temperature=0, timeout=15, **_LOOKUP)
     match = re.search(r"\{[\s\S]*\}", raw)
     if not match:
         return {"dishes": [], "headcount": None}
@@ -471,11 +645,21 @@ def _extract_menu(user_text: str) -> dict:
     return {"dishes": dishes, "headcount": headcount}
 
 
-_DISH_EXTRACTION_SYSTEM_PROMPT = """Extract the distinct dish names from a cafeteria recipe/portion writeup.
+_DISH_EXTRACTION_SYSTEM_PROMPT = """Extract the main dishes from a cafeteria recipe/portion writeup.
 
-Identify every distinct DISH (a specific food item someone would cook -- e.g.
-"Grilled Chicken Caesar Salad"). Ignore day labels ("Day 1:") and anything
-that isn't an actual dish name.
+Return ONE entry per dish (per day / per meal) -- the whole meal as a
+single dish, named by its main or centerpiece component in 2-4 plain words
+("Grilled salmon", "Herb-crusted pork tenderloin", "Stuffed portobello").
+
+Do NOT:
+- break a meal into parts -- sides, starches, vegetables, salads, sauces,
+  glazes, dressings, marinades and garnishes belong to their dish, they
+  are not separate dishes ("... with wild rice pilaf and a lemon-pepper
+  crust" is still just "Grilled salmon")
+- include day labels ("Day 1:"), headcounts, serving or operational
+  notes, or anything that isn't a dish
+- keep plating flourishes ("pan-seared", "served over", "with a drizzle
+  of ...") -- name the dish, not how it is presented
 
 Respond with ONLY a single JSON object and no other text:
 {"dishes": ["<dish name>", ...]}
@@ -499,7 +683,7 @@ def _extract_dishes_from_recipes(recipe_text: str) -> list[str]:
     week. saved_recipes is the authoritative source of what dishes exist,
     same reasoning as every other specialist's own on_observed_utterance
     hook in this project."""
-    raw = llm_utils.chat_sync(_DISH_EXTRACTION_SYSTEM_PROMPT, recipe_text, temperature=0, timeout=15)
+    raw = llm_utils.chat_sync(_DISH_EXTRACTION_SYSTEM_PROMPT, recipe_text, temperature=0, timeout=15, **_LOOKUP)
     match = re.search(r"\{[\s\S]*\}", raw)
     if not match:
         return []
@@ -510,28 +694,283 @@ def _extract_dishes_from_recipes(recipe_text: str) -> list[str]:
     return [d.strip() for d in (parsed.get("dishes") or []) if isinstance(d, str) and d.strip()]
 
 
+# TheMealDB's title search matches a query only as an exact substring of a
+# recipe TITLE (not ingredients, not category), so a Menu-Designer-invented
+# "Herb-crusted pork tenderloin with garlic mashed potatoes" matches
+# nothing while the bare "pork" does -- some retry with a shorter term is
+# unavoidable. Deciding which term used to be a hand-rolled word-filtering
+# heuristic (patched three separate times), then a single LLM call asked
+# to both identify AND rank candidate terms -- confirmed live that the
+# ranking half was unreliable even on the full model tier (run to run, it
+# sometimes ranked a generic word above a far more specific one,
+# regenerating the exact wrong match this feature exists to avoid).
+#
+# Splitting the job fixes that: the LLM only EXTRACTS what's in the dish
+# name into typed slots (a much easier, more reliable task than ranking a
+# flat list), and _terms_from_slots below builds the actual search-term
+# priority order deterministically in code. Same shape as
+# recipe_portion_agent.py's own copy (kept separate: each cafeteria-ops
+# agent is self-contained, no cross-agent imports).
+_SLOT_EXTRACTION_SYSTEM_PROMPT = """Extract structured slots from each cafeteria dish name given, for looking
+it up in TheMealDB, a small recipe database whose search only matches a
+query as an exact substring of a recipe TITLE (not ingredients, not
+category, not cuisine metadata).
+
+For each dish, identify these slots (use null for any that don't apply):
+- "main_ingredient": the single primary protein or vegetable (e.g.
+  "chicken", "lamb", "salmon", "chickpea") -- the core food itself, not a
+  cut, preparation, or plating detail.
+- "secondary_ingredient": another SPECIFIC named ingredient that
+  distinguishes this dish from others sharing the same main ingredient
+  (e.g. "chorizo", "feta", "coconut") -- null if there isn't a clear
+  second one. Must be a specific food, never a generic category word like
+  "vegetable", "meat", "dairy", or "seafood" -- those are too broad to
+  usefully narrow a search (e.g. for "chicken and vegetable biryani", the
+  unnamed vegetables give no real second ingredient, so this is null).
+- "dish_type": the specific category or format of dish if the name
+  states one (e.g. "biryani", "quesadillas", "fajitas", "stew", "salad",
+  "casserole", "curry", "tagine") -- null if it doesn't name one.
+- "sauce_or_style": a named sauce or flavor profile (e.g. "teriyaki",
+  "honey garlic") -- NOT a plain cooking method like "grilled" or
+  "roasted" -- null if there isn't one.
+- "cooking_method": how it's cooked, if the name states one (e.g.
+  "grilled", "roasted", "baked", "fried", "stir-fried") -- null if not
+  named.
+- "cut": the specific cut or part of the animal named, if any (e.g.
+  "thigh", "breast", "wing", "shank", "chop", "loin", "drumstick",
+  "fillet") -- null if not named.
+- "cuisine": the cuisine or region if explicitly named (e.g. "Moroccan",
+  "Mediterranean", "Korean") -- null if not named.
+
+Respond with ONLY a single JSON object mapping each given dish name
+(exactly as given, as the key) to its slots: {"<dish name>":
+{"main_ingredient": ..., "secondary_ingredient": ..., "dish_type": ...,
+"sauce_or_style": ..., "cooking_method": ..., "cut": ..., "cuisine": ...}, ...}
+"""
+
+
+# Cut names that identify a dish as a STEAK even when the word "steak"
+# itself never appears -- fixed, unambiguous world knowledge, so it's
+# deterministic code rather than an LLM inference into dish_type (which
+# confirmed live ranked it too high: several different steak cuts across
+# a week's menu all reduced to the SAME generic "steak" term in the same
+# early round, and the dedupe-by-meal-id step then dropped every dish but
+# the first as a false collision, before their own more specific cut name
+# ever got a chance). Same set as recipe_portion_agent.py's own copy.
+_STEAK_CUTS = frozenset("""
+sirloin ribeye rib-eye filet tenderloin strip t-bone porterhouse flank
+skirt chuck
+""".split())
+
+# secondary_ingredient must be a SPECIFIC named food, never a generic
+# category word ("vegetable", "meat") -- confirmed live the model dodges
+# that instruction just by pluralizing ("vegetables"), a different string
+# the prompt wording never named. Enforced deterministically in code
+# instead of relying on wording. Same set as recipe_portion_agent.py's own
+# copy.
+_GENERIC_CATEGORY_WORDS = frozenset("""
+vegetable meat dairy seafood protein grain starch herb spice fruit legume
+nut green produce
+""".split())
+
+
+def _singular_candidates(word: str) -> list[str]:
+    # More than one stripping rule can apply to the same word (e.g.
+    # "vegetables" ends in both "s" and "es"), and only one of them is
+    # actually right ("vegetable", not "vegetabl") -- so every candidate is
+    # returned and checked against the blocklist, rather than committing to
+    # a single guessed singular form.
+    candidates = [word]
+    if word.endswith("ies") and len(word) > 3:
+        candidates.append(word[:-3] + "y")
+    if word.endswith("es") and len(word) > 2:
+        candidates.append(word[:-2])
+    if word.endswith("s") and not word.endswith("ss") and len(word) > 1:
+        candidates.append(word[:-1])
+    return candidates
+
+
+def _is_generic_category_word(value: str) -> bool:
+    lowered = value.strip().lower()
+    if not lowered:
+        return False
+    return any(c in _GENERIC_CATEGORY_WORDS for c in _singular_candidates(lowered))
+
+
+def _terms_from_slots(slots: dict) -> list[str]:
+    """Deterministic, priority-ordered TheMealDB search terms built from
+    one dish's extracted slots -- most to least likely to find a
+    genuinely relevant recipe. Same priority order and reasoning as
+    recipe_portion_agent.py's own copy:
+      1. dish_type + main_ingredient    6. "steak", same condition
+      2. secondary_ingredient alone     7. cooking_method + main_ingredient
+      3. main_ingredient + sauce        8. cuisine + main_ingredient, as an
+      4. main_ingredient + cut             absolute last resort
+      5. main_ingredient + "steak", if cut is a recognized steak cut (see
+         _STEAK_CUTS) -- tried only after the cut's own name (4 above)
+         has failed, since a cut like "sirloin" has zero TheMealDB
+         coverage on its own but the steak dish-type it implies does
+
+    Deliberately NOT included: main_ingredient alone, cuisine alone,
+    dish_type alone, or sauce_or_style alone. Confirmed live these
+    single-word fallbacks are exactly what produced every wrong match
+    found ("chicken" -> the unrelated "Chicken Handi"; "Moroccan" -> the
+    unrelated "Moroccan Carrot Soup"; "beef" -> "Beef pho" fed downstream
+    as if it were a seared ribeye steak's real ingredients; "tacos" -> the
+    unrelated "Breadfruit Tacos"; "pizza" -> the unrelated "Cassava
+    pizza"; "barbecue" -> the unrelated "Barbecue pork buns", even fed
+    downstream for a dish explicitly labeled Vegetarian). A dish-type or
+    sauce/style word turned out to be just as risky as a bare ingredient
+    or cuisine word -- each names a whole category ("tacos", "pizza",
+    "barbecue") that covers countless unrelated dishes, not a specific
+    one. A wrong "real" recipe silently misleading the shopping list is
+    worse than an honest "not found" falling through to clearly-labeled
+    general knowledge -- every remaining tier above still requires at
+    least two pieces of information to align in one title.
+
+    Non-string or blank slot values are treated as absent. Duplicates are
+    dropped, keeping first occurrence."""
+    def _s(key: str) -> str:
+        value = slots.get(key)
+        return value.strip() if isinstance(value, str) else ""
+
+    main, secondary = _s("main_ingredient"), _s("secondary_ingredient")
+    if _is_generic_category_word(secondary):
+        secondary = ""
+    dish_type, sauce, cuisine = _s("dish_type"), _s("sauce_or_style"), _s("cuisine")
+    cooking, cut = _s("cooking_method"), _s("cut")
+    # any() not an exact match -- confirmed live a multi-word cut like
+    # "filet mignon" never equals the single word "filet" in _STEAK_CUTS.
+    is_steak_cut = any(word in _STEAK_CUTS for word in cut.lower().split())
+
+    ordered_candidates = [
+        f"{dish_type} {main}".strip() if dish_type and main else "",
+        secondary,
+        f"{main} {sauce}".strip() if main and sauce else "",
+        f"{main} {cut}".strip() if main and cut else "",
+        cut,
+        f"{main} steak".strip() if main and is_steak_cut else "",
+        "steak" if is_steak_cut else "",
+        f"{cooking} {main}".strip() if cooking and main else "",
+        f"{cuisine} {main}".strip() if cuisine and main else "",
+    ]
+    seen: set[str] = set()
+    result: list[str] = []
+    for term in ordered_candidates:
+        key = term.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            result.append(term)
+    return result
+
+
+def _llm_candidate_terms(dishes: list[str]) -> dict[str, list[str]]:
+    """dish -> ordered TheMealDB search terms (best first): the exact dish
+    name (always prepended as the first, free attempt), followed by the
+    deterministic priority order built from that dish's LLM-extracted
+    slots (see _terms_from_slots). Falls back to [dish] alone for any
+    dish missing or malformed in the LLM response, so a parse failure
+    degrades to "just try the exact name" rather than losing the retry
+    entirely.
+
+    Uses the full model tier, not _LOOKUP -- confirmed live (same finding
+    as recipe_portion_agent.py's own copy) that the smaller lookup-tier
+    model was noticeably less reliable at this kind of attribute
+    extraction than the full model."""
+    if not dishes:
+        return {}
+    raw = llm_utils.chat_sync(_SLOT_EXTRACTION_SYSTEM_PROMPT, json.dumps(dishes), temperature=0, timeout=30)
+    match = re.search(r"\{[\s\S]*\}", raw)
+    parsed = {}
+    if match:
+        try:
+            parsed = json.loads(match.group())
+        except json.JSONDecodeError:
+            parsed = {}
+
+    result: dict[str, list[str]] = {}
+    for dish in dishes:
+        slots = parsed.get(dish)
+        candidates = [dish] + (_terms_from_slots(slots) if isinstance(slots, dict) else [])
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for term in candidates:
+            key = term.strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                ordered.append(term)
+        result[dish] = ordered
+    return result
+
+
 def _fetch_dish_ingredients(dishes: list[str]) -> dict[str, dict | None]:
     """dish name -> {"meal_name": str, "ingredients": [str, ...]}, or None
-    when no match was found. Two rounds are needed because TheMealDB's name
-    search only returns a summary (id/name/category) -- the real
-    ingredients list comes from a second, per-meal-id lookup."""
+    when no match was found. Two stages are needed because TheMealDB's
+    name search only returns a summary (id/name/category) -- the real
+    ingredients list comes from a second, per-meal-id lookup. The search
+    stage itself retries down each dish's LLM-ranked candidate-term list
+    (see _llm_candidate_terms) rather than giving up after one failed
+    search on the full dish name -- confirmed live that TheMealDB's small
+    catalog rarely has an exact title match for a Menu-Designer-invented
+    dish name, and this agent previously had no fallback at all (unlike
+    recipe_portion_agent.py's own matching, which already retried).
+
+    A dish that loses the meal-id dedupe (see below) is given back its
+    OWN remaining candidate terms and retried, rather than simply dropped
+    -- same fix as recipe_portion_agent.py's own copy, for the same
+    reason: two dishes both falling back to the same shared generic term
+    should each still get a real recipe if either has more candidates
+    of its own worth trying, not just whichever happened to go first."""
     if not dishes:
         return {}
 
-    search_requests = [("themealdb", "search_by_name", {"name": dish[:60]}) for dish in dishes]
-    search_results = mcp_client.call_tools_parallel_sync(search_requests, timeout=10.0)
-
+    remaining: dict[str, list[str]] = _llm_candidate_terms(dishes)
     top_match: dict[str, tuple[str, str]] = {}  # dish -> (meal_id, meal_name)
-    for dish, raw in zip(dishes, search_results):
-        if not raw:
-            continue
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        results = parsed.get("results") or []
-        if results and results[0].get("id"):
-            top_match[dish] = (results[0]["id"], results[0].get("name") or dish)
+    needs_attempt = list(dishes)  # a plain list, not a set -- request/result
+    # order below has to track ``dishes``' own order (via zip).
+
+    while needs_attempt:
+        pending = {dish: remaining[dish] for dish in needs_attempt if remaining.get(dish)}
+        while pending:
+            attempt = {dish: terms[0] for dish, terms in pending.items()}
+            search_requests = [("themealdb", "search_by_name", {"name": term[:60]}) for term in attempt.values()]
+            search_results = mcp_client.call_tools_parallel_sync(search_requests, timeout=10.0)
+
+            next_pending: dict[str, list[str]] = {}
+            for (dish, _term), raw in zip(attempt.items(), search_results):
+                remaining[dish] = remaining[dish][1:]  # consumed either way
+                hit = None
+                if raw:
+                    try:
+                        results = json.loads(raw).get("results") or []
+                    except json.JSONDecodeError:
+                        results = []
+                    if results and results[0].get("id"):
+                        hit = (results[0]["id"], results[0].get("name") or dish)
+                if hit:
+                    top_match[dish] = hit
+                elif remaining[dish]:
+                    next_pending[dish] = remaining[dish]
+            pending = next_pending
+
+        # Dedupe by meal_id: two dish names can match the same TheMealDB
+        # recipe. Keep the first dish (menu order); re-queue any other
+        # dish claiming the same one (if it has candidates left) rather
+        # than dropping it outright, so the while loop above gives it
+        # another attempt with its next term.
+        claimed: dict[str, str] = {}  # meal_id -> first dish that claimed it
+        needs_attempt = []
+        for dish in dishes:
+            pair = top_match.get(dish)
+            if pair is None:
+                continue
+            meal_id = pair[0]
+            if meal_id in claimed:
+                del top_match[dish]
+                if remaining.get(dish):
+                    needs_attempt.append(dish)
+            else:
+                claimed[meal_id] = dish
 
     output: dict[str, dict | None] = {dish: None for dish in dishes}
     if not top_match:
@@ -558,6 +997,7 @@ class ShoppingListAgent(BaseStrategyAgent):
     AGENT_PORT = 8310
     AGENT_SYNOPSIS = "Aggregates a week's menu into ingredient quantities and estimated costs"
     AGENT_CAPABILITY_DETAIL = "Sums real per-dish ingredient quantities across a week's menu into one shopping list with estimated costs."
+    WORKING_LABEL = "totalling up the shopping list"
     AGENT_KEYPHRASES = ["shopping list", "grocery list", "how much", "ingredients needed",
                          "quantities", "buy", "order", "purchase list"]
     # BaseStrategyAgent's default of 50 words is a single-item budget --
@@ -597,7 +1037,7 @@ class ShoppingListAgent(BaseStrategyAgent):
         # (see _extract_dishes_from_recipes's docstring).
         saved_recipes = self._observed_recipes.get(self._current_conv_id, "")
         if saved_recipes:
-            dishes = _extract_dishes_from_recipes(saved_recipes)
+            dishes = _extract_dishes_from_recipes(_BATCH_PREAMBLE_RE.sub("", saved_recipes, count=1))
             if dishes:
                 return self._respond_from_recipe_portion(dishes, headcount, headcount_note, saved_recipes)
 
@@ -610,6 +1050,17 @@ class ShoppingListAgent(BaseStrategyAgent):
         return self._respond_from_themealdb(dishes, headcount, headcount_note)
 
     def _respond_from_recipe_portion(self, dishes: list[str], headcount: int, headcount_note: str, saved_recipes: str) -> dict:
+        # If Recipe & Portion already scaled its writeup to a headcount,
+        # divide it back to one serving so the scaling pass below multiplies
+        # exactly once (not twice).
+        saved_recipes, already_scaled_to = _to_one_serving(saved_recipes)
+        if already_scaled_to > 1:
+            logger.info(
+                "[ShoppingList] Recipe & Portion writeup was pre-scaled to %d servings; "
+                "divided back to one serving before scaling to %d",
+                already_scaled_to, headcount,
+            )
+
         user_message = f"""{self._history_block()}Week's menu ({len(dishes)} dishes) for {headcount} people{headcount_note}:
 {', '.join(dishes)}
 
@@ -618,7 +1069,7 @@ Real one-serving ingredient amounts already determined by the Recipe & Portion S
 
 Please produce one consolidated shopping list (total quantity + estimated cost per ingredient) scaled to {headcount} people."""
 
-        raw = llm_utils.chat_sync(SYSTEM_PROMPT, user_message, timeout=45)
+        raw = llm_utils.chat_sync(SYSTEM_PROMPT, user_message, timeout=45, **_SCALING)
         return _categorized_response(raw, headcount)
 
     def _respond_from_themealdb(self, dishes: list[str], headcount: int, headcount_note: str) -> dict:
@@ -640,7 +1091,7 @@ Real per-serving ingredient data retrieved from TheMealDB:
 
 Please produce one consolidated shopping list (total quantity + estimated cost per ingredient) scaled to {headcount} people."""
 
-        raw = llm_utils.chat_sync(SYSTEM_PROMPT, user_message, timeout=45)
+        raw = llm_utils.chat_sync(SYSTEM_PROMPT, user_message, timeout=45, **_SCALING)
         return _categorized_response(raw, headcount)
 
 

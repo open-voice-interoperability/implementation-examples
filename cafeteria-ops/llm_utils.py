@@ -12,6 +12,15 @@ Configure via environment variables:
   LLM_API_KEY    - OpenAI API key
   LLM_MODEL      - OpenAI model name (default: gpt-4o-mini)
   LLM_PROVIDER   - 'auto' (try Ollama first, then OpenAI), 'ollama', or 'openai'
+
+  CLASSIFIER_OLLAMA_MODEL / CLASSIFIER_LLM_MODEL - tiny model tier for the
+    convener's routing/intent classification (a narrow decision that
+    degrades safely to a regex fallback).
+  LOOKUP_OLLAMA_MODEL / LOOKUP_LLM_MODEL - smaller model tier for the
+    specialists that mostly look up and format data (nutrition, recipe/
+    portion, menu optimization, inventory, procurement, shopping list)
+    rather than doing open-ended creative work. Only the Menu Designer
+    keeps the full analysis model (OLLAMA_MODEL / LLM_MODEL).
 """
 
 import os
@@ -49,6 +58,17 @@ LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 # "qwen2.5:3b" or "llama3.2:1b") if you have a smaller model available.
 CLASSIFIER_LLM_MODEL = os.getenv("CLASSIFIER_LLM_MODEL", "gpt-4.1-nano")
 CLASSIFIER_OLLAMA_MODEL = os.getenv("CLASSIFIER_OLLAMA_MODEL", OLLAMA_MODEL)
+
+# Mid ("lookup") tier for specialists that retrieve and format data rather
+# than reason open-endedly -- capable enough to summarize USDA/TheMealDB
+# results and do portion arithmetic, but no need for the full analysis
+# model. LOOKUP_LLM_MODEL defaults to gpt-4o-mini (already the cheap,
+# always-available OpenAI default). LOOKUP_OLLAMA_MODEL defaults to
+# OLLAMA_MODEL (a no-op) for the same reason as CLASSIFIER_OLLAMA_MODEL --
+# there's no safe way to guess a smaller tag that's actually pulled
+# locally; set it in .env (e.g. "qwen2.5:7b" or "llama3.2:3b").
+LOOKUP_LLM_MODEL = os.getenv("LOOKUP_LLM_MODEL", "gpt-4o-mini")
+LOOKUP_OLLAMA_MODEL = os.getenv("LOOKUP_OLLAMA_MODEL", OLLAMA_MODEL)
 
 LANGUAGE_RESPONSE_POLICY = (
     "Response language rule: respond in the same natural language as the person's own "

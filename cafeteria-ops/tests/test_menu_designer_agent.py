@@ -114,6 +114,25 @@ class ImagePromptTests(unittest.TestCase):
         prompt = mda._image_prompt("Day 1: Lentil soup")
         self.assertIn("Lentil soup", prompt)
 
+    def test_savoury_line_is_plated_as_a_lunch_plate(self):
+        prompt = mda._image_prompt("Day 1: Chicken curry, rice, cucumber salad.")
+        self.assertIn("cafeteria lunch plate", prompt)
+        self.assertNotIn("dessert", prompt.lower())
+
+    def test_dessert_line_is_plated_as_a_dessert(self):
+        for line in [
+            "Day 2: Lemon tart with raspberry coulis",
+            "Dark chocolate mousse",
+            "Day 5: Apple cobbler with vanilla ice cream",
+            "Sticky toffee pudding",
+        ]:
+            prompt = mda._image_prompt(line)
+            self.assertIn("cafeteria dessert serving", prompt, line)
+            self.assertIn("dessert plate or bowl", prompt, line)
+            self.assertNotIn("lunch plate", prompt, line)
+            # anti-duplication instruction still present
+            self.assertIn("do not repeat or duplicate", prompt.lower(), line)
+
 
 class GenerateMealImagesTests(unittest.TestCase):
     """Parallel, honest (generated-or-empty) AI illustration per line of a

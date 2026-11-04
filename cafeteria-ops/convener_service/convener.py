@@ -836,7 +836,7 @@ def handle_envelope_json(json_payload: str) -> str:
             speakerUri=CONVENER_MANIFEST.identification.speakerUri,
             serviceUrl=CONVENER_MANIFEST.identification.serviceUrl
         ),
-        schema=Schema(version="1.1", url="https://openvoicenetwork.org/schema"),
+        schema=Schema(version="1.1.0", url="https://openvoicenetwork.org/schema"),
         events=[]
     )
 

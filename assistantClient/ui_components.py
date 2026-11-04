@@ -62,6 +62,16 @@ def _ensure_windows_ico() -> None:
         # Pillow is commonly available; use it to generate a proper multi-size ICO.
         from PIL import Image
 
+        def _make_about_half_size(src: "Image.Image") -> "Image.Image":
+            """Reduce the image to roughly half its current size while preserving aspect ratio."""
+            width, height = src.size
+            if width <= 1 and height <= 1:
+                return src
+            new_width = max(1, int(round(width * 0.5)))
+            new_height = max(1, int(round(height * 0.5)))
+            resample = getattr(Image, "Resampling", Image).LANCZOS
+            return src.resize((new_width, new_height), resample)
+
         def _translated_rgba(src: "Image.Image", dx: int, dy: int) -> "Image.Image":
             dst = Image.new("RGBA", src.size, (0, 0, 0, 0))
             if dx == 0 and dy == 0:
@@ -143,6 +153,13 @@ def _ensure_windows_ico() -> None:
                     im = white
                 except Exception:
                     pass
+
+            # Make the final exported image about 50% smaller while keeping the
+            # aspect ratio intact for the PNG/ICO outputs.
+            try:
+                im = _make_about_half_size(im)
+            except Exception:
+                pass
 
             # Save derived bold PNG so iconphoto() matches the Windows ICO.
             try:

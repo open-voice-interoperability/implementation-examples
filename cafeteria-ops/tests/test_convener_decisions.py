@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -151,6 +152,24 @@ class DecideForHumanUtteranceTests(unittest.TestCase):
         text = utterance_event.dialogEvent.features["text"].tokens[0].value
         self.assertIn("Write approximately 125 words", text)
         self.assertIn("address EVERY one of them", text)
+
+    def test_handle_envelope_json_uses_openfloor_1_1_0_schema_version(self):
+        dialog = convener.DialogEvent(speakerUri="tag:user")
+        text_feature = convener.TextFeature()
+        text_feature.tokens = [convener.Token(value="hello")]
+        dialog.features = {"text": text_feature}
+
+        envelope = convener.Envelope(
+            conversation=convener.Conversation(id="conv:spec-check"),
+            sender=convener.Sender(speakerUri="tag:user", serviceUrl="https://example.test/user"),
+            schema=convener.Schema(version="1.1.0", url="https://openvoicenetwork.org/schema"),
+            events=[convener.UtteranceEvent(dialogEvent=dialog)],
+        )
+
+        payload = envelope.to_json(as_payload=True)
+        response = json.loads(convener.handle_envelope_json(payload))
+
+        self.assertEqual(response["openFloor"]["schema"]["version"], "1.1.0")
 
     def test_default_max_words_does_not_append_instruction(self):
         classification = {"action": "ask_specific_agent", "addressed_agent_key": "nutrition", "agent_keys": []}

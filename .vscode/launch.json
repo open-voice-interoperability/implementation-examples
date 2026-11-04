@@ -113,6 +113,16 @@
             "cwd": "${workspaceFolder}/convener",
             "justMyCode": false,
             "python": "${workspaceFolder}/.venv/Scripts/python.exe"
+        },
+        {
+            "name": "Python: cafeteria-ops All Agents",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/cafeteria-ops/debug_all_agents.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/cafeteria-ops",
+            "justMyCode": false,
+            "python": "${workspaceFolder}/cafeteria-ops/.venv/Scripts/python.exe"
         }
     ],
     "compounds": [

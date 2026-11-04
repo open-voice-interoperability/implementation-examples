@@ -67,6 +67,20 @@ class FoodQueryTests(unittest.TestCase):
     def test_empty_text_has_no_food_query(self):
         self.assertIsNone(_food_query(""))
 
+    def test_compound_calories_and_sodium_question_extracts_the_food_name(self):
+        # Confirmed live: only the "how much sodium is in" half matched the
+        # old framing pattern, leaving "how many calories and" attached to
+        # the food name -- which pushed the cleaned text over the 8-word cap
+        # and returned None. With a menu already on the floor, that silently
+        # produced a whole-menu nutrition dump instead of answering about
+        # the food actually named.
+        text = "Nutrition Specialist, how many calories and how much sodium is in a grilled chicken caesar wrap?"
+        self.assertEqual(_food_query(text), "grilled chicken caesar wrap")
+
+    def test_compound_question_with_sodium_first_extracts_the_food_name(self):
+        text = "Nutrition Specialist, how much sodium and how many calories are in a grilled chicken caesar wrap?"
+        self.assertEqual(_food_query(text), "grilled chicken caesar wrap")
+
 
 class ExtractDishesTests(unittest.TestCase):
     def test_parses_dishes_from_llm_json_response(self):
@@ -352,6 +366,38 @@ class BuildWholeMenuHtmlTests(unittest.TestCase):
         self.assertIn("<li>Chicken curry: 350 cal.</li>", html)
         self.assertIn("<p", html)
         self.assertIn("No notable problems.</p>", html)
+
+
+class NeedsUnavailableDataTests(unittest.TestCase):
+    """Questions about what diners actually ate/chose or historical menu
+    records are declined without an LLM call -- the system has no such
+    data and qwen2.5:7b otherwise invents a 'typical' range."""
+
+    def test_consumption_history_questions_are_flagged(self):
+        for q in [
+            "What's the average sodium of the lunches our diners actually chose last month?",
+            "How does this compare to what people usually eat here?",
+            "What did we serve last week and how much sodium was in it?",
+        ]:
+            self.assertTrue(na._needs_unavailable_data(q), q)
+
+    def test_ordinary_nutrition_questions_are_not_flagged(self):
+        for q in [
+            "How many calories are in a serving of grilled chicken breast?",
+            "Give me the macros for salmon with quinoa.",
+            "Is this menu high in sodium?",
+        ]:
+            self.assertFalse(na._needs_unavailable_data(q), q)
+
+    def test_a_flagged_question_is_declined_without_an_llm_call(self):
+        agent = NutritionAgent()
+        agent._current_conv_id = "conv-1"
+        with patch.object(na.llm_utils, "chat_sync") as chat_sync:
+            result = agent.process_utterance("What did our diners actually eat last month, on average, for sodium?")
+
+        chat_sync.assert_not_called()
+        self.assertIn("don't have data on what diners actually ate", result["text"])
+        self.assertEqual(result["html"], "")
 
 
 if __name__ == "__main__":

@@ -13,7 +13,17 @@ password (USDA's documented convention -- not a bearer token or query param).
 
 Tools exposed:
   - search_reports(keyword, limit) -> find relevant market news reports by keyword
-  - get_report(slug_id, limit) -> pricing data rows for one report
+  - get_report(slug_id, commodity, limit) -> real price rows for one report
+
+Confirmed live (2026-09-18) that v1.2's /reports/{slug_id} -- the endpoint
+this file used until now -- only ever returns the "Report Header" section:
+one row per publication date with a prose narrative, no numeric price
+fields at all. USDA AMS's actual price data (price_avg/price_min/price_max,
+commodity, type/cut, region, store_count) lives in v3.1's section-based
+endpoint, /reports/{slug_id}/{section}, under the "Report Details" section
+-- discovered via the API's own /services/help/all listing, since v1.2
+isn't in that listing at all and appears to be an undocumented legacy
+version still served for backward compatibility but never updated.
 """
 
 import httpx
@@ -25,7 +35,7 @@ from mcp.server.fastmcp import FastMCP
 
 logger = logging.getLogger(__name__)
 
-AMS_BASE = "https://marsapi.ams.usda.gov/services/v1.2"
+AMS_BASE = "https://marsapi.ams.usda.gov/services/v3.1"
 AMS_API_KEY = os.getenv("AMS_API_KEY", "")
 
 mcp = FastMCP("usda_ams")
@@ -86,13 +96,26 @@ async def search_reports(keyword: str, limit: int = 10) -> str:
 
 
 @mcp.tool()
-async def get_report(slug_id: str, limit: int = 20) -> str:
+async def get_report(slug_id: str, commodity: str = "", limit: int = 500) -> str:
     """
-    Get pricing/market data rows for a specific USDA Market News report
-    (obtained from search_reports).
+    Get real price rows (commodity, type/cut, region, price_avg/min/max,
+    price_unit, store_count) for the MOST RECENTLY PUBLISHED edition of a
+    USDA Market News report (obtained from search_reports) -- the "Report
+    Details" section, which is where the actual numeric data lives (the
+    plain /reports/{slug_id} endpoint returns only publication metadata,
+    no prices). A report can carry hundreds of price line items per week
+    across every cut/type and region it tracks, so pass ``commodity``
+    (e.g. "Chicken", "Beef") to filter server-side to just that commodity
+    -- the specific cut/type asked about (e.g. "thighs") still needs a
+    second, client-side pass over the returned rows' "type" field, since
+    USDA doesn't expose a reliable cut-level filter.
     """
-    async with httpx.AsyncClient(timeout=20) as client:
-        r = await client.get(f"{AMS_BASE}/reports/{slug_id}", auth=_auth())
+    params: dict = {"lastReports": 1, "numberOfRows": max(limit, 1)}
+    if commodity:
+        params["q"] = f"commodity={commodity}"
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(f"{AMS_BASE}/reports/{slug_id}/Report%20Details", params=params, auth=_auth())
         if r.status_code != 200:
             return json.dumps({"error": f"MARS API returned {r.status_code} for report {slug_id}"})
 
@@ -101,7 +124,7 @@ async def get_report(slug_id: str, limit: int = 20) -> str:
         except Exception:
             return json.dumps({"error": "MARS API returned a non-JSON response"})
 
-        rows = data if isinstance(data, list) else data.get("results", [])
+        rows = data.get("results", [])
         return json.dumps({"slug_id": slug_id, "rows": rows[:limit]})
 
 

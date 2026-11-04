@@ -14,6 +14,12 @@ import traceback
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+# There's no local Ollama on Vercel, so always use OpenAI rather than "auto"
+# (which tries Ollama first and only falls back after that call fails). This
+# deliberately overrides any LLM_PROVIDER in the Vercel project env. Must run
+# before utterance_handler is imported, since it reads this at import time.
+os.environ["LLM_PROVIDER"] = "openai"
+
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 

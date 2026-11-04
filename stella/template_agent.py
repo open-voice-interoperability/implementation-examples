@@ -128,27 +128,27 @@ class BotAgent:
             target_speaker = normalize_uri(to_speaker)
             target_service = normalize_uri(to_service)
 
-            if target_speaker and target_speaker == my_speaker:
-                return True
-
-            if target_service and my_service:
-                if target_service == my_service:
+            for target, mine in ((target_speaker, my_speaker), (target_service, my_service)):
+                if target and mine and (target == mine or self._same_endpoint(target, mine)):
                     return True
 
-                try:
-                    parsed_target = urlparse(target_service)
-                    parsed_me = urlparse(my_service)
-                    if (
-                        parsed_target.hostname
-                        and parsed_me.hostname
-                        and parsed_target.hostname == parsed_me.hostname
-                        and (parsed_target.port or 80) == (parsed_me.port or 80)
-                    ):
-                        return True
-                except Exception:
-                    continue
-
         return False
+
+    _LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+    @classmethod
+    def _same_endpoint(cls, a: str, b: str) -> bool:
+        # speakerUri/serviceUrl are rewritten per request from the Host header, so
+        # treat localhost / 127.0.0.1 / ::1 as the same host when comparing.
+        try:
+            pa, pb = urlparse(a), urlparse(b)
+        except Exception:
+            return False
+        if not pa.hostname or not pb.hostname:
+            return False
+        host_a = "localhost" if pa.hostname in cls._LOOPBACK_HOSTS else pa.hostname
+        host_b = "localhost" if pb.hostname in cls._LOOPBACK_HOSTS else pb.hostname
+        return host_a == host_b and (pa.port or 80) == (pb.port or 80)
 
     def bot_on_envelope(self, in_envelope: Envelope, out_envelope: Envelope) -> None:
         for event in getattr(in_envelope, "events", []) or []:
@@ -178,7 +178,6 @@ logger = logging.getLogger(__name__)
 class TemplateAgent(BotAgent):
     def __init__(self, manifest: Manifest):
         super().__init__(manifest)
-        self.joinedFloor = False
         self.grantedFloor = False
         self.currentConversation = None
         self._register_handlers()
@@ -206,10 +205,6 @@ class TemplateAgent(BotAgent):
         out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
 
     def _handle_utterance(self, event: UtteranceEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
-        if not self.grantedFloor and self.joinedFloor:
-            logger.debug("[UTTERANCE] Floor not granted, ignoring utterance")
-            return
-
         try:
             user_text = self._extract_text_from_utterance_event(event)
             incoming_speaker_uri = (self._extract_speaker_uri_from_utterance_event(event) or "").strip().lower()
@@ -453,17 +448,9 @@ class TemplateAgent(BotAgent):
 
     def _handle_invite(self, event: InviteEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
         logger.info("[INVITE] Received invitation to conversation: %s", in_envelope.conversation.id)
-        self.joinedFloor = False
-        for evt in in_envelope.events:
-            if hasattr(evt, "eventType") and evt.eventType == "joinFloor":
-                self.joinedFloor = True
-                break
         self.currentConversation = in_envelope.conversation.id
         agent_name = self._manifest.identification.conversationalName
-        if self.joinedFloor:
-            greeting = f"Hi, I'm {agent_name}. I've joined the floor and I'm ready to help!"
-        else:
-            greeting = f"Hi, I'm {agent_name}. How can I help you today?"
+        greeting = f"Hi, I'm {agent_name}. How can I help you today?"
         dialog = DialogEvent(
             speakerUri=self._manifest.identification.speakerUri,
             features={"text": TextFeature(values=[greeting])},
@@ -479,7 +466,6 @@ class TemplateAgent(BotAgent):
             features={"text": TextFeature(values=[farewell])},
         )
         out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
-        self.joinedFloor = False
         self.grantedFloor = False
         self.currentConversation = None
 
@@ -490,7 +476,6 @@ class TemplateAgent(BotAgent):
 
     def _handle_bye(self, event: ByeEvent, in_envelope: Envelope, out_envelope: Envelope) -> None:
         logger.info("[BYE] Conversation ending: %s", in_envelope.conversation.id)
-        self.joinedFloor = False
         self.grantedFloor = False
         self.currentConversation = None
 

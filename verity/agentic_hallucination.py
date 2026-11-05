@@ -2,7 +2,6 @@ import os
 import json
 import ast
 from pathlib import Path
-import pandas as pd
 import logging
 
 import openai

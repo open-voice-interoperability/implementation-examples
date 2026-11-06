@@ -34,6 +34,9 @@ def wrapped_conversant(agent_key):
 ALL_RECORDS = [conversant_record(k) for k in convener.FULL_ANALYSIS_SEQUENCE]
 ALL_WRAPPED_RECORDS = [wrapped_conversant(k) for k in convener.FULL_ANALYSIS_SEQUENCE]
 
+# A non-specialist agent the user added from the Planner page.
+GUEST_RECORD = {"speakerUri": "http://localhost:8767", "serviceUrl": "http://localhost:8767/", "floorGranted": True}
+
 
 class DecideForHumanUtteranceTests(unittest.TestCase):
     def test_invite_only_returns_invite_events_for_not_yet_invited(self):
@@ -341,6 +344,14 @@ class ClassifySpeakerTests(unittest.TestCase):
     def test_treats_unknown_speaker_as_human(self):
         self.assertEqual(convener._classify_speaker("tag:some-human-client", ALL_RECORDS), "human")
 
+    def test_non_specialist_conversant_is_a_guest(self):
+        records = ALL_RECORDS + [GUEST_RECORD]
+        self.assertEqual(convener._classify_speaker("http://localhost:8767", records), "guest")
+
+    def test_guest_matched_by_service_url_too(self):
+        records = ALL_RECORDS + [{"speakerUri": "tag:stella", "serviceUrl": "http://localhost:8767/", "floorGranted": False}]
+        self.assertEqual(convener._classify_speaker("http://localhost:8767", records), "guest")
+
 
 class DecideDelegatedUtteranceDispatchTests(unittest.TestCase):
     """End-to-end through _decide_delegated_utterance using real openfloor
@@ -387,6 +398,38 @@ class DecideDelegatedUtteranceDispatchTests(unittest.TestCase):
         event = self._utterance_event("tag:human", "hi", "")
         events = convener._decide_delegated_utterance(event, {"conversants": ALL_WRAPPED_RECORDS})
         self.assertEqual(events, [])
+
+    def test_guest_agent_reply_does_not_restart_the_round(self):
+        # Without the guest check this would be classified "human" and the
+        # round's question re-routed to every specialist again.
+        event = self._utterance_event("http://localhost:8767", "Here are some Jupiter images", "plan a lunch menu")
+        conversation = {"conversants": ALL_WRAPPED_RECORDS + [{"identification": GUEST_RECORD}]}
+        with patch.object(convener, "classify_utterance") as mocked:
+            events = convener._decide_delegated_utterance(event, conversation)
+
+        self.assertEqual(events, [])
+        mocked.assert_not_called()
+
+    def test_human_question_addressed_to_a_guest_is_not_routed(self):
+        event = self._utterance_event("tag:human", "show me jupiter", "show me jupiter")
+        event.to = convener.To(serviceUrl="http://localhost:8767/", private=True)
+        conversation = {"conversants": ALL_WRAPPED_RECORDS + [{"identification": GUEST_RECORD}]}
+        with patch.object(convener, "classify_utterance") as mocked:
+            events = convener._decide_delegated_utterance(event, conversation)
+
+        self.assertEqual(events, [])
+        mocked.assert_not_called()
+
+    def test_human_question_addressed_to_a_specialist_is_still_routed(self):
+        classification = {"action": "ask_specific_agent", "addressed_agent_key": "nutrition", "agent_keys": []}
+        event = self._utterance_event("tag:human", "calories?", "how many calories?")
+        event.to = convener.To(serviceUrl=convener.AGENTS["nutrition"]["url"])
+        conversation = {"conversants": ALL_WRAPPED_RECORDS + [{"identification": GUEST_RECORD}]}
+        with patch.object(convener, "classify_utterance", return_value=classification) as mocked:
+            events = convener._decide_delegated_utterance(event, conversation)
+
+        mocked.assert_called_once()
+        self.assertIsInstance(events[0], convener.GrantFloorEvent)
 
 
 if __name__ == "__main__":

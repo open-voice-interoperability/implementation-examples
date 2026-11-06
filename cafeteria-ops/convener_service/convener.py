@@ -774,12 +774,50 @@ def _decide_for_specialist_reply(speaker_uri: str, routing_mode: str, question_t
     return [revoke_event, *_grant_and_ask_events(remaining[0], question_text, max_words, conversant_records, private=True)]
 
 
+def _is_guest_record(record: dict) -> bool:
+    """A conversant on the floor that isn't one of the seven cafeteria
+    specialists -- e.g. an agent the user added mid-conversation from the
+    Planner page (Stella, TimeAgent, Verity...)."""
+    return _agent_key_for_service_url(record["serviceUrl"]) is None
+
+
+def _guest_record_for(uri: str, conversant_records: list[dict]) -> dict | None:
+    normalized = _normalize_id(uri)
+    if not normalized:
+        return None
+    for record in conversant_records:
+        if normalized in (_normalize_id(record["speakerUri"]), _normalize_id(record["serviceUrl"])):
+            return record if _is_guest_record(record) else None
+    return None
+
+
 def _classify_speaker(speaker_uri: str, conversant_records: list[dict]) -> str:
-    """"specialist" | "human" -- distinguishes a specialist's own reply
-    (advance/end the round) from a fresh question (start a round)."""
+    """"specialist" | "guest" | "human" -- distinguishes a specialist's own
+    reply (advance/end the round) from a fresh question (start a round).
+
+    The floor manager never lists the human as a conversant, so a speaker
+    that IS on the conversant list but isn't a specialist is a guest agent
+    the user invited. Its replies must not be read as a new human question:
+    _decide_for_human_utterance would re-route the round's question to every
+    specialist all over again."""
     if _agent_key_for_speaker_uri(speaker_uri, conversant_records) is not None:
         return "specialist"
+    if _guest_record_for(speaker_uri, conversant_records) is not None:
+        return "guest"
     return "human"
+
+
+def _is_addressed_to_guest(event, conversant_records: list[dict]) -> bool:
+    """True when an utterance's `to` names a guest agent (a direct question
+    the user sent to one added agent). The specialists have no part in
+    that exchange, so there's nothing to route."""
+    to = _field(event, "to", None)
+    if to is None:
+        return False
+    for uri in (_field(to, "speakerUri", "") or "", _field(to, "serviceUrl", "") or ""):
+        if _guest_record_for(uri, conversant_records) is not None:
+            return True
+    return False
 
 
 def _decide_delegated_utterance(event, conversation) -> list:
@@ -801,7 +839,14 @@ def _decide_delegated_utterance(event, conversation) -> list:
         return []
 
     conversant_records = _conversant_records(conversation)
-    if _classify_speaker(speaker_uri, conversant_records) == "specialist":
+    speaker_kind = _classify_speaker(speaker_uri, conversant_records)
+    if speaker_kind == "guest":
+        logger.info("Utterance from guest agent %s; nothing to route", speaker_uri)
+        return []
+    if _is_addressed_to_guest(event, conversant_records):
+        logger.info("Utterance addressed to a guest agent; nothing to route")
+        return []
+    if speaker_kind == "specialist":
         return _decide_for_specialist_reply(
             speaker_uri, round_routing_mode, round_question, round_max_words, round_turn_order, conversant_records
         )

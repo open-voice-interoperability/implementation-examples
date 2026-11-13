@@ -20,6 +20,7 @@ import os
 import re
 import sys
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from html import escape
@@ -32,7 +33,7 @@ from PIL import Image, ImageDraw, ImageFont
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # OpenFloor imports
-from openfloor.envelope import Envelope, Parameters, Conversation, Sender
+from openfloor.envelope import Envelope, Parameters, Conversation, Sender, To
 from openfloor.events import (
     UtteranceEvent, InviteEvent, GetManifestsEvent, PublishManifestsEvent,
 )
@@ -508,6 +509,20 @@ class StrategyBotAgent(BotAgent):
         self._conversation_histories: dict[str, list[tuple[str, str]]] = {}
         self._current_history_text = ""
 
+        # `to` for this turn's replies: None (public) unless the question was
+        # private, then the asker, privately. See _private_reply_to.
+        self._current_reply_to = None
+
+        # Answer on the grant. conv_id -> (utterance event, time heard) of
+        # the latest question a PERSON asked that this agent heard while it
+        # didn't hold the floor. The question is broadcast once, to every
+        # agent; when the convener later grants this agent the floor (OFP's
+        # "you may speak now") with no question attached, this is what it
+        # answers -- so the convener never has to repeat the question to
+        # each agent in turn. See _handle_grant_floor.
+        self._open_questions: dict[str, tuple] = {}
+        self._answering_open_question = False
+
         # Floor-holder race state: conv_id -> (Future, user_text, max_words)
         # for a request whose work is still running after the race deadline,
         # waiting for the gateway's resume request to collect it. One slot per
@@ -538,10 +553,74 @@ class StrategyBotAgent(BotAgent):
         # requestFloor: no handler -- no code path has a specialist proactively
         # request the floor; meaningful only floor-manager/convener-side.
 
+    # An open question older than this is stale -- a grant that much later
+    # is about something else, so it isn't answered.
+    _OPEN_QUESTION_TTL_S = 30 * 60
+
     def _handle_grant_floor(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
-        """Allow subsequent utterance responses after a grantFloor event."""
+        """Allow utterance responses after a grantFloor event -- and, when
+        the grant comes on its own, answer the question this agent already
+        heard (see _open_questions). A grant that arrives WITH a question in
+        the same envelope is answered by that utterance instead, as before."""
         self._floor_granted = True
         logger.info("[FLOOR] grantFloor received; responses enabled")
+        if self._envelope_has_utterance_for_me(in_envelope):
+            return
+        conv_id = self._envelope_conv_id(in_envelope)
+        entry = self._open_questions.pop(conv_id, None)
+        if entry is None:
+            return
+        question, heard_at = entry
+        if time.time() - heard_at > self._OPEN_QUESTION_TTL_S:
+            logger.info("[FLOOR] open question is stale; not answering it on this grant")
+            return
+        logger.info("[FLOOR] answering the open question on this grant")
+        self._answering_open_question = True
+        try:
+            self.bot_on_utterance(question, in_envelope, out_envelope)
+        finally:
+            self._answering_open_question = False
+
+    def _envelope_has_utterance_for_me(self, in_envelope: Envelope) -> bool:
+        for event in getattr(in_envelope, "events", []) or []:
+            event_type = getattr(event, "eventType", None) or (event.get("eventType") if isinstance(event, dict) else None)
+            if event_type == "utterance" and self._is_addressed_to_me(event):
+                return True
+        return False
+
+    @staticmethod
+    def _envelope_conv_id(in_envelope: Envelope) -> str:
+        try:
+            return getattr(getattr(in_envelope, "conversation", None), "id", "") or ""
+        except Exception:
+            return ""
+
+    def _convener_on_floor(self, in_envelope: Envelope) -> bool:
+        conversants = getattr(getattr(in_envelope, "conversation", None), "conversants", None) or []
+        for conversant in conversants:
+            identification = self._get_attr(conversant, "identification")
+            if self._speaker_label(self._get_attr(identification, "serviceUrl") or self._get_attr(identification, "speakerUri")) == "Convener":
+                return True
+        return False
+
+    def _is_person(self, speaker_uri: str, in_envelope: Envelope) -> bool:
+        """True when ``speaker_uri`` isn't one of the conversation's agents.
+        The floor manager lists every invited agent (specialists, the
+        convener, added guests, sentinels) in conversation.conversants; the
+        person at the Planner is never invited, so isn't on it."""
+        if not speaker_uri:
+            return False
+        speaker = self._normalize_endpoint_id(speaker_uri)
+        if speaker == self._normalize_endpoint_id(self.speakerUri):
+            return False
+        conversants = getattr(getattr(in_envelope, "conversation", None), "conversants", None) or []
+        for conversant in conversants:
+            identification = self._get_attr(conversant, "identification")
+            ids = {self._normalize_endpoint_id(self._get_attr(identification, "speakerUri")),
+                   self._normalize_endpoint_id(self._get_attr(identification, "serviceUrl"))}
+            if speaker in ids:
+                return False
+        return True
 
     def _handle_revoke_floor(self, event, in_envelope: Envelope, out_envelope: Envelope) -> None:
         """Block utterance responses until the next grantFloor event."""
@@ -1019,6 +1098,10 @@ class StrategyBotAgent(BotAgent):
                 logger.info("[UTTERANCE] Ignored: speaker is this agent itself (self-loop guard)")
                 return
 
+            # A private question gets a private answer, addressed to whoever
+            # asked (see _private_reply_to). Every reply built below uses it.
+            self._current_reply_to = self._private_reply_to(event)
+
             conv_id = ""
             try:
                 conv_id = getattr(getattr(in_envelope, "conversation", None), "id", "") or ""
@@ -1040,7 +1123,9 @@ class StrategyBotAgent(BotAgent):
             # specific agent has any bespoke on_observed_utterance override.
             self._current_history_text = self._conversation_history_text(conv_id)
 
-            if observed_text:
+            # An open question being answered on a grant was recorded and
+            # observed when it was first heard -- not again now.
+            if observed_text and not self._answering_open_question:
                 self._record_conversation_turn(conv_id, speaker_uri or "", observed_text)
                 try:
                     self.on_observed_utterance(conv_id, speaker_uri or "", observed_text)
@@ -1050,8 +1135,29 @@ class StrategyBotAgent(BotAgent):
             # Floor gate: only respond when we currently hold the floor, unless
             # the gate has been explicitly disabled for direct/testing use.
             if not self._floor_granted and self._enforce_floor_gate:
-                logger.info("[UTTERANCE] Ignored because floor is revoked (strict floor gate enabled)")
+                if observed_text and self._is_person(speaker_uri, in_envelope):
+                    # Kept to answer when the floor is granted (see
+                    # _handle_grant_floor); a newer question replaces it.
+                    self._open_questions[conv_id] = (event, time.time())
+                    logger.info("[UTTERANCE] Floor not held; keeping the question to answer when granted")
+                else:
+                    logger.info("[UTTERANCE] Ignored because floor is revoked (strict floor gate enabled)")
                 return
+            # Holding the floor is for answering the person's question, not
+            # every message that arrives meanwhile: with a convener running
+            # the floor, another agent's message (a sentinel's alert, a peer's
+            # reply) is context -- recorded above -- not something to answer.
+            # Seen live: sentinel alerts broadcast while the Nutrition
+            # Specialist still held its turn each got a duplicate answer, and
+            # each duplicate advanced the convener's round again. Without a
+            # convener, agents may still answer each other (the floor
+            # manager's free cross-talk).
+            if (not self._answering_open_question and not self._is_person(speaker_uri, in_envelope)
+                    and self._speaker_label(speaker_uri) != "Convener" and self._convener_on_floor(in_envelope)):
+                logger.info("[UTTERANCE] Another agent's message; the convener runs this floor, so not answering it")
+                return
+            # Answering now, so nothing is left open for a later grant.
+            self._open_questions.pop(conv_id, None)
             if not self._floor_granted and not self._enforce_floor_gate:
                 logger.info("[UTTERANCE] Floor is revoked, but strict floor gate is disabled; processing direct utterance")
 
@@ -1115,7 +1221,8 @@ class StrategyBotAgent(BotAgent):
                         result = future.result()
                     else:
                         with self._pending_lock:
-                            self._pending_futures[conv_id] = (future, user_text, self._current_max_words)
+                            self._pending_futures[conv_id] = (future, user_text, self._current_max_words,
+                                                              self._current_reply_to)
                         self._append_floor_holder(out_envelope, user_text)
                         logger.info(
                             "[FLOOR-HOLDER] %s: work still running after %.1fs; sent status, awaiting resume",
@@ -1131,11 +1238,7 @@ class StrategyBotAgent(BotAgent):
         except Exception as e:
             # Never crash the request loop: reply with a generic error utterance.
             logger.exception("[UTTERANCE] Error processing utterance")
-            dialog = DialogEvent(
-                speakerUri=self._manifest.identification.speakerUri,
-                features={"text": TextFeature(tokens=[Token(value="Error processing message")])}
-            )
-            out_envelope.events.append(UtteranceEvent(dialogEvent=dialog))
+            out_envelope.events.append(self._reply_event({"text": TextFeature(tokens=[Token(value="Error processing message")])}))
 
     # -------------------------------------------------------------------------
     # Floor-holder / progress helpers
@@ -1185,9 +1288,7 @@ class StrategyBotAgent(BotAgent):
             "text": TextFeature(tokens=[Token(value=label)]),
             FLOOR_HOLDER_FEATURE: TextFeature(tokens=[Token(value="true")]),
         }
-        out_envelope.events.append(UtteranceEvent(
-            dialogEvent=DialogEvent(speakerUri=self._manifest.identification.speakerUri, features=features)
-        ))
+        out_envelope.events.append(self._reply_event(features))
 
     def _finish_pending(self, conv_id: str, event, out_envelope: Envelope) -> None:
         """Resume handling: hand back the answer whose work started on the
@@ -1195,8 +1296,11 @@ class StrategyBotAgent(BotAgent):
         (e.g. the agent process restarted between the two requests)."""
         with self._pending_lock:
             entry = self._pending_futures.pop(conv_id, None)
+        # The resume request comes from the gateway, not the asker: answer
+        # whoever asked the original question, as privately as they asked.
+        self._current_reply_to = None
         if entry is not None:
-            future, _user_text, max_words = entry
+            future, _user_text, max_words, self._current_reply_to = entry
             self._current_conv_id = conv_id
             self._current_max_words = max_words
             try:
@@ -1242,9 +1346,26 @@ class StrategyBotAgent(BotAgent):
         features: dict = {"text": TextFeature(tokens=[Token(value=response_text)])}
         if html_content:
             features["html"] = Feature(mimeType="text/html", tokens=[Token(value=html_content)])
-        out_envelope.events.append(UtteranceEvent(
-            dialogEvent=DialogEvent(speakerUri=self._manifest.identification.speakerUri, features=features)
-        ))
+        out_envelope.events.append(self._reply_event(features))
+
+    def _reply_event(self, features: dict) -> UtteranceEvent:
+        """This agent's reply utterance, private to the asker when the
+        question was private (self._current_reply_to)."""
+        dialog = DialogEvent(speakerUri=self._manifest.identification.speakerUri, features=features)
+        if self._current_reply_to is not None:
+            return UtteranceEvent(dialogEvent=dialog, to=self._current_reply_to)
+        return UtteranceEvent(dialogEvent=dialog)
+
+    def _private_reply_to(self, event) -> "To | None":
+        """OFP 1.1.1 section 2.1: "private utterances will have private
+        responses". When an utterance addressed to this agent is marked
+        private, the reply goes privately to whoever spoke it; otherwise
+        replies stay public (None)."""
+        to = self._get_attr(event, "to")
+        if to is None or not self._get_attr(to, "private", False):
+            return None
+        asker = self._get_event_speaker_uri(event)
+        return To(speakerUri=asker, private=True) if asker else None
 
     @staticmethod
     def _get_attr(obj, key, default=None):

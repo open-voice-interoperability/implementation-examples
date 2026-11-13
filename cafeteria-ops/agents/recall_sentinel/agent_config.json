@@ -1,0 +1,33 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Recall Sentinel",
+      "speakerUri": "http://127.0.0.1:8308/",
+      "serviceUrl": "http://127.0.0.1:8308/",
+      "organization": "Open Voice Network",
+      "role": "sentinel",
+      "synopsis": "Watches the floor and flags menu ingredients involved in active FDA food recalls",
+      "openFloorRoles": { "information": true }
+    },
+    "capabilities": {
+      "keyphrases": [
+        "food recall",
+        "recall",
+        "FDA",
+        "contamination",
+        "salmonella",
+        "listeria"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Sentinel: watches every reply on the floor and speaks only when it finds a problem.",
+        "Checks recall-prone ingredients named on the floor against ongoing FDA Class I/II food recalls (openFDA) and flags any that are involved in one."
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

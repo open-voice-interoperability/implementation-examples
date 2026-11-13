@@ -21,6 +21,8 @@ AGENT_LABELS_BY_PORT = {
     8304: "Menu Optimization Specialist",
     8305: "Inventory Specialist",
     8306: "Procurement Specialist",
+    8307: "Allergy Sentinel",
+    8308: "Recall Sentinel",
     8310: "Shopping List Specialist",
 }
 

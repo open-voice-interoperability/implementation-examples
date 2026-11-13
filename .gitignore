@@ -121,3 +121,6 @@ startup-strategy/logs/startup/competitive.err.log
 startup-strategy/logs/startup/convener.err.log
 /startup-strategy/logs
 cafeteria-ops/logs/
+
+# Locally saved data snapshots (e.g. the FSIS recall list saved from a browser) -- large and refreshed by hand
+cafeteria-ops/data/

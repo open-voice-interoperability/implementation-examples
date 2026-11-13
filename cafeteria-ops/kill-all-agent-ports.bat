@@ -1,8 +1,8 @@
 @echo off
 setlocal enabledelayedexpansion
 
-rem Convener + all specialist agent ports for cafeteria-ops.
-set PORTS=8300 8301 8302 8303 8304 8305 8306 8310
+rem Convener + all specialist agent ports for cafeteria-ops, plus the allergy (8307) and recall (8308) sentinels.
+set PORTS=8300 8301 8302 8303 8304 8305 8306 8307 8308 8310
 
 for %%P in (%PORTS%) do (
     set FOUND=0

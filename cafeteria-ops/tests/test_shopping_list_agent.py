@@ -389,6 +389,51 @@ class OnObservedUtteranceTests(unittest.TestCase):
 
         self.assertEqual(agent._observed_recipes, {"conv-1": "Chicken Curry: 150g chicken breast."})
 
+    def test_a_later_recipe_reply_is_added_not_substituted(self):
+        # e.g. a later answer about one dish: it must refine that dish, not
+        # wipe out the week's recipes.
+        agent = ShoppingListAgent()
+        agent.on_observed_utterance("conv-1", sla._RECIPE_PORTION_SERVICE_URL, "Chicken Curry: 150g chicken breast.")
+        agent.on_observed_utterance("conv-1", sla._RECIPE_PORTION_SERVICE_URL, "Beef Burger: 120g ground beef.")
+
+        saved = agent._observed_recipes["conv-1"]
+        self.assertIn("Chicken Curry: 150g chicken breast.", saved)
+        self.assertIn(sla._RECIPE_UPDATE_NOTE, saved)
+        self.assertTrue(saved.endswith("Beef Burger: 120g ground beef."))
+
+    def test_a_replacement_recipe_takes_the_place_of_the_old_one(self):
+        agent = ShoppingListAgent()
+        week = "1. Grilled Salmon: 150g salmon, 5ml oil.\nBeef Burger: 150g beef patty, 1 bun."
+        replacement = ("Grilled Salmon: Replacement recipe -- AI-generated recipe (not from TheMealDB) -- "
+                       "Ingredients: 150g salmon, 10g miso. Method: bake. Plate: 250g.")
+        agent.on_observed_utterance("conv-1", sla._RECIPE_PORTION_SERVICE_URL, week)
+        agent.on_observed_utterance("conv-1", sla._RECIPE_PORTION_SERVICE_URL, replacement)
+
+        saved = agent._observed_recipes["conv-1"]
+        self.assertNotIn("5ml oil", saved)  # the old salmon recipe is gone
+        self.assertIn("Beef Burger: 150g beef patty, 1 bun.", saved)
+        self.assertTrue(saved.endswith(replacement))
+
+    def test_a_new_menu_clears_the_saved_recipes(self):
+        agent = ShoppingListAgent()
+        agent.on_observed_utterance("conv-1", sla._RECIPE_PORTION_SERVICE_URL, "Chicken Curry: 150g chicken breast.")
+        agent.on_observed_utterance("conv-1", sla._MENU_DESIGNER_SERVICE_URL, "Monday: Lentil soup" + chr(10) + "Tuesday: Fish tacos")
+
+        self.assertNotIn("conv-1", agent._observed_recipes)
+
+    def test_only_the_pre_scaled_piece_is_divided_back_to_one_serving(self):
+        agent = ShoppingListAgent()
+        week = "Full service -- quantities to prepare 10 servings:" + chr(10) + "Chicken Curry: 1500g chicken breast."
+        agent.on_observed_utterance("conv-1", sla._RECIPE_PORTION_SERVICE_URL, week)
+        agent.on_observed_utterance("conv-1", sla._RECIPE_PORTION_SERVICE_URL, "Beef Burger: 120g ground beef.")
+
+        with patch.object(sla.llm_utils, "chat_sync", return_value="Produce" + chr(10) + "- chicken breast: 15kg") as chat:
+            agent._respond_from_recipe_portion(["Chicken Curry", "Beef Burger"], 100, "", agent._observed_recipes["conv-1"])
+
+        prompt = next(c.args[1] for c in chat.call_args_list if "Real one-serving ingredient amounts" in c.args[1])
+        self.assertIn("150 g chicken breast", prompt)  # the week, divided back from 10 servings
+        self.assertIn("120g ground beef", prompt)      # the one-serving recipe, untouched
+
     def test_ignores_utterances_from_other_speakers(self):
         agent = ShoppingListAgent()
 

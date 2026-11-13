@@ -55,6 +55,39 @@ logger = logging.getLogger(__name__)
 # self-contained (no cross-agent imports), so this is kept in sync by hand
 # like every other agent's port number in this project.
 _RECIPE_PORTION_SERVICE_URL = "http://127.0.0.1:8303/"
+_MENU_DESIGNER_SERVICE_URL = "http://127.0.0.1:8301/"
+
+# Recipe & Portion's replies are kept cumulatively per conversation, not just
+# the latest one: a follow-up for a single dish (e.g. the Planner's recipe
+# pop-up asking for one AI-written recipe) must refine that dish, not replace
+# the whole week's recipes. Later replies are appended under this note; a new
+# menu from the Menu Designer starts over, since earlier recipes no longer
+# apply. Kept as a local copy in each agent that saves recipes -- agents
+# share no code.
+_RECIPE_UPDATE_NOTE = ("Later update from the Recipe & Portion Specialist (where it covers the same dish "
+                       "as above, use these amounts instead):")
+
+# "<dish>: Replacement recipe -- ..." is the Recipe & Portion Specialist's
+# answer when the user asked for a different recipe for one dish (see
+# recipe_portion_agent._REPLACEMENT_MARKER, kept in sync by hand). The dish's
+# old line is dropped so the old and new recipes are never both counted.
+_REPLACEMENT_LINE_RE = re.compile(r"^\s*([^:\n]{1,64}):\s*Replacement recipe\b", re.IGNORECASE)
+_DISH_LINE_LEAD_RE = re.compile(r"^\s*(?:day\s*\d+\s*[:\-–—.)]*\s*|\d+[.)]\s*)", re.IGNORECASE)
+
+
+def _merge_recipe_reply(prior: str, text: str) -> str:
+    """The saved Recipe & Portion writeup with a later reply added -- a
+    replacement recipe takes the place of that dish's earlier line(s)."""
+    if not prior:
+        return text
+    match = _REPLACEMENT_LINE_RE.match(text.strip())
+    if match:
+        dish = match.group(1).strip().lower()
+        prior = "\n".join(
+            line for line in prior.split("\n")
+            if _DISH_LINE_LEAD_RE.sub("", line).split(":", 1)[0].strip().lower() != dish
+        )
+    return f"{prior}\n\n{_RECIPE_UPDATE_NOTE}\n{text}"
 
 # The maxWords slider's instruction, appended by convener._question_text
 # whenever the UI's maxWords != the no-instruction default -- present on
@@ -838,8 +871,13 @@ class ProcurementAgent(BaseStrategyAgent):
         self._observed_recipes: dict[str, str] = {}
 
     def on_observed_utterance(self, conv_id: str, speaker_uri: str, text: str) -> None:
-        if self._normalize_endpoint_id(speaker_uri) == self._normalize_endpoint_id(_RECIPE_PORTION_SERVICE_URL):
-            self._observed_recipes[conv_id] = text
+        speaker = self._normalize_endpoint_id(speaker_uri)
+        if speaker == self._normalize_endpoint_id(_MENU_DESIGNER_SERVICE_URL):
+            if self._observed_recipes.pop(conv_id, None) is not None:
+                logger.info("[Procurement] New menu from the Menu Designer; cleared saved recipes for conv %s", conv_id)
+        elif speaker == self._normalize_endpoint_id(_RECIPE_PORTION_SERVICE_URL):
+            prior = self._observed_recipes.get(conv_id)
+            self._observed_recipes[conv_id] = _merge_recipe_reply(prior, text)
             logger.info("[Procurement] Saved Recipe & Portion's one-serving recipes for conv %s", conv_id)
 
     def process_utterance(self, user_text: str) -> dict:

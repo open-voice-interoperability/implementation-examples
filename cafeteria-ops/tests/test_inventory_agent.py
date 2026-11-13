@@ -52,6 +52,31 @@ class ProcessUtteranceTests(unittest.TestCase):
         user_message = chat_sync.call_args[0][1]
         self.assertNotIn("Prior conversation so far:", user_message)
 
+    def test_the_request_asks_for_a_few_ingredients_within_the_word_limit(self):
+        # Without this the model walked every ingredient on the menu through
+        # the same template -- thousands of tokens, nearly all trimmed away.
+        agent = InventoryAgent()
+        agent._current_max_words = 320
+        with patch.object(ia.llm_utils, "chat_sync", return_value="ok") as chat_sync:
+            agent.process_utterance("Plan a 5-day lunch menu for 450.")
+
+        user_message = chat_sync.call_args[0][1]
+        self.assertIn("within about 320 words", user_message)
+        self.assertIn("Do not go through the ingredients one by one", user_message)
+        self.assertIn("three to five ingredients", user_message)
+
+    def test_a_pointed_question_gets_just_that_answer(self):
+        # Live, the menu-review instruction made "par level for fresh basil?"
+        # come back about tahini and feta -- a pointed question gets none of it.
+        agent = InventoryAgent()
+        agent._current_max_words = 320
+        with patch.object(ia.llm_utils, "chat_sync", return_value="ok") as chat_sync:
+            agent.process_utterance("Inventory Specialist, what par level should we set for fresh basil?")
+
+        user_message = chat_sync.call_args[0][1]
+        self.assertIn("Answer only the question asked", user_message)
+        self.assertNotIn("three to five ingredients", user_message)
+
     def test_returns_a_text_and_html_dict(self):
         agent = self._make_agent()
         with patch.object(ia.llm_utils, "chat_sync", return_value="Basil spoils fast; keep a tight par level."):

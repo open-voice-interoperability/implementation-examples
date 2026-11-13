@@ -597,22 +597,44 @@ def _question_text(text: str, max_words: int) -> str:
     )
 
 
-def _question_dialog_event(text: str, max_words: int) -> DialogEvent:
-    dialog_event = DialogEvent(speakerUri=CONVENER_MANIFEST.identification.speakerUri)
+def _turn_events(agent_key: str, conversant_records: list[dict]) -> list:
+    """Give one specialist its turn: grant it the floor, and nothing else.
+
+    It already heard the question -- the user's public utterance reaches
+    every conversant before the convener decides anything -- so the grant is
+    its cue to answer it (OFP's grantFloor: "you may speak now"; see
+    base_strategy_agent.py's _handle_grant_floor). The convener used to
+    repeat the question with every grant, putting another copy in front of
+    every agent at each turn and crowding real replies out of their
+    conversation history. A private question is relayed instead (see
+    _decide_delegated_utterance), since only its recipient heard it."""
+    grant = _grant_only_event(agent_key, conversant_records)
+    return [grant] if grant is not None else []
+
+
+def _user_dialog_event(speaker_uri: str, text: str, max_words: int) -> DialogEvent:
+    """The user's question as a dialog event in the USER's voice, for
+    relaying it (the delegated copy arrives as plain JSON, which openfloor
+    won't put back in an UtteranceEvent). Keeps the word budget, like a
+    question the convener asks itself."""
+    dialog_event = DialogEvent(speakerUri=speaker_uri)
     text_feature = TextFeature()
     text_feature.tokens = [Token(value=_question_text(text, max_words))]
     dialog_event.features = {"text": text_feature}
     return dialog_event
 
 
-def _grant_and_ask_events(agent_key: str, text: str, max_words: int, conversant_records: list[dict], private: bool) -> list:
-    if agent_key not in AGENTS:
-        return []
-    target = _lookup_target_for_agent(agent_key, conversant_records)
-    utterance_kwargs = {"dialogEvent": _question_dialog_event(text, max_words)}
-    if private:
-        utterance_kwargs["to"] = To(speakerUri=target.speakerUri, serviceUrl=target.serviceUrl, private=True)
-    return [GrantFloorEvent(to=target), UtteranceEvent(**utterance_kwargs)]
+def _private_specialist_key(event, conversant_records: list[dict]) -> str | None:
+    """The specialist a private utterance is addressed to, or None when the
+    utterance isn't private or isn't addressed to a specialist."""
+    to = _field(event, "to", None)
+    if to is None or not _field(to, "private", False):
+        return None
+    for uri in (_field(to, "serviceUrl", "") or "", _field(to, "speakerUri", "") or ""):
+        key = _agent_key_for_service_url(uri) or _agent_key_for_speaker_uri(uri, conversant_records)
+        if key:
+            return key
+    return None
 
 
 def _revoke_events_for_other_granted_agents(exclude_key: str, conversant_records: list[dict]) -> list:
@@ -637,14 +659,22 @@ def _revoke_events_for_other_granted_agents(exclude_key: str, conversant_records
     return events
 
 
+def _revoke_other_granted_specialists(exclude_key: str, conversant_records: list[dict]) -> list:
+    """RevokeFloorEvent for every specialist other than exclude_key that
+    still holds the floor -- e.g. one that timed out mid-reply and was never
+    revoked. A round-robin turn is asked publicly, so a stale grant would let
+    that specialist answer out of turn. Guest agents are left alone: they may
+    still be answering the human's own request."""
+    return [
+        event for event in _revoke_events_for_other_granted_agents(exclude_key, conversant_records)
+        if _agent_key_for_service_url(event.to.serviceUrl or "") is not None
+    ]
+
+
 def _grant_only_event(agent_key: str, conversant_records: list[dict]):
     if agent_key not in AGENTS:
         return None
     return GrantFloorEvent(to=_lookup_target_for_agent(agent_key, conversant_records))
-
-
-def _public_question_utterance(text: str, max_words: int) -> UtteranceEvent:
-    return UtteranceEvent(dialogEvent=_question_dialog_event(text, max_words))
 
 
 def _invite_events_for_not_yet_invited(conversant_records: list[dict], scope: list[str] | None = None) -> list:
@@ -688,7 +718,7 @@ def _decide_for_human_utterance(text: str, routing_mode: str, max_words: int, co
         # stale grant left over from an earlier turn must be closed here
         # rather than relied on to already be closed.
         revoke_events = _revoke_events_for_other_granted_agents(agent_key, conversant_records)
-        return [*revoke_events, *_grant_and_ask_events(agent_key, text, max_words, conversant_records, private=False)]
+        return [*revoke_events, *_turn_events(agent_key, conversant_records)]
 
     agent_keys = classification["agent_keys"]
     if not agent_keys:
@@ -696,17 +726,17 @@ def _decide_for_human_utterance(text: str, routing_mode: str, max_words: int, co
 
     if routing_mode == "round_robin":
         logger.info(f"Round-robin turn order for '{text[:60]}' -> agents: {agent_keys}; starting with {agent_keys[0]}")
-        return _grant_and_ask_events(agent_keys[0], text, max_words, conversant_records, private=True)
+        return [*_revoke_other_granted_specialists(agent_keys[0], conversant_records),
+                *_turn_events(agent_keys[0], conversant_records)]
 
     logger.info(f"Full-sweep classification for '{text[:60]}' -> agents: {agent_keys}")
+    # Every agent already heard the user's question; each grant is its cue
+    # to answer (see _turn_events).
     events = []
     for key in agent_keys:
         grant = _grant_only_event(key, conversant_records)
         if grant is not None:
             events.append(grant)
-    if not events:
-        return []
-    events.append(_public_question_utterance(text, max_words))
     return events
 
 
@@ -761,6 +791,7 @@ def _decide_for_specialist_reply(speaker_uri: str, routing_mode: str, question_t
 
     agent_keys = classification["agent_keys"] if classification["agent_keys"] else invited_keys
 
+    logger.info("Reply from %s; this round's turns so far: %s", speaker_uri, round_turn_order)
     already_spoken = {_normalize_id(u) for u in (round_turn_order or [])}
     remaining = [
         key for key in agent_keys
@@ -771,7 +802,9 @@ def _decide_for_specialist_reply(speaker_uri: str, routing_mode: str, question_t
         return [revoke_event]
 
     logger.info(f"Round-robin: advancing to next agent -> {remaining[0]}")
-    return [revoke_event, *_grant_and_ask_events(remaining[0], question_text, max_words, conversant_records, private=True)]
+    others = [e for e in _revoke_other_granted_specialists(remaining[0], conversant_records)
+              if _normalize_id(e.to.speakerUri) != _normalize_id(speaker_uri)]
+    return [revoke_event, *others, *_turn_events(remaining[0], conversant_records)]
 
 
 def _is_guest_record(record: dict) -> bool:
@@ -820,6 +853,59 @@ def _is_addressed_to_guest(event, conversant_records: list[dict]) -> bool:
     return False
 
 
+def _to_for_conversant(uri: str, conversant_records: list[dict]) -> To:
+    """A `to` naming a conversant by both identifiers when it's on the
+    conversant list, else by the one given."""
+    normalized = _normalize_id(uri)
+    for record in conversant_records:
+        if normalized in (_normalize_id(record["speakerUri"]), _normalize_id(record["serviceUrl"])):
+            return To(speakerUri=record["speakerUri"] or None, serviceUrl=record["serviceUrl"] or None)
+    return To(speakerUri=uri)
+
+
+# Reason token a sentinel puts at the start of its requestFloor reason,
+# followed by a description: "@issueDetected <what it found>". OFP 1.1.1
+# defines special "@" reason tokens for other events (revokeFloor's
+# @timedOut/@override..., yieldFloor's @complete...) but none yet for
+# requestFloor; this is in the same style, and a candidate to propose.
+ISSUE_DETECTED_TOKEN = "@issueDetected"
+
+# Fallback for requests without the token: a plain-prose reason that reports
+# a problem is granted; anything else ("more information to add", no reason
+# at all) is turned down.
+_FLOOR_REQUEST_ISSUE_RE = re.compile(
+    r"\b(?:issues?|problems?|alerts?|allerg\w*|recalls?|safety|unsafe|hazards?|risks?|errors?|warnings?|conflicts?)\b",
+    re.IGNORECASE,
+)
+
+
+def _reports_an_issue(reason: str) -> bool:
+    if reason.startswith(ISSUE_DETECTED_TOKEN):
+        # the token alone gives nothing to judge or to show anyone
+        return bool(reason[len(ISSUE_DETECTED_TOKEN):].strip())
+    return bool(_FLOOR_REQUEST_ISSUE_RE.search(reason))
+
+
+def _decide_floor_request(event, conversant_records: list[dict]) -> list:
+    """A delegated requestFloor (OFP 1.1.1 section 1.19: it "should receive a
+    grantFloor or revokeFloor event in response"). The request's `to` names
+    who wants the floor; its `reason` says why. Grant when the reason reports
+    a problem worth interrupting for -- the @issueDetected token with a
+    description, or a plain-prose problem report -- otherwise revoke."""
+    to = _field(event, "to", None)
+    requester = (_field(to, "speakerUri", "") or _field(to, "serviceUrl", "") or "") if to is not None else ""
+    if not requester:
+        logger.info("Floor request names no requester; nothing to decide")
+        return []
+    reason = (_field(event, "reason", "") or "").strip()
+    target = _to_for_conversant(requester, conversant_records)
+    if _reports_an_issue(reason):
+        logger.info("Granting floor to %s (reason: %s)", requester, reason)
+        return [GrantFloorEvent(to=target, reason=reason)]
+    logger.info("Declining floor request from %s (reason: %r)", requester, reason)
+    return [RevokeFloorEvent(to=target, reason=f"declined: {reason or 'no reason given'}")]
+
+
 def _decide_delegated_utterance(event, conversation) -> list:
     params = getattr(event, "parameters", None) or {}
     dialog = getattr(event, "dialogEvent", None)
@@ -835,13 +921,16 @@ def _decide_delegated_utterance(event, conversation) -> list:
     round_max_words = _param("roundMaxWords", 0) or MAX_RESPONSE_WORDS
     round_turn_order = list(_param("roundTurnOrder", []) or [])
 
-    if not round_question:
-        return []
-
     conversant_records = _conversant_records(conversation)
     speaker_kind = _classify_speaker(speaker_uri, conversant_records)
     if speaker_kind == "guest":
-        logger.info("Utterance from guest agent %s; nothing to route", speaker_uri)
+        # A guest (an added agent, or a sentinel explaining an issue after
+        # its floor request was granted) has had its say: nothing to route,
+        # and its turn is over, so close its floor.
+        logger.info("Utterance from guest agent %s; revoking its floor", speaker_uri)
+        return [RevokeFloorEvent(to=_to_for_conversant(speaker_uri, conversant_records))]
+
+    if not round_question:
         return []
     if _is_addressed_to_guest(event, conversant_records):
         logger.info("Utterance addressed to a guest agent; nothing to route")
@@ -850,6 +939,20 @@ def _decide_delegated_utterance(event, conversation) -> list:
         return _decide_for_specialist_reply(
             speaker_uri, round_routing_mode, round_question, round_max_words, round_turn_order, conversant_records
         )
+    private_key = _private_specialist_key(event, conversant_records)
+    if private_key:
+        # The user chose the recipient and kept the question private: no
+        # classification, no re-broadcast. Give that specialist the floor
+        # and relay the user's OWN utterance to it privately (it heard it
+        # while revoked, so it won't have answered yet). Relaying rather
+        # than re-asking in the convener's name keeps the user as the
+        # speaker, so the specialist's private answer goes back to the user.
+        logger.info("Private question for %s; relaying it privately", private_key)
+        target = _lookup_target_for_agent(private_key, conversant_records)
+        relayed = _user_dialog_event(speaker_uri, round_question, round_max_words)
+        return [*_revoke_other_granted_specialists(private_key, conversant_records),
+                GrantFloorEvent(to=target),
+                UtteranceEvent(dialogEvent=relayed, to=To(speakerUri=target.speakerUri, serviceUrl=target.serviceUrl, private=True))]
     return _decide_for_human_utterance(round_question, round_routing_mode, round_max_words, conversant_records)
 
 
@@ -896,10 +999,13 @@ def handle_envelope_json(json_payload: str) -> str:
         if "roundHistory" in event_params:
             # Trivial echo-back for delegated control events (approve as
             # given -- convener has no additional opinion on invite/
-            # uninvite/requestFloor/grantFloor/revokeFloor beyond what the
-            # floor manager already decided to ask about). Real decision
-            # logic lives in _decide_delegated_utterance for utterances.
-            if event_type in ("invite", "uninvite", "requestFloor", "grantFloor", "revokeFloor"):
+            # uninvite/grantFloor/revokeFloor beyond what the floor manager
+            # already decided to ask about). A requestFloor is judged on its
+            # reason (_decide_floor_request); utterances on content
+            # (_decide_delegated_utterance).
+            if event_type == "requestFloor":
+                out_envelope.events = _decide_floor_request(event, _conversant_records(getattr(in_envelope, "conversation", None)))
+            elif event_type in ("invite", "uninvite", "grantFloor", "revokeFloor"):
                 out_envelope.events = [event]
             elif event_type == "utterance":
                 out_envelope.events = _decide_delegated_utterance(event, getattr(in_envelope, "conversation", None))

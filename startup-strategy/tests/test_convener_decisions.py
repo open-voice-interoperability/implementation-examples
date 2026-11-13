@@ -55,30 +55,28 @@ class DecideForHumanUtteranceTests(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertIsInstance(events[0], convener.UtteranceEvent)
 
-    def test_ask_specific_agent_grants_and_asks_privately(self):
+    def test_ask_specific_agent_grants_without_repeating_the_question(self):
+        # Every agent already heard the user's own (public) question; the
+        # grant alone is the addressed agent's cue to answer it.
         classification = {"action": "ask_specific_agent", "addressed_agent_key": "risk", "agent_keys": []}
         with patch.object(convener, "classify_utterance", return_value=classification):
             events = convener._decide_for_human_utterance("risk identifier, what about compliance?", "", 50, ALL_RECORDS)
 
-        self.assertEqual(len(events), 2)
+        self.assertEqual(len(events), 1)
         self.assertIsInstance(events[0], convener.GrantFloorEvent)
         self.assertEqual(events[0].to.serviceUrl, convener.AGENTS["risk"]["url"])
-        self.assertIsInstance(events[1], convener.UtteranceEvent)
-        self.assertTrue(events[1].to.private)
-        self.assertEqual(events[1].to.serviceUrl, convener.AGENTS["risk"]["url"])
 
     def test_round_robin_grants_only_the_first_agent(self):
         classification = {"action": "ask_agents", "addressed_agent_key": None, "agent_keys": ["market", "risk", "funding"]}
         with patch.object(convener, "classify_utterance", return_value=classification):
             events = convener._decide_for_human_utterance("evaluate this idea", "round_robin", 50, ALL_RECORDS)
 
-        self.assertEqual(len(events), 2)
+        # Just the grant: the first agent answers the question it already heard.
+        self.assertEqual(len(events), 1)
         self.assertIsInstance(events[0], convener.GrantFloorEvent)
         self.assertEqual(events[0].to.serviceUrl, convener.AGENTS["market"]["url"])
-        self.assertIsInstance(events[1], convener.UtteranceEvent)
-        self.assertTrue(events[1].to.private)
 
-    def test_full_sweep_grants_everyone_and_sends_one_public_utterance(self):
+    def test_full_sweep_grants_everyone_without_repeating_the_question(self):
         classification = {"action": "ask_agents", "addressed_agent_key": None, "agent_keys": ["market", "risk", "funding"]}
         with patch.object(convener, "classify_utterance", return_value=classification):
             events = convener._decide_for_human_utterance("evaluate this idea", "", 50, ALL_RECORDS)
@@ -87,28 +85,47 @@ class DecideForHumanUtteranceTests(unittest.TestCase):
         utterance_events = [e for e in events if isinstance(e, convener.UtteranceEvent)]
         self.assertEqual(len(grant_events), 3)
         self.assertEqual({e.to.serviceUrl for e in grant_events}, {convener.AGENTS[k]["url"] for k in ("market", "risk", "funding")})
-        self.assertEqual(len(utterance_events), 1)
-        # Public: no `to` at all (Pass-Through to every conversant, each
-        # agent's own local floor gate filters out the ungranted ones).
-        self.assertIsNone(getattr(utterance_events[0], "to", None))
+        self.assertEqual(utterance_events, [])  # each answers the question it already heard
 
     def test_max_words_appends_instruction_to_question_text(self):
-        classification = {"action": "ask_specific_agent", "addressed_agent_key": "market", "agent_keys": []}
-        with patch.object(convener, "classify_utterance", return_value=classification):
-            events = convener._decide_for_human_utterance("what's the TAM?", "", 125, ALL_RECORDS)
-
-        utterance_event = events[1]
-        text = utterance_event.dialogEvent.features["text"].tokens[0].value
+        # Used when the convener asks a private question on the user's behalf.
+        events = convener._grant_and_ask_events("market", "what's the TAM?", 125, ALL_RECORDS, private=True)
+        text = events[1].dialogEvent.features["text"].tokens[0].value
         self.assertIn("[Write approximately 125 words.]", text)
 
     def test_default_max_words_does_not_append_instruction(self):
-        classification = {"action": "ask_specific_agent", "addressed_agent_key": "market", "agent_keys": []}
-        with patch.object(convener, "classify_utterance", return_value=classification):
-            events = convener._decide_for_human_utterance("what's the TAM?", "", convener.MAX_RESPONSE_WORDS, ALL_RECORDS)
-
-        utterance_event = events[1]
-        text = utterance_event.dialogEvent.features["text"].tokens[0].value
+        events = convener._grant_and_ask_events("market", "what's the TAM?", convener.MAX_RESPONSE_WORDS, ALL_RECORDS, private=True)
+        text = events[1].dialogEvent.features["text"].tokens[0].value
         self.assertNotIn("[Write approximately", text)
+
+
+class PrivateQuestionTests(unittest.TestCase):
+    """A private question reached only its recipient, so only it is asked --
+    no round, no grants to agents that never heard it."""
+
+    def _delegated(self, to):
+        dialog = convener.DialogEvent(speakerUri="tag:human")
+        text_feature = convener.TextFeature()
+        text_feature.tokens = [convener.Token(value="what's the TAM?")]
+        dialog.features = {"text": text_feature}
+        event = convener.UtteranceEvent(dialogEvent=dialog, to=to)
+        event.parameters = {"dialogEvent": dialog, "roundQuestion": "what's the TAM?", "roundRoutingMode": "round_robin",
+                            "roundMaxWords": 0, "roundTurnOrder": []}
+        return convener._decide_delegated_utterance(event, {"conversants": ALL_WRAPPED_RECORDS})
+
+    def test_a_private_question_is_asked_of_its_recipient_only(self):
+        market = convener.AGENTS["market"]["url"]
+        events = self._delegated(convener.To(serviceUrl=market, private=True))
+        self.assertEqual([type(e) for e in events], [convener.GrantFloorEvent, convener.UtteranceEvent])
+        self.assertEqual(events[0].to.serviceUrl, market)
+        self.assertTrue(events[1].to.private)
+        self.assertEqual(events[1].to.serviceUrl, market)
+
+    def test_a_public_question_starts_the_round_with_a_grant_only(self):
+        classification = {"action": "ask_agents", "addressed_agent_key": None, "agent_keys": ["market", "risk"]}
+        with patch.object(convener, "classify_utterance", return_value=classification):
+            events = self._delegated(None)
+        self.assertEqual([type(e) for e in events], [convener.GrantFloorEvent])
 
 
 class DecideForSpecialistReplyTests(unittest.TestCase):
@@ -123,7 +140,7 @@ class DecideForSpecialistReplyTests(unittest.TestCase):
         self.assertEqual(events[0].to.speakerUri, "tag:market")
         self.assertIsInstance(events[1], convener.GrantFloorEvent)
         self.assertEqual(events[1].to.serviceUrl, convener.AGENTS["risk"]["url"])
-        self.assertIsInstance(events[2], convener.UtteranceEvent)
+        self.assertEqual(len(events), 2)  # no repeat of the question -- risk already heard it
 
     def test_round_robin_sequence_complete_only_revokes(self):
         classification = {"action": "ask_agents", "addressed_agent_key": None, "agent_keys": ["market", "risk"]}

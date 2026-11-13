@@ -479,6 +479,9 @@ def _question_dialog_event(text: str, max_words: int) -> DialogEvent:
 
 
 def _grant_and_ask_events(agent_key: str, text: str, max_words: int, conversant_records: list[dict], private: bool) -> list:
+    """Grant the floor and ask the question. Only for a question the agent
+    has NOT already heard -- a private one sent to it alone (see
+    _decide_delegated_utterance); everything else is _turn_events."""
     if agent_key not in AGENTS:
         return []
     target = _lookup_target_for_agent(agent_key, conversant_records)
@@ -494,8 +497,17 @@ def _grant_only_event(agent_key: str, conversant_records: list[dict]):
     return GrantFloorEvent(to=_lookup_target_for_agent(agent_key, conversant_records))
 
 
-def _public_question_utterance(text: str, max_words: int) -> UtteranceEvent:
-    return UtteranceEvent(dialogEvent=_question_dialog_event(text, max_words))
+def _turn_events(agent_key: str, conversant_records: list[dict]) -> list:
+    """Give one specialist its turn: grant it the floor, and nothing else.
+
+    It already heard the question -- the user's public utterance reaches
+    every conversant before the convener decides anything -- so the grant is
+    its cue to answer it (OFP's grantFloor: "you may speak now"; see
+    base_strategy_agent.py's _handle_grant_floor). The convener used to ask
+    the question again with every grant, putting a second copy in front of
+    each agent and into its conversation history."""
+    grant = _grant_only_event(agent_key, conversant_records)
+    return [grant] if grant is not None else []
 
 
 def _invite_events_for_not_yet_invited(conversant_records: list[dict]) -> list:
@@ -527,7 +539,7 @@ def _decide_for_human_utterance(text: str, routing_mode: str, max_words: int, co
         if not agent_key:
             return []
         logger.info(f"Directly addressed agent for '{text[:60]}' -> {agent_key}")
-        return _grant_and_ask_events(agent_key, text, max_words, conversant_records, private=True)
+        return _turn_events(agent_key, conversant_records)
 
     agent_keys = classification["agent_keys"]
     if not agent_keys:
@@ -535,17 +547,14 @@ def _decide_for_human_utterance(text: str, routing_mode: str, max_words: int, co
 
     if routing_mode == "round_robin":
         logger.info(f"Round-robin turn order for '{text[:60]}' -> agents: {agent_keys}; starting with {agent_keys[0]}")
-        return _grant_and_ask_events(agent_keys[0], text, max_words, conversant_records, private=True)
+        return _turn_events(agent_keys[0], conversant_records)
 
     logger.info(f"Full-sweep classification for '{text[:60]}' -> agents: {agent_keys}")
+    # Every agent already heard the user's question; each grant is its cue
+    # to answer (see _turn_events).
     events = []
     for key in agent_keys:
-        grant = _grant_only_event(key, conversant_records)
-        if grant is not None:
-            events.append(grant)
-    if not events:
-        return []
-    events.append(_public_question_utterance(text, max_words))
+        events.extend(_turn_events(key, conversant_records))
     return events
 
 
@@ -554,7 +563,7 @@ def _decide_for_specialist_reply(speaker_uri: str, routing_mode: str, question_t
     revoke_event = RevokeFloorEvent(to=To(speakerUri=speaker_uri))
 
     if routing_mode != "round_robin" or not question_text:
-        # Full-sweep: each agent was already granted+asked up front (see
+        # Full-sweep: each agent was already granted up front (see
         # _decide_for_human_utterance); nothing left to do but revoke this
         # one now that it has spoken.
         return [revoke_event]
@@ -573,7 +582,7 @@ def _decide_for_specialist_reply(speaker_uri: str, routing_mode: str, question_t
         return [revoke_event]
 
     logger.info(f"Round-robin: advancing to next agent -> {remaining[0]}")
-    return [revoke_event, *_grant_and_ask_events(remaining[0], question_text, max_words, conversant_records, private=True)]
+    return [revoke_event, *_turn_events(remaining[0], conversant_records)]
 
 
 def _classify_speaker(speaker_uri: str, conversant_records: list[dict]) -> str:
@@ -607,7 +616,27 @@ def _decide_delegated_utterance(event, conversation) -> list:
         return _decide_for_specialist_reply(
             speaker_uri, round_routing_mode, round_question, round_max_words, round_turn_order, conversant_records
         )
+    private_key = _private_specialist_key(event)
+    if private_key:
+        # A private question reached only the specialist it was sent to, so
+        # nobody else can be handed a turn to answer it: give that one the
+        # floor and ask it there, privately -- no round, no re-broadcast.
+        logger.info("Private question for %s; asking it there only", private_key)
+        return _grant_and_ask_events(private_key, round_question, round_max_words, conversant_records, private=True)
     return _decide_for_human_utterance(round_question, round_routing_mode, round_max_words, conversant_records)
+
+
+def _private_specialist_key(event) -> str | None:
+    """The specialist a private utterance is addressed to, or None when the
+    utterance isn't private or isn't addressed to a specialist."""
+    to = _field(event, "to", None)
+    if to is None or not _field(to, "private", False):
+        return None
+    for uri in (_field(to, "serviceUrl", "") or "", _field(to, "speakerUri", "") or ""):
+        key = _agent_key_for_service_url(uri)
+        if key:
+            return key
+    return None
 
 
 def _parse_incoming_envelope(json_payload: str):

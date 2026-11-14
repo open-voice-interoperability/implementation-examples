@@ -39,8 +39,21 @@ HUMAN_SPEAKER_URI = "tag:human"
 def make_fake_specialist(agent_key: str, service_url: str):
     """Mirrors base_strategy_agent.py's real behavior closely enough for
     this test: auto-accepts invites, tracks its own local floor-granted
-    state, and only replies to an utterance while granted."""
-    state = {"floor_granted": False}
+    state, replies to an utterance while granted -- and keeps the person's
+    question it heard while NOT granted, answering it when a grant arrives
+    on its own (no question in the same envelope), the way the real agent's
+    _handle_grant_floor does."""
+    state = {"floor_granted": False, "open_question": None, "asked": []}
+
+    def reply(text: str) -> dict:
+        state["asked"].append(text)
+        return {
+            "eventType": "utterance",
+            "parameters": {"dialogEvent": {
+                "speakerUri": f"tag:{agent_key}",
+                "features": {"text": {"tokens": [{"value": f"{agent_key} analysis of: {text}"}]}},
+            }},
+        }
 
     def handle(envelope: dict) -> dict:
         openfloor = envelope.get("openFloor", envelope)
@@ -53,19 +66,21 @@ def make_fake_specialist(agent_key: str, service_url: str):
                 out_events.append({"eventType": "acceptInvite"})
             elif event_type == "grantFloor":
                 state["floor_granted"] = True
+                asked_too = any(e.get("eventType") == "utterance" for e in events)
+                if not asked_too and state["open_question"] is not None:
+                    question, state["open_question"] = state["open_question"], None
+                    out_events.append(reply(question))
             elif event_type == "revokeFloor":
                 state["floor_granted"] = False
-            elif event_type == "utterance" and state["floor_granted"]:
+            elif event_type == "utterance":
                 dialog = (event.get("parameters") or {}).get("dialogEvent", {})
                 tokens = (dialog.get("features", {}).get("text", {}) or {}).get("tokens", [])
                 text = tokens[0].get("value", "") if tokens else ""
-                out_events.append({
-                    "eventType": "utterance",
-                    "parameters": {"dialogEvent": {
-                        "speakerUri": f"tag:{agent_key}",
-                        "features": {"text": {"tokens": [{"value": f"{agent_key} analysis of: {text}"}]}},
-                    }},
-                })
+                if state["floor_granted"]:
+                    state["open_question"] = None
+                    out_events.append(reply(text))
+                elif dialog.get("speakerUri") == HUMAN_SPEAKER_URI:
+                    state["open_question"] = text
         return {"openFloor": {"conversation": {}, "sender": {"speakerUri": f"tag:{agent_key}", "serviceUrl": service_url}, "events": out_events}}
 
     return handle, state, service_url
@@ -157,6 +172,15 @@ class RoundRobinIntegrationTests(unittest.TestCase):
         self.assertTrue(any("market analysis" in t for t in reply_texts))
         self.assertTrue(any("risk analysis" in t for t in reply_texts))
         self.assertTrue(any("funding analysis" in t for t in reply_texts))
+
+        # The question went out once, from the person; the convener only
+        # granted turns -- it never repeated the question -- and each agent
+        # answered the question it had heard.
+        utterance_speakers = [e["parameters"]["dialogEvent"].get("speakerUri") for e in executed if e.get("eventType") == "utterance"]
+        self.assertEqual(utterance_speakers.count(HUMAN_SPEAKER_URI), 1)
+        self.assertNotIn(convener.CONVENER_MANIFEST.identification.speakerUri, utterance_speakers)
+        for state in (self.market_state, self.risk_state, self.funding_state):
+            self.assertEqual(state["asked"], ["evaluate this startup idea"])
 
         # Every specialist ends the round revoked -- no one left holding the floor.
         self.assertFalse(self.market_state["floor_granted"])

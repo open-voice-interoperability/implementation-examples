@@ -34,6 +34,7 @@ MCP_SERVERS = {
     "usda_ams": os.path.join(os.path.dirname(__file__), "mcp", "usda_ams_mcp.py"),
     "themealdb": os.path.join(os.path.dirname(__file__), "mcp", "themealdb_mcp.py"),
     "web_search": os.path.join(os.path.dirname(__file__), "mcp", "web_search_mcp.py"),
+    "food_recalls": os.path.join(os.path.dirname(__file__), "mcp", "food_recalls_mcp.py"),
 }
 
 # ---------------------------------------------------------------------------

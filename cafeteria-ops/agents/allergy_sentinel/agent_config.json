@@ -1,0 +1,35 @@
+{
+  "manifest": {
+    "identification": {
+      "conversationalName": "Allergy Sentinel",
+      "speakerUri": "http://127.0.0.1:8307/",
+      "serviceUrl": "http://127.0.0.1:8307/",
+      "organization": "Open Voice Network",
+      "role": "sentinel",
+      "synopsis": "Watches the floor and flags dishes with allergens the request rules out, or severe allergens",
+      "openFloorRoles": { "information": true }
+    },
+    "capabilities": {
+      "keyphrases": [
+        "allergy",
+        "allergen",
+        "nut-free",
+        "gluten-free",
+        "dairy-free",
+        "shellfish",
+        "sesame",
+        "peanut"
+      ],
+      "languages": [
+        "en-us"
+      ],
+      "descriptions": [
+        "Sentinel: watches every reply on the floor and speaks only when it finds a problem.",
+        "Flags menu items that break a stated allergy restriction, and any dish containing peanuts, tree nuts, shellfish or sesame."
+      ],
+      "supportedLayers": [
+        "text"
+      ]
+    }
+  }
+}

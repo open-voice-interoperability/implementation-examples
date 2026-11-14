@@ -18,6 +18,7 @@ Port: 8305
 
 import logging
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -32,6 +33,19 @@ import llm_utils
 _LOOKUP = {"ollama_model": llm_utils.LOOKUP_OLLAMA_MODEL, "openai_model": llm_utils.LOOKUP_LLM_MODEL}
 
 logger = logging.getLogger(__name__)
+
+# A broad planning request ("plan a 5-day lunch menu for 450") gets a review
+# of the menu's riskiest ingredients; anything else is a pointed question
+# ("what par level should we set for fresh basil?") that gets just that
+# answer. Decided here, not left to the model: told "answer a specific
+# question directly, otherwise review the menu", qwen2.5:7b reviewed the
+# menu either way -- live, the basil question came back about tahini and
+# feta. Same pattern as the Nutrition / Procurement / Recipe & Portion
+# agents' own copies (agents share no code).
+_BROAD_PLANNING_SIGNAL = re.compile(
+    r"\b(five-day|\d+[- ]day|weekly|week'?s|itemized|budget|per meal|menu for|lunch menu|meal plan)\b",
+    re.IGNORECASE,
+)
 
 SYSTEM_PROMPT = """You are the Inventory Specialist for a corporate cafeteria operations panel.
 Your job is to reason about stock levels for the ingredients or situation
@@ -86,6 +100,25 @@ class InventoryAgent(BaseStrategyAgent):
         user_message = f"""{self._history_block()}Inventory situation: {user_text}
 
 Please assess stock/par-level risk for this situation."""
+        # Without a length target and a limit on how many ingredients to
+        # cover, the model walks EVERY ingredient in Recipe & Portion's
+        # writeup (33+ seen) through the same usage/shelf-life/par/risk
+        # template -- thousands of tokens, a minute of generation, nearly
+        # all of it trimmed away by _limit_words. Replayed against real
+        # rounds it did that in 15 of 45 tries; Menu Optimization, which has
+        # this same kind of instruction, never did. See its own note.
+        if _BROAD_PLANNING_SIGNAL.search(user_text or ""):
+            user_message += (
+                f"\n\nKeep the entire response within about {self._current_max_words} words. "
+                "Do not go through the ingredients one by one -- name the three to five ingredients "
+                "with the highest stockout or spoilage risk on this menu, give each a par level and "
+                "the reason in a sentence or two, then sum up the rest in one sentence."
+            )
+        else:
+            user_message += (
+                f"\n\nAnswer only the question asked, in about {self._current_max_words} words "
+                "at most -- do not review the rest of the menu."
+            )
 
         text = llm_utils.chat_sync(SYSTEM_PROMPT, user_message, **_LOOKUP)
         # This agent's response is normally one holistic paragraph, not a

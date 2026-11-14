@@ -108,6 +108,16 @@ def _build_chat_messages(system_prompt: str, user_message: str) -> tuple[list[di
     return messages, user_content
 
 
+# Upper bound on the tokens one reply may generate. No agent shows more than
+# ~400 words (~550 tokens), and the longest internal calls (a week's dish
+# extraction, Recipe & Portion's whole-menu writeup) stay near 1,000 -- but a
+# small local model occasionally loops, repeating itself until the request
+# times out: seen live, qwen2.5:7b generated 13,000+ tokens in 60s for the
+# Inventory Specialist, whose reply then fell over to OpenAI and failed.
+# Capped, a loop stops in seconds and the reply is trimmed as usual.
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "1536"))
+
+
 def _ollama_base_url() -> str:
     """Get Ollama API base URL, ensuring /v1 suffix."""
     base_url = OLLAMA_HOST.rstrip("/")
@@ -123,6 +133,8 @@ async def chat(
     timeout: float | None = None,
     ollama_model: str | None = None,
     openai_model: str | None = None,
+    max_tokens: int | None = None,
+    json_mode: bool = False,
 ) -> str:
     """
     Send a chat completion request to the configured LLM provider(s).
@@ -141,8 +153,18 @@ async def chat(
     Lets a latency-sensitive caller (e.g. routing/classification) opt into a
     smaller/faster model on whichever provider is actually configured, without
     changing the model deeper analysis calls get.
+
+    max_tokens: the most tokens the reply may generate; defaults to
+    LLM_MAX_TOKENS (see there for why every call is capped).
+
+    json_mode: ask the provider for syntactically valid JSON only
+    (response_format json_object -- Ollama and OpenAI both honor it), for a
+    caller that parses the reply as JSON. Without it a small model writes
+    near-JSON (unquoted values, misplaced braces) often enough to matter.
+    The prompt must still ask for JSON and describe its shape.
     """
     messages, _ = _build_chat_messages(system_prompt, user_message)
+    reply_token_cap = max_tokens if max_tokens is not None else LLM_MAX_TOKENS
     request_timeout = timeout if timeout is not None else 60
     effective_ollama_model = ollama_model or OLLAMA_MODEL
     effective_openai_model = openai_model or LLM_MODEL
@@ -159,7 +181,10 @@ async def chat(
                 "model": effective_ollama_model,
                 "messages": messages,
                 "temperature": temperature,
+                "max_tokens": reply_token_cap,
             }
+            if json_mode:
+                payload["response_format"] = {"type": "json_object"}
             async with httpx.AsyncClient(timeout=request_timeout) as client:
                 r = await client.post(
                     f"{base_url}/chat/completions",
@@ -189,7 +214,10 @@ async def chat(
                 "model": effective_openai_model,
                 "messages": messages,
                 "temperature": temperature,
+                "max_tokens": reply_token_cap,
             }
+            if json_mode:
+                payload["response_format"] = {"type": "json_object"}
             async with httpx.AsyncClient(timeout=request_timeout) as client:
                 r = await client.post(
                     f"{LLM_BASE_URL}/chat/completions",
@@ -227,10 +255,12 @@ def chat_sync(
     timeout: float | None = None,
     ollama_model: str | None = None,
     openai_model: str | None = None,
+    max_tokens: int | None = None,
+    json_mode: bool = False,
 ) -> str:
     """Synchronous wrapper around chat() for use in non-async contexts.
 
-    timeout, ollama_model, openai_model: see chat(). timeout also bounds the
+    timeout, ollama_model, openai_model, max_tokens, json_mode: see chat(). timeout also bounds the
     outer thread-pool wait (with a small buffer for two sequential provider
     attempts) when called from inside a running event loop.
     """
@@ -247,10 +277,10 @@ def chat_sync(
             future_timeout = (timeout * 2 + 5) if timeout is not None else 90
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 future = pool.submit(
-                    asyncio.run, chat(system_prompt, user_message, temperature, timeout, ollama_model, openai_model)
+                    asyncio.run, chat(system_prompt, user_message, temperature, timeout, ollama_model, openai_model, max_tokens, json_mode)
                 )
                 return future.result(timeout=future_timeout)
-        return asyncio.run(chat(system_prompt, user_message, temperature, timeout, ollama_model, openai_model))
+        return asyncio.run(chat(system_prompt, user_message, temperature, timeout, ollama_model, openai_model, max_tokens, json_mode))
     except Exception as e:
         logger.error(f"chat_sync failed: {e}")
         return f"[LLM call failed: {e}]"
@@ -264,20 +294,27 @@ def chat_sync(
 # fal-ai/replicate, which need their own separate billing setup).
 HF_API_KEY = os.getenv("HF_API_KEY", "")
 HF_IMAGE_MODEL = os.getenv("HF_IMAGE_MODEL", "stabilityai/stable-diffusion-3-medium-diffusers")
-HF_INFERENCE_BASE = "https://api-inference.huggingface.co/models"
+# The router replaced the old api-inference.huggingface.co host, which no
+# longer resolves (confirmed 2026-11). Usage draws on the account's
+# Inference Providers credits; without any it answers 402.
+HF_INFERENCE_BASE = "https://router.huggingface.co/hf-inference/models"
 
-# Which image provider(s) to try, and in what order: 'auto' (Hugging Face
-# first, then OpenAI), 'huggingface', or 'openai'.
+# Which image provider(s) to try, and in what order: 'auto' (the local image
+# service, then Hugging Face, then OpenAI), 'local', 'huggingface', or 'openai'.
 IMAGE_PROVIDER = os.getenv("IMAGE_PROVIDER", "auto").strip().lower()
 
-# A menu illustration is shown at most 200px wide in the report popup (see
-# menu_designer_agent.py's _entry_html) -- generating/keeping it at a
+# The local image service (image_server/image_server.py): FLUX.1-schnell on
+# this machine's GPU -- free and private. Skipped quickly when not running.
+LOCAL_IMAGE_URL = os.getenv("LOCAL_IMAGE_URL", "http://127.0.0.1:8320").rstrip("/")
+
+# A menu illustration is shown as a 100px plate on the Planner board and
+# opens at up to 560px when clicked -- 512px keeps that sharp, while a
 # provider's native 1024x1024 wastes bandwidth for no visible benefit (a
 # single image came back ~2.5MB base64-encoded as PNG at that size, live-
 # tested). IMAGE_MAX_DIMENSION bounds the final image's longer side;
 # _shrink_data_uri also re-encodes as JPEG, which compresses a
 # photographic image far better than PNG.
-IMAGE_MAX_DIMENSION = int(os.getenv("IMAGE_MAX_DIMENSION", "400"))
+IMAGE_MAX_DIMENSION = int(os.getenv("IMAGE_MAX_DIMENSION", "512"))
 _IMAGE_JPEG_QUALITY = 80
 
 
@@ -304,6 +341,30 @@ def _shrink_data_uri(data_uri: str, max_dimension: int = IMAGE_MAX_DIMENSION, qu
     except Exception as e:
         logger.warning(f"Image shrink failed, using original: {e}")
         return data_uri
+
+
+def _generate_image_local(prompt: str) -> str:
+    """One image from the local image service, as a base64 data URI, or ""
+    if it isn't running, is still loading its model, or fails."""
+    if not LOCAL_IMAGE_URL:
+        return ""
+    try:
+        side = max(256, IMAGE_MAX_DIMENSION)
+        # Normally a second or two; give up well before the Menu Designer's own
+        # reply deadline (3 min) so a stalled service costs pictures, not the menu.
+        with httpx.Client(timeout=httpx.Timeout(60, connect=2)) as client:
+            r = client.post(f"{LOCAL_IMAGE_URL}/generate", json={"prompt": prompt, "width": side, "height": side})
+        if r.status_code == 200:
+            image = r.json().get("image", "")
+            if image.startswith("data:image/"):
+                logger.info("Image generated by the local image service")
+                return image
+        logger.warning(f"Local image service returned {r.status_code}: {r.text[:150]}")
+    except httpx.ConnectError:
+        logger.debug("Local image service not running at %s", LOCAL_IMAGE_URL)
+    except Exception as e:
+        logger.warning(f"Local image service failed: {e}")
+    return ""
 
 
 def _generate_image_huggingface(prompt: str) -> str:
@@ -385,11 +446,19 @@ def generate_image_sync(prompt: str, size: str = "1024x1024") -> str:
     Generate an image and return it as a base64 data URI, or "" if
     unavailable/failed on every configured provider.
 
-    Tries Hugging Face's free Inference Providers API first (if HF_API_KEY
-    is set and IMAGE_PROVIDER allows it), then falls back to an
+    Tries the local image service first (free, on this machine), then
+    Hugging Face's Inference Providers API (if HF_API_KEY is set), then an
     OpenAI-compatible /images/generations call -- same "prefer free, fall
-    back to paid" order as chat()'s Ollama-then-OpenAI split.
+    back to paid" order as chat()'s Ollama-then-OpenAI split. IMAGE_PROVIDER
+    narrows it to one.
     """
+    if IMAGE_PROVIDER in {"auto", "local"}:
+        image = _generate_image_local(prompt)
+        if image:
+            return _shrink_data_uri(image)
+        if IMAGE_PROVIDER == "local":
+            return ""
+
     if IMAGE_PROVIDER in {"auto", "huggingface"} and HF_API_KEY:
         image = _generate_image_huggingface(prompt)
         if image:

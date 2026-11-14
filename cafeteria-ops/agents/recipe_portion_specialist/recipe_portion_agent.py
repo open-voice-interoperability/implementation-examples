@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
@@ -926,6 +927,111 @@ def _repair_missing_dish_line(dish: str, raw_recipe: "str | None") -> str:
     return f"{dish}: No recipe data found -- use general culinary knowledge for this dish."
 
 
+# --- AI-generated recipes, one per dish ---------------------------------------
+#
+# A dish TheMealDB has no recipe for gets its OWN AI-generated recipe -- one
+# focused call per dish -- instead of a best guess squeezed into the combined
+# whole-menu writeup. It goes out in the same round reply, so Nutrition,
+# Procurement, Shopping List and the sentinels all hear the ingredients that
+# will actually be used, and the Planner's pop-up shows it as that dish's
+# recipe straight away. The Planner and the other agents key on these markers.
+_AI_RECIPE_MARKER = "AI-generated recipe (not from TheMealDB)"
+_REPLACEMENT_MARKER = "Replacement recipe"
+
+_AI_RECIPE_SYSTEM_PROMPT = """You write ONE cafeteria recipe for a single dish, for exactly ONE serving,
+from general culinary knowledge. Respond with ONLY one line, in exactly this format:
+
+Ingredients: <each ingredient with a specific one-serving amount, comma separated, e.g. 150g chicken breast>. Method: <short preparation steps>. Plate: <plate serving size>.
+
+No dish name, no markdown, no heading, no commentary, no line breaks."""
+
+
+def _ai_recipe_line(dish: str, word_budget: int, avoid: str = "", request: str = "",
+                    marker: str = _AI_RECIPE_MARKER) -> str:
+    """"<dish>: <marker> -- Ingredients: ... Steps: ... Plate: ..." on one
+    line. ``avoid`` is the current recipe when the user asked for a
+    different one; ``request`` is what they said about it."""
+    extra = ""
+    if avoid:
+        extra += ("\n\nThe current recipe for this dish, which the user wants replaced -- write a clearly "
+                  f"DIFFERENT one (a different preparation or seasoning, still this dish):\n{avoid}")
+    if request:
+        extra += f"\n\nThe user's request: {request}"
+    user_message = f"Dish: {dish}{extra}\n\nKeep the whole line to about {word_budget} words."
+    raw = llm_utils.chat_sync(_AI_RECIPE_SYSTEM_PROMPT, user_message, timeout=30, **_LOOKUP)
+    body = " ".join(line.strip() for line in (raw or "").split("\n") if line.strip())
+    if body.lower().startswith(dish.strip().lower()):  # the model repeated the dish name anyway
+        body = body[len(dish.strip()):].lstrip(" :-–—")
+    if not body:
+        body = "No recipe could be written for this dish -- ask the Recipe & Portion Specialist again."
+    return f"{dish}: {marker} -- {body}"
+
+
+def _line_for_dish(lines: list[str], dish: str) -> "int | None":
+    """Index of the line in a whole-menu writeup that is ``dish``'s entry
+    (same tolerant name match as _missing_dishes), or None."""
+    needle = dish.strip().lower()
+    for i, line in enumerate(lines):
+        name = _dish_name_from_line(line)
+        if name:
+            c = name.strip().lower()
+            if needle == c or needle in c or c in needle:
+                return i
+    return None
+
+
+def _in_menu_order(text: str, dishes: list[str], ai_lines: dict[str, str]) -> str:
+    """The writeup for the dishes TheMealDB had plus each AI-generated line,
+    one line per dish in menu order; anything else the writeup had (a
+    note) goes last."""
+    lines = [line for line in text.split("\n") if line.strip()]
+    used: set[int] = set()
+    out: list[str] = []
+    for dish in dishes:
+        if dish in ai_lines:
+            out.append(ai_lines[dish])
+            continue
+        i = _line_for_dish(["" if j in used else line for j, line in enumerate(lines)], dish)
+        if i is not None:
+            used.add(i)
+            out.append(lines[i])
+    out.extend(line for j, line in enumerate(lines) if j not in used)
+    return "\n".join(out)
+
+
+# "Replace the salmon recipe", "I don't like the curry recipe, give me
+# another one", "a different recipe for the tacos" -- asked of this agent
+# by name, in public, so the agents that use the recipes hear the new one.
+_REPLACE_REQUEST_RE = re.compile(
+    r"\b(?:replace|swap|change|redo|rewrite|switch)\b[^.?!]*\brecipe"
+    r"|\brecipe\b[^.?!]*\b(?:replace|swap|instead)\b"
+    r"|\b(?:another|different|new|other)\s+(?:\w+\s+)?recipe\b"
+    r"|\b(?:don'?t|do not)\s+(?:like|want)\b[^.?!]*\brecipe", re.I)
+_DISH_FILLER = {"with", "and", "the", "for"}
+
+
+def _words_of(text: str) -> set[str]:
+    words = re.findall(r"[a-z]{3,}", (text or "").lower())
+    return {w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w
+            for w in words if w not in _DISH_FILLER}
+
+
+def _named_dish(text: str, dishes: list[str]) -> "str | None":
+    """Which of ``dishes`` the request names -- at least half the dish's
+    words appear in it (the best share wins, then the more specific name)."""
+    said = _words_of(text)
+    best, best_key = None, (0.0, 0)
+    for dish in dishes:
+        words = _words_of(dish)
+        if not words:
+            continue
+        share = len(words & said) / len(words)
+        key = (share, len(words))
+        if share >= 0.5 and key > best_key:
+            best, best_key = dish, key
+    return best
+
+
 class RecipePortionAgent(BaseStrategyAgent):
     AGENT_NAME = "Recipe & Portion Specialist"
     AGENT_PORT = 8303
@@ -951,13 +1057,22 @@ class RecipePortionAgent(BaseStrategyAgent):
         # conversation so an older, unrelated conversation's menu can never
         # leak into a new one against the same running agent process.
         self._observed_menus: dict[str, str] = {}
+        # conv_id -> {dish: its one-serving line} from this agent's own last
+        # whole-menu writeup (and any replacements since) -- what a "replace
+        # the X recipe" request is checked against.
+        self._recipe_lines: dict[str, dict[str, str]] = {}
 
     def on_observed_utterance(self, conv_id: str, speaker_uri: str, text: str) -> None:
         if self._normalize_endpoint_id(speaker_uri) == self._normalize_endpoint_id(_MENU_DESIGNER_SERVICE_URL):
             self._observed_menus[conv_id] = text
+            self._recipe_lines.pop(conv_id, None)  # a new menu means new recipes
             logger.info("[RecipePortion] Saved Menu Designer's proposed menu for conv %s", conv_id)
 
     def process_utterance(self, user_text: str) -> dict:
+        replacement = self._replacement_request(user_text)
+        if replacement:
+            return self._respond_with_replacement(user_text, *replacement)
+
         if _needs_unavailable_data(user_text):
             logger.info("[RecipePortion] Declining -- question needs recipe/prep history this system lacks")
             return {"text": _MISSING_DATA_DECLINE, "html": ""}
@@ -1132,18 +1247,70 @@ prep summary, and plate serving size for ONE serving."""
         text = llm_utils.chat_sync(_MULTI_IDEA_SYSTEM_PROMPT, user_message, timeout=30, **_LOOKUP)
         return {"text": text, "html": self._text_to_html_list(text)}
 
+    def _replacement_request(self, user_text: str) -> "tuple[str, str] | None":
+        """(dish, its current recipe line) when the user asks for a different
+        recipe for one of this week's dishes, else None."""
+        cleaned = _MAX_WORDS_INSTRUCTION.sub("", user_text or "")
+        if not _REPLACE_REQUEST_RE.search(cleaned):
+            return None
+        lines = self._recipe_lines.get(self._current_conv_id) or {}
+        dishes = list(lines)
+        if not dishes:
+            saved_menu = self._observed_menus.get(self._current_conv_id, "")
+            dishes = _extract_dishes(saved_menu) if saved_menu else []
+        dish = _named_dish(cleaned, dishes)
+        return (dish, lines.get(dish, "")) if dish else None
+
+    def _respond_with_replacement(self, user_text: str, dish: str, current: str) -> dict:
+        """One new AI-generated recipe for ``dish``, marked as a replacement --
+        the Planner swaps it in for that dish only, and the agents that saved
+        the week's recipes drop the old one."""
+        request = _ADDRESS_PREFIX.sub("", _MAX_WORDS_INSTRUCTION.sub("", user_text or "").strip(), count=1)
+        line = _ai_recipe_line(dish, max(40, min(120, self._current_max_words)), avoid=current,
+                               request=request, marker=f"{_REPLACEMENT_MARKER} -- {_AI_RECIPE_MARKER}")
+        self._recipe_lines.setdefault(self._current_conv_id, {})[dish] = line
+        logger.info("[RecipePortion] Replaced the recipe for %s", dish)
+        return {"text": line, "html": self._text_to_html_list(line)}
+
     def _respond_for_whole_menu(self, saved_menu: str, dishes: list[str], servings: int = 1) -> dict:
         recipe_data = _fetch_all_recipes(dishes)
+        found = [dish for dish in dishes if recipe_data.get(dish)]
+        not_found = [dish for dish in dishes if not recipe_data.get(dish)]
+        per_dish_words = max(20, self._current_max_words // max(1, len(dishes)))
 
-        gathered = []
-        not_found = []
-        for dish, raw in recipe_data.items():
-            if raw:
-                gathered.append(f"{dish}:\n{raw}")
-            else:
-                not_found.append(dish)
-        context = "\n\n".join(gathered) if gathered else "No recipe data found for any dish."
-        not_found_note = f"\nDishes with no recipe data found: {', '.join(not_found)}" if not_found else ""
+        # Each dish with no TheMealDB recipe gets its own AI-generated one
+        # (see _ai_recipe_line), written in parallel.
+        ai_lines: dict[str, str] = {}
+        if not_found:
+            with ThreadPoolExecutor(max_workers=min(5, len(not_found))) as pool:
+                futures = {dish: pool.submit(_ai_recipe_line, dish, per_dish_words) for dish in not_found}
+            ai_lines = {dish: future.result() for dish, future in futures.items()}
+
+        text = self._write_found_dishes(saved_menu, found, recipe_data, per_dish_words) if found else ""
+        text = _in_menu_order(text, dishes, ai_lines)
+        lines = text.split("\n")
+        self._recipe_lines[self._current_conv_id] = {
+            dish: lines[i] for dish in dishes if (i := _line_for_dish(lines, dish)) is not None
+        }
+
+        text = self._apply_servings(text, servings)
+        return {"text": text, "html": self._text_to_html_list(text), "keep_whole": True}
+
+    def _emit_answer(self, result, out_envelope) -> None:
+        # A whole-menu reply is the week's recipe data -- the other agents
+        # shop and count nutrients from it -- so the word limit must not cut
+        # off the last dish's method mid-recipe (seen live with an 8-dish
+        # week). The per-dish budget is what keeps it short. Applied here,
+        # not in _respond_for_whole_menu, because a floor-holder resume
+        # restores the request's original limit before answering.
+        if isinstance(result, dict) and result.get("keep_whole"):
+            self._current_max_words = max(self._current_max_words, len(str(result.get("text", "")).split()))
+        super()._emit_answer(result, out_envelope)
+
+    def _write_found_dishes(self, saved_menu: str, dishes: list[str], recipe_data: dict, per_dish_words: int) -> str:
+        """One combined writeup, one line per dish, for the dishes TheMealDB
+        had real recipe data for."""
+        context = "\n\n".join(f"{dish}:\n{recipe_data[dish]}" for dish in dishes)
 
         # Same fix as Menu Designer's per-day word budget: without an
         # explicit per-dish word count, the model writes an exhaustive
@@ -1152,7 +1319,6 @@ prep summary, and plate serving size for ONE serving."""
         # live (a 3-dish menu at a 300-word budget only ever covered dish
         # 1). Giving it the arithmetic up front, not just the instruction
         # to "cover everything," is what actually makes it reliable.
-        per_dish_words = max(20, self._current_max_words // max(1, len(dishes)))
         budget_hint = (
             f"\n\nThis menu has {len(dishes)} dishes. Budget roughly {per_dish_words} words "
             f"per dish so all {len(dishes)} fit in the response -- do not spend more than "
@@ -1163,14 +1329,13 @@ prep summary, and plate serving size for ONE serving."""
         user_message = f"""{self._history_block()}The week's menu as proposed by the Menu Designer:
 {saved_menu}
 
-Dishes identified: {', '.join(dishes)}
+Dishes to cover here: {', '.join(dishes)} (any other dish on the menu is handled separately -- do not write it)
 
 Real recipe data retrieved from TheMealDB (may be written for several servings -- scale down to one serving):
 {context}
-{not_found_note}
 {budget_hint}
 
-Please provide a concrete recipe with portion guidance (ingredient amounts needed) for ONE serving of EVERY dish in this week's menu.
+Please provide a concrete recipe with portion guidance (ingredient amounts needed) for ONE serving of EVERY dish listed above.
 
 Format: ONE line per dish -- the dish name, then a colon, then the
 one-serving ingredient amounts, a short prep note, and the plate size, all
@@ -1197,9 +1362,7 @@ or plate size on their own separate lines."""
             )
             repair_lines = [_repair_missing_dish_line(dish, recipe_data.get(dish)) for dish in missing]
             text = text.rstrip("\n") + "\n" + "\n".join(repair_lines)
-
-        text = self._apply_servings(text, servings)
-        return {"text": text, "html": self._text_to_html_list(text)}
+        return text
 
 
 def main() -> None:

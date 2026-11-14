@@ -754,10 +754,15 @@ class RespondWithMultipleIdeasTests(unittest.TestCase):
         self.assertIn("Provide all ideas from general culinary knowledge", user_message)
 
 
+def _found(*dishes):
+    """_fetch_all_recipes result where TheMealDB had every one of ``dishes``."""
+    return {dish: '{"ingredients": ["100g something"]}' for dish in dishes}
+
+
 class RespondForWholeMenuTests(unittest.TestCase):
     def test_asks_for_one_serving_not_a_headcount(self):
         agent = RecipePortionAgent()
-        with patch.object(rpa, "_fetch_all_recipes", return_value={"Lentil Soup": None}), \
+        with patch.object(rpa, "_fetch_all_recipes", return_value=_found("Lentil Soup")), \
              patch.object(rpa.llm_utils, "chat_sync", return_value="Lentil Soup: 100g lentils.") as chat_sync:
             agent._respond_for_whole_menu("Day 1: Lentil Soup.", ["Lentil Soup"])
 
@@ -776,7 +781,7 @@ class RespondForWholeMenuTests(unittest.TestCase):
         agent = RecipePortionAgent()
         agent._current_max_words = 300
         covering_reply = "Chicken Curry: a.\nLentil Soup: b.\nBeef Stew: c."
-        with patch.object(rpa, "_fetch_all_recipes", return_value={"Chicken Curry": None, "Lentil Soup": None, "Beef Stew": None}), \
+        with patch.object(rpa, "_fetch_all_recipes", return_value=_found("Chicken Curry", "Lentil Soup", "Beef Stew")), \
              patch.object(rpa.llm_utils, "chat_sync", return_value=covering_reply) as chat_sync:
             agent._respond_for_whole_menu(
                 "Day 1: Chicken Curry. Day 2: Lentil Soup. Day 3: Beef Stew.",
@@ -794,7 +799,7 @@ class RespondForWholeMenuTests(unittest.TestCase):
         agent._current_max_words = 20
         dishes = [f"Dish {i}" for i in range(7)]
         covering_reply = "\n".join(f"{d}: x." for d in dishes)
-        with patch.object(rpa, "_fetch_all_recipes", return_value={d: None for d in dishes}), \
+        with patch.object(rpa, "_fetch_all_recipes", return_value=_found(*dishes)), \
              patch.object(rpa.llm_utils, "chat_sync", return_value=covering_reply) as chat_sync:
             agent._respond_for_whole_menu("a menu", dishes)
 
@@ -803,23 +808,44 @@ class RespondForWholeMenuTests(unittest.TestCase):
         user_message = chat_sync.call_args[0][1]
         self.assertIn("20 words", user_message)  # max(20, 20 // 7) == 20
 
-    def test_dishes_with_no_recipe_data_are_named_not_silently_dropped(self):
+    def test_a_dish_with_no_recipe_data_gets_its_own_ai_recipe_in_menu_order(self):
         agent = RecipePortionAgent()
-        covering_reply = "Lentil Soup: no data, best guess.\nChicken Curry: 200g chicken."
-        with patch.object(rpa, "_fetch_all_recipes", return_value={"Lentil Soup": None, "Chicken Curry": '{"ingredients": ["200g chicken"]}'}), \
-             patch.object(rpa.llm_utils, "chat_sync", return_value=covering_reply) as chat_sync:
-            agent._respond_for_whole_menu("Day 1: Lentil Soup. Day 2: Chicken Curry.", ["Lentil Soup", "Chicken Curry"])
 
-        # Both dishes got their own line, so no missing-dish repair call fired.
-        chat_sync.assert_called_once()
-        user_message = chat_sync.call_args[0][1]
-        self.assertIn("Dishes with no recipe data found: Lentil Soup", user_message)
-        self.assertIn("Chicken Curry", user_message)
+        def fake_chat(system, user_message, **kwargs):
+            if system == rpa._AI_RECIPE_SYSTEM_PROMPT:
+                return "Ingredients: 80g red lentils, 250ml stock. Method: simmer 20 min. Plate: 300ml bowl."
+            return "Chicken Curry: 200g chicken."
+
+        with patch.object(rpa, "_fetch_all_recipes",
+                          return_value={"Lentil Soup": None, **_found("Chicken Curry")}), \
+             patch.object(rpa.llm_utils, "chat_sync", side_effect=fake_chat) as chat_sync:
+            result = agent._respond_for_whole_menu(
+                "Day 1: Lentil Soup. Day 2: Chicken Curry.", ["Lentil Soup", "Chicken Curry"])
+
+        self.assertEqual(chat_sync.call_count, 2)  # one AI recipe + the combined writeup
+        combined = [c for c in chat_sync.call_args_list if c.args[0] != rpa._AI_RECIPE_SYSTEM_PROMPT]
+        self.assertNotIn("Lentil Soup:", combined[0].args[1])  # not asked to write the AI dish too
+        lines = result["text"].split("\n")
+        self.assertEqual(lines[0], "Lentil Soup: AI-generated recipe (not from TheMealDB) -- "
+                                   "Ingredients: 80g red lentils, 250ml stock. Method: simmer 20 min. Plate: 300ml bowl.")
+        self.assertEqual(lines[1], "Chicken Curry: 200g chicken.")
+
+    def test_every_dish_without_data_is_written_separately_and_no_combined_call(self):
+        agent = RecipePortionAgent()
+        with patch.object(rpa, "_fetch_all_recipes", return_value={"Duck Bao": None, "Kale Slaw": None}), \
+             patch.object(rpa.llm_utils, "chat_sync", return_value="Ingredients: x. Method: y. Plate: z.") as chat_sync:
+            result = agent._respond_for_whole_menu("menu", ["Duck Bao", "Kale Slaw"])
+
+        self.assertEqual(chat_sync.call_count, 2)
+        self.assertTrue(all(c.args[0] == rpa._AI_RECIPE_SYSTEM_PROMPT for c in chat_sync.call_args_list))
+        asked = sorted(c.args[1].split("\n")[0] for c in chat_sync.call_args_list)
+        self.assertEqual(asked, ["Dish: Duck Bao", "Dish: Kale Slaw"])  # one meal per call
+        self.assertEqual([line.split(":")[0] for line in result["text"].split("\n")], ["Duck Bao", "Kale Slaw"])
 
     def test_multi_dish_response_becomes_an_html_list(self):
         agent = RecipePortionAgent()
         raw_reply = "Chicken curry: 150g chicken.\nLentil soup: 100g lentils."
-        with patch.object(rpa, "_fetch_all_recipes", return_value={"Chicken Curry": None, "Lentil Soup": None}), \
+        with patch.object(rpa, "_fetch_all_recipes", return_value=_found("Chicken Curry", "Lentil Soup")), \
              patch.object(rpa.llm_utils, "chat_sync", return_value=raw_reply):
             result = agent._respond_for_whole_menu("Day 1: Chicken Curry. Day 2: Lentil Soup.", ["Chicken Curry", "Lentil Soup"])
 
@@ -832,9 +858,9 @@ class RespondForWholeMenuTests(unittest.TestCase):
         # all one line, so the Caprese panini popup would show nothing (or
         # duck's) instead of its own data.
         agent = RecipePortionAgent()
-        merged_reply = "Pan-seared duck: No recipe data found: Caprese panini: 40g mozzarella: grill: 200g"
+        merged_reply = "Pan-seared duck: 150g duck: Caprese panini: 40g mozzarella: grill: 200g"
         repair_reply = "Caprese panini: 40g mozzarella, 20g tomato: grill: 200g"
-        with patch.object(rpa, "_fetch_all_recipes", return_value={"Pan-seared duck": None, "Caprese panini": None}), \
+        with patch.object(rpa, "_fetch_all_recipes", return_value=_found("Pan-seared duck", "Caprese panini")), \
              patch.object(rpa.llm_utils, "chat_sync", side_effect=[merged_reply, repair_reply]) as chat_sync:
             result = agent._respond_for_whole_menu(
                 "Day 1: Pan-seared duck. Day 2: Caprese panini.", ["Pan-seared duck", "Caprese panini"],
@@ -850,7 +876,7 @@ class RespondForWholeMenuTests(unittest.TestCase):
         agent = RecipePortionAgent()
         dropped_reply = "Chicken curry: 150g chicken: fry: 200g"  # Lentil soup never appears
         repair_reply = "Lentil soup: 100g lentils: simmer: 250g bowl"
-        with patch.object(rpa, "_fetch_all_recipes", return_value={"Chicken curry": None, "Lentil soup": None}), \
+        with patch.object(rpa, "_fetch_all_recipes", return_value=_found("Chicken curry", "Lentil soup")), \
              patch.object(rpa.llm_utils, "chat_sync", side_effect=[dropped_reply, repair_reply]) as chat_sync:
             result = agent._respond_for_whole_menu(
                 "Day 1: Chicken curry. Day 2: Lentil soup.", ["Chicken curry", "Lentil soup"],
@@ -858,6 +884,71 @@ class RespondForWholeMenuTests(unittest.TestCase):
 
         self.assertEqual(chat_sync.call_count, 2)
         self.assertIn("Lentil soup: 100g lentils: simmer: 250g bowl", result["text"])
+
+
+class WholeMenuWordLimitTests(unittest.TestCase):
+    def test_a_whole_menu_reply_is_not_cut_off_by_the_word_limit(self):
+        agent = RecipePortionAgent()
+        agent._current_max_words = 5
+        result = {"text": "Duck Bao: AI-generated recipe -- Ingredients: a, b, c. Method: steam. Plate: 1 bun.",
+                  "html": "", "keep_whole": True}
+        with patch.object(rpa.BaseStrategyAgent, "_emit_answer") as emit:
+            agent._emit_answer(result, None)
+
+        emit.assert_called_once()
+        self.assertEqual(agent._current_max_words, len(result["text"].split()))
+
+    def test_other_replies_keep_the_word_limit(self):
+        agent = RecipePortionAgent()
+        agent._current_max_words = 5
+        with patch.object(rpa.BaseStrategyAgent, "_emit_answer"):
+            agent._emit_answer({"text": "one two three four five six seven", "html": ""}, None)
+        self.assertEqual(agent._current_max_words, 5)
+
+
+class ReplaceRecipeTests(unittest.TestCase):
+    """"Recipe & Portion Specialist, I don't like the salmon recipe -- give me
+    another one" replaces that one dish's recipe, marked so the Planner and
+    the other agents swap it in."""
+
+    def setUp(self):
+        self.agent = RecipePortionAgent()
+        self.agent._current_conv_id = "conv-r"
+        self.agent._recipe_lines["conv-r"] = {
+            "Grilled Salmon": "Grilled Salmon: 150g salmon, 5ml olive oil: grill: 250g plate",
+            "Beef Burger": "Beef Burger: 150g beef patty, 1 bun: grill: 300g plate",
+        }
+
+    def _ask(self, text, reply="Ingredients: 150g salmon, 10g miso. Method: glaze and bake. Plate: 250g."):
+        with patch.object(rpa.llm_utils, "chat_sync", return_value=reply) as chat_sync:
+            result = self.agent.process_utterance(text)
+        return result, chat_sync
+
+    def test_replace_request_names_the_dish_and_avoids_the_current_recipe(self):
+        result, chat_sync = self._ask("Recipe & Portion Specialist, I don't like the salmon recipe, give me another one")
+
+        self.assertEqual(result["text"], "Grilled Salmon: Replacement recipe -- AI-generated recipe (not from TheMealDB) -- "
+                                         "Ingredients: 150g salmon, 10g miso. Method: glaze and bake. Plate: 250g.")
+        prompt = chat_sync.call_args[0][1]
+        self.assertIn("Dish: Grilled Salmon", prompt)
+        self.assertIn("150g salmon, 5ml olive oil", prompt)  # told what to replace
+        self.assertIn(result["text"], self.agent._recipe_lines["conv-r"].values())
+
+    def test_several_phrasings_are_replace_requests(self):
+        for text in ("replace the beef burger recipe", "a different recipe for the burger please",
+                     "can you swap the Beef Burger recipe?"):
+            result, _ = self._ask(text, reply="Ingredients: x. Method: y. Plate: z.")
+            self.assertTrue(result["text"].startswith("Beef Burger: Replacement recipe"), text)
+
+    def test_a_plain_recipe_request_is_not_a_replacement(self):
+        self.assertIsNone(self.agent._replacement_request("give me a recipe for grilled salmon"))
+
+    def test_a_dish_not_on_the_menu_is_not_a_replacement(self):
+        self.assertIsNone(self.agent._replacement_request("replace the lasagne recipe"))
+
+    def test_a_new_menu_forgets_the_old_recipes(self):
+        self.agent.on_observed_utterance("conv-r", rpa._MENU_DESIGNER_SERVICE_URL, "Day 1: Tacos.")
+        self.assertNotIn("conv-r", self.agent._recipe_lines)
 
 
 class RespondForOneDishHtmlTests(unittest.TestCase):

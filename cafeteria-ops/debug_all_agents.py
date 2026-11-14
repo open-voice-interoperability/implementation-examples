@@ -32,7 +32,9 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+from agents.allergy_sentinel import AllergySentinelAgent
 from agents.base_strategy_agent import make_flask_app
+from agents.recall_sentinel import RecallSentinelAgent
 from agents.inventory_specialist import InventoryAgent
 from agents.menu_designer import MenuDesignerAgent
 from agents.menu_optimization_specialist import MenuOptimizationAgent
@@ -54,6 +56,8 @@ SPECIALIST_CLASSES = [
     InventoryAgent,
     ProcurementAgent,
     ShoppingListAgent,
+    AllergySentinelAgent,  # sentinels, not specialists -- they watch the floor
+    RecallSentinelAgent,
 ]
 
 

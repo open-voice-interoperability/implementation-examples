@@ -23,7 +23,9 @@ $services = @(
     @{ Name = "menu_optimization"; Port = 8304; Script = "agents\menu_optimization_specialist\menu_optimization_agent.py" },
     @{ Name = "inventory"; Port = 8305; Script = "agents\inventory_specialist\inventory_agent.py" },
     @{ Name = "procurement"; Port = 8306; Script = "agents\procurement_specialist\procurement_agent.py" },
-    @{ Name = "shopping_list"; Port = 8310; Script = "agents\shopping_list_specialist\shopping_list_agent.py" }
+    @{ Name = "shopping_list"; Port = 8310; Script = "agents\shopping_list_specialist\shopping_list_agent.py" },
+    @{ Name = "allergy_sentinel"; Port = 8307; Script = "agents\allergy_sentinel\allergy_sentinel_agent.py" },
+    @{ Name = "recall_sentinel"; Port = 8308; Script = "agents\recall_sentinel\recall_sentinel_agent.py" }
 )
 
 $ports = $services | ForEach-Object { $_.Port }
@@ -187,6 +189,15 @@ foreach ($svc in $services) {
         Write-Host "  [FAIL] Port $($svc.Port): multiple listeners ($pidList)"
         $hadIssue = $true
     }
+}
+
+# The local image service (Menu Designer pictures) is started if it's set up
+# and not already running -- never restarted here, since loading its model
+# takes a while. Its port is not in $ports, so step 1 leaves it alone.
+$imageServer = Join-Path $root "image_server\run_image_server.ps1"
+if (Test-Path $imageServer) {
+    try { & $imageServer | ForEach-Object { Write-Host "  $_" } }
+    catch { Write-Host "  - Image service not started: $($_.Exception.Message)" -ForegroundColor Yellow }
 }
 
 if ($hadIssue) {

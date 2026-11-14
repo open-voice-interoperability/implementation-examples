@@ -709,6 +709,38 @@ class OnObservedUtteranceTests(unittest.TestCase):
 
         self.assertEqual(agent._observed_recipes, {"conv-1": "Chicken breast: 150g."})
 
+    def test_a_later_recipe_reply_is_added_not_substituted(self):
+        # e.g. a later answer about one dish: it must refine that dish, not
+        # wipe out the week's recipes.
+        agent = ProcurementAgent()
+        agent.on_observed_utterance("conv-1", pa._RECIPE_PORTION_SERVICE_URL, "Chicken Curry: 150g chicken breast.")
+        agent.on_observed_utterance("conv-1", pa._RECIPE_PORTION_SERVICE_URL, "Beef Burger: 120g ground beef.")
+
+        saved = agent._observed_recipes["conv-1"]
+        self.assertIn("Chicken Curry: 150g chicken breast.", saved)
+        self.assertIn(pa._RECIPE_UPDATE_NOTE, saved)
+        self.assertTrue(saved.endswith("Beef Burger: 120g ground beef."))
+
+    def test_a_replacement_recipe_takes_the_place_of_the_old_one(self):
+        agent = ProcurementAgent()
+        week = "1. Grilled Salmon: 150g salmon, 5ml oil.\nBeef Burger: 150g beef patty, 1 bun."
+        replacement = ("Grilled Salmon: Replacement recipe -- AI-generated recipe (not from TheMealDB) -- "
+                       "Ingredients: 150g salmon, 10g miso. Method: bake. Plate: 250g.")
+        agent.on_observed_utterance("conv-1", pa._RECIPE_PORTION_SERVICE_URL, week)
+        agent.on_observed_utterance("conv-1", pa._RECIPE_PORTION_SERVICE_URL, replacement)
+
+        saved = agent._observed_recipes["conv-1"]
+        self.assertNotIn("5ml oil", saved)  # the old salmon recipe is gone
+        self.assertIn("Beef Burger: 150g beef patty, 1 bun.", saved)
+        self.assertTrue(saved.endswith(replacement))
+
+    def test_a_new_menu_clears_the_saved_recipes(self):
+        agent = ProcurementAgent()
+        agent.on_observed_utterance("conv-1", pa._RECIPE_PORTION_SERVICE_URL, "Chicken Curry: 150g chicken breast.")
+        agent.on_observed_utterance("conv-1", pa._MENU_DESIGNER_SERVICE_URL, "Monday: Lentil soup" + chr(10) + "Tuesday: Fish tacos")
+
+        self.assertNotIn("conv-1", agent._observed_recipes)
+
     def test_ignores_utterances_from_other_speakers(self):
         agent = ProcurementAgent()
 
@@ -886,6 +918,22 @@ class RenderIngredientGuidanceTests(unittest.TestCase):
 
         self.assertEqual(result, "Cornstarch: Buy from a bulk supplier. Choose a reputable brand. Store dry.")
 
+    def test_malformed_json_is_salvaged_not_shown_raw(self):
+        # The live reply: an unquoted value, a missing "{", stray braces --
+        # it reached the Planner as raw JSON.
+        raw = ('{\n"ingredients": [\n"name": "chicken breast",\n"quantity_needed": 2500g,\n'
+               '"guidance": "Buy 10 packs at a local grocery store."\n{\n},\n'
+               '{"name": "rice", "guidance": "A 25 lb bag at Costco, about $18."')
+        result = pa._render_ingredient_guidance(raw)
+
+        self.assertEqual(result, "chicken breast: Buy 10 packs at a local grocery store.\n"
+                                 "rice: A 25 lb bag at Costco, about $18.")
+        self.assertNotIn("{", result)
+
+    def test_unreadable_json_gets_a_message_not_the_json(self):
+        result = pa._render_ingredient_guidance('{"ingredients": [ {"product": "x"')
+        self.assertEqual(result, pa._UNREADABLE_GUIDANCE)
+
     def test_guidance_with_embedded_newlines_is_collapsed(self):
         raw = json.dumps({"ingredients": [{"name": "Garlic", "guidance": "Buy from local suppliers.\nCheck freshness."}]})
         result = pa._render_ingredient_guidance(raw)
@@ -906,13 +954,18 @@ class RenderIngredientGuidanceTests(unittest.TestCase):
         raw = "sorry, I can't help with that"
         self.assertEqual(pa._render_ingredient_guidance(raw), raw)
 
-    def test_malformed_json_falls_back_to_raw_text(self):
-        raw = "{ingredients: [oops]}"
-        self.assertEqual(pa._render_ingredient_guidance(raw), raw)
+    def test_malformed_json_with_nothing_to_salvage_is_never_shown_raw(self):
+        # It used to be passed through as is -- raw JSON on the Planner.
+        self.assertEqual(pa._render_ingredient_guidance("{ingredients: [oops]}"), pa._UNREADABLE_GUIDANCE)
 
-    def test_no_usable_entries_falls_back_to_raw_text(self):
+    def test_no_usable_entries_is_never_shown_raw(self):
         raw = json.dumps({"ingredients": [{"name": "", "guidance": ""}]})
-        self.assertEqual(pa._render_ingredient_guidance(raw), raw)
+        self.assertEqual(pa._render_ingredient_guidance(raw), pa._UNREADABLE_GUIDANCE)
+
+    def test_plain_text_lines_still_pass_through(self):
+        # Not JSON at all (e.g. an OpenAI reply that ignored the format):
+        # "<name>: <guidance>" lines are kept.
+        self.assertEqual(pa._render_ingredient_guidance("Rice: buy a 25 lb bag."), "Rice: buy a 25 lb bag.")
 
     def test_multiple_brand_entries_for_one_ingredient_collapse_to_one_line(self):
         raw = json.dumps({"ingredients": [
@@ -948,6 +1001,21 @@ class RenderIngredientGuidanceTests(unittest.TestCase):
 
 
 class RespondForWholeMenuTests(unittest.TestCase):
+    def test_asks_for_valid_json_with_room_for_a_long_week(self):
+        # Live, the default reply cap cut a 30+ ingredient reply off mid-JSON,
+        # and without JSON mode the model wrote near-JSON (unquoted 2500g).
+        agent = ProcurementAgent()
+        with patch.object(pa, "_fetch_all_market_data", return_value={"chicken breast": None}), \
+             patch.object(pa, "_fetch_all_web_prices", return_value={}), \
+             patch.object(pa.llm_utils, "chat_sync", return_value='{"ingredients": []}') as chat_sync:
+            agent._respond_for_whole_menu("Chicken breast: 150g.", ["chicken breast"])
+
+        self.assertTrue(chat_sync.call_args.kwargs["json_mode"])
+        self.assertGreater(chat_sync.call_args.kwargs["max_tokens"], pa.llm_utils.LLM_MAX_TOKENS)
+        # only the two fields that are shown are asked for
+        self.assertNotIn('"unit_price"', pa._WHOLE_MENU_SYSTEM_PROMPT)
+        self.assertIn('{"name": "<actual ingredient name>", "guidance":', pa._WHOLE_MENU_SYSTEM_PROMPT)
+
     def test_asks_for_guidance_covering_every_ingredient(self):
         agent = ProcurementAgent()
         empty_reply = json.dumps({"ingredients": []})

@@ -25,6 +25,33 @@ class GenerateImageSyncProviderRoutingTests(unittest.TestCase):
         patcher = patch.object(llm_utils, "_shrink_data_uri", side_effect=lambda uri, *a, **k: uri)
         self.addCleanup(patcher.stop)
         patcher.start()
+        # The local image service isn't running in tests unless a test says so.
+        local = patch.object(llm_utils, "_generate_image_local", return_value="")
+        self.addCleanup(local.stop)
+        self.local = local.start()
+
+    def test_auto_prefers_the_local_image_service_when_it_answers(self):
+        self.local.return_value = "data:image/jpeg;base64,LOC"
+        with patch.object(llm_utils, "HF_API_KEY", "hf_token"),                 patch.object(llm_utils, "IMAGE_PROVIDER", "auto"),                 patch.object(llm_utils, "_generate_image_huggingface") as hf,                 patch.object(llm_utils, "_generate_image_openai") as openai:
+            result = llm_utils.generate_image_sync("a nice salad")
+
+        self.assertEqual(result, "data:image/jpeg;base64,LOC")
+        self.local.assert_called_once_with("a nice salad")
+        hf.assert_not_called()
+        openai.assert_not_called()
+
+    def test_local_only_never_falls_back(self):
+        with patch.object(llm_utils, "HF_API_KEY", "hf_token"),                 patch.object(llm_utils, "IMAGE_PROVIDER", "local"),                 patch.object(llm_utils, "_generate_image_huggingface") as hf,                 patch.object(llm_utils, "_generate_image_openai") as openai:
+            result = llm_utils.generate_image_sync("a nice salad")
+
+        self.assertEqual(result, "")
+        hf.assert_not_called()
+        openai.assert_not_called()
+
+    def test_huggingface_only_skips_the_local_service(self):
+        with patch.object(llm_utils, "HF_API_KEY", "hf_token"),                 patch.object(llm_utils, "IMAGE_PROVIDER", "huggingface"),                 patch.object(llm_utils, "_generate_image_huggingface", return_value="data:image/png;base64,H"):
+            self.assertEqual(llm_utils.generate_image_sync("a nice salad"), "data:image/png;base64,H")
+        self.local.assert_not_called()
 
     def test_auto_prefers_huggingface_when_configured_and_it_succeeds(self):
         with patch.object(llm_utils, "HF_API_KEY", "hf_token"), \

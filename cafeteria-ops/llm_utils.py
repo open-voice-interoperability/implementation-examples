@@ -134,6 +134,7 @@ async def chat(
     ollama_model: str | None = None,
     openai_model: str | None = None,
     max_tokens: int | None = None,
+    json_mode: bool = False,
 ) -> str:
     """
     Send a chat completion request to the configured LLM provider(s).
@@ -155,6 +156,12 @@ async def chat(
 
     max_tokens: the most tokens the reply may generate; defaults to
     LLM_MAX_TOKENS (see there for why every call is capped).
+
+    json_mode: ask the provider for syntactically valid JSON only
+    (response_format json_object -- Ollama and OpenAI both honor it), for a
+    caller that parses the reply as JSON. Without it a small model writes
+    near-JSON (unquoted values, misplaced braces) often enough to matter.
+    The prompt must still ask for JSON and describe its shape.
     """
     messages, _ = _build_chat_messages(system_prompt, user_message)
     reply_token_cap = max_tokens if max_tokens is not None else LLM_MAX_TOKENS
@@ -176,6 +183,8 @@ async def chat(
                 "temperature": temperature,
                 "max_tokens": reply_token_cap,
             }
+            if json_mode:
+                payload["response_format"] = {"type": "json_object"}
             async with httpx.AsyncClient(timeout=request_timeout) as client:
                 r = await client.post(
                     f"{base_url}/chat/completions",
@@ -207,6 +216,8 @@ async def chat(
                 "temperature": temperature,
                 "max_tokens": reply_token_cap,
             }
+            if json_mode:
+                payload["response_format"] = {"type": "json_object"}
             async with httpx.AsyncClient(timeout=request_timeout) as client:
                 r = await client.post(
                     f"{LLM_BASE_URL}/chat/completions",
@@ -245,10 +256,11 @@ def chat_sync(
     ollama_model: str | None = None,
     openai_model: str | None = None,
     max_tokens: int | None = None,
+    json_mode: bool = False,
 ) -> str:
     """Synchronous wrapper around chat() for use in non-async contexts.
 
-    timeout, ollama_model, openai_model, max_tokens: see chat(). timeout also bounds the
+    timeout, ollama_model, openai_model, max_tokens, json_mode: see chat(). timeout also bounds the
     outer thread-pool wait (with a small buffer for two sequential provider
     attempts) when called from inside a running event loop.
     """
@@ -265,10 +277,10 @@ def chat_sync(
             future_timeout = (timeout * 2 + 5) if timeout is not None else 90
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 future = pool.submit(
-                    asyncio.run, chat(system_prompt, user_message, temperature, timeout, ollama_model, openai_model, max_tokens)
+                    asyncio.run, chat(system_prompt, user_message, temperature, timeout, ollama_model, openai_model, max_tokens, json_mode)
                 )
                 return future.result(timeout=future_timeout)
-        return asyncio.run(chat(system_prompt, user_message, temperature, timeout, ollama_model, openai_model, max_tokens))
+        return asyncio.run(chat(system_prompt, user_message, temperature, timeout, ollama_model, openai_model, max_tokens, json_mode))
     except Exception as e:
         logger.error(f"chat_sync failed: {e}")
         return f"[LLM call failed: {e}]"

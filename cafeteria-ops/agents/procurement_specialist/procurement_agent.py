@@ -608,16 +608,13 @@ This system also has NO data on this cafeteria's own purchasing history,
 past prices paid, suppliers, or contracts. If the request depends on those
 records, say plainly you don't have them and can't answer that part.
 
-For EVERY ingredient:
+For EVERY ingredient, write ONE short guidance sentence (about 30 words at
+most) that says, where the data gives it: the product and package size,
+the retailer or store, the current price, how many packages are needed for
+the quantity given, and the estimated cost -- then a brief recommendation.
 
 * Use the retrieved grocery-store/food-service web search data where given -- it reflects actual current retail products and prices.
 * If only USDA data was retrieved for an ingredient (no web search result), use it, but check its own "market_type" field (e.g. "Retail - Livestock/Poultry/Egg" is retail, not wholesale) rather than assuming it's a wholesale/bulk figure by default -- describe the price as whatever the data actually says it is.
-* Identify a suitable product and package size when possible.
-* Report the current price when a reliable current price is available.
-* Calculate or estimate the number of packages needed when the required quantity is provided.
-* Calculate the resulting estimated purchase cost when possible.
-* Identify the retailer or store when known.
-* Provide a concise sourcing recommendation based on the information retrieved.
 * If multiple suitable products or prices are found, select the most practical option and briefly indicate why.
 * If no data (web search or USDA) was retrieved for an ingredient, say so plainly and provide useful general sourcing guidance without implying that a current price was found.
 * Never invent a product, price, package size, retailer, or other procurement information.
@@ -626,13 +623,13 @@ For EVERY ingredient:
 Output EXACTLY ONE entry per ingredient in the "Ingredients identified"
 list -- never two or more entries for the same ingredient (e.g. do not
 list several brands or package variants of peas as separate entries; pick
-one and describe it inside that single entry's fields).
+one and describe it inside that single entry's guidance).
 
 The "name" field MUST be the plain ingredient name exactly as it appears in
 "Ingredients identified" (e.g. "peas", "cheddar cheese") -- NOT a brand
 name, product name, or packaging description (not "Le Sueur Very Young
 Small Sweet Peas", not "Great Value Organic Frozen Peas"). Put any specific
-product name in the "product" field, not "name".
+product name in the guidance, not "name".
 
 Your sourcing guidance should be specific to the individual ingredient and the information retrieved, not generic advice that could apply to any ingredient. Do not repeat the same guidance sentence across ingredients.
 
@@ -642,23 +639,12 @@ Use this format:
 
 {
 "ingredients": [
-{
-"name": "<actual ingredient name>",
-"product": "<specific product, if found>",
-"package_size": "<package size, if found>",
-"retailer": "<retailer/store, if known>",
-"unit_price": "<current price, if found>",
-"quantity_needed": "<quantity needed, if provided>",
-"packages_needed": "<number of packages, if calculable>",
-"estimated_cost": "<estimated purchase cost, if calculable>",
-"guidance": "<concise sourcing guidance for this ingredient>"
-}
+{"name": "<actual ingredient name>", "guidance": "<the one guidance sentence for this ingredient>"}
 ]
 }
 
 Use the ingredient's actual name in "name" (for example, "cheddar cheese", not "dairy").
-
-If information is unavailable for a field, use null rather than inventing a value."""
+Every value is a quoted string. Leave out anything the data doesn't give rather than inventing it."""
 
 
 # A single-commodity or general answer is about ONE thing, not a whole
@@ -672,6 +658,10 @@ If information is unavailable for a field, use null rather than inventing a valu
 # capped at whatever the caller's own budget already is, in case that's
 # smaller (e.g. a tight UI slider value).
 _SINGLE_COMMODITY_WORD_TARGET = 60
+
+# Reply cap for the whole-menu JSON (see its call): ~50 tokens per
+# ingredient for 35+ ingredients, with room to spare.
+_WHOLE_MENU_MAX_TOKENS = 4096
 
 
 def _single_commodity_budget_hint(max_words: int) -> str:
@@ -756,11 +746,13 @@ def _render_ingredient_guidance(raw: str, ingredients: list[str] | None = None) 
     ingredients = ingredients or []
     match = re.search(r"\{[\s\S]*\}", raw)
     if not match:
+        if "{" in raw or '"name"' in raw:
+            return _salvaged_guidance(raw, ingredients)
         return _collapse_ingredient_lines(_dedup_repeated_lines(raw), ingredients)
     try:
         parsed = json.loads(match.group())
     except json.JSONDecodeError:
-        return _collapse_ingredient_lines(_dedup_repeated_lines(raw), ingredients)
+        return _salvaged_guidance(raw, ingredients)
     entries = parsed.get("ingredients") or []
     lines: list[str] = []
     seen_keys: set[str] = set()
@@ -777,7 +769,37 @@ def _render_ingredient_guidance(raw: str, ingredients: list[str] | None = None) 
             continue
         seen_keys.add(key)
         lines.append(f"{_display_ingredient_name(name, canonical)}: {guidance}")
-    return "\n".join(lines) if lines else _collapse_ingredient_lines(_dedup_repeated_lines(raw), ingredients)
+    return "\n".join(lines) if lines else _salvaged_guidance(raw, ingredients)
+
+
+_NAME_FIELD_RE = re.compile(r'"name"\s*:\s*"((?:[^"\\]|\\.)*)"')
+_GUIDANCE_FIELD_RE = re.compile(r'"guidance"\s*:\s*"((?:[^"\\]|\\.)*)"')
+_UNREADABLE_GUIDANCE = "The sourcing guidance came back unreadable this time -- please ask the Procurement Specialist again."
+
+
+def _salvaged_guidance(raw: str, ingredients: list[str]) -> str:
+    """For JSON that won't parse (cut off, or malformed): each "name" paired
+    with the next "guidance" after it, rendered like a parsed reply. Raw
+    JSON is never shown -- seen live, it reached the Planner as is."""
+    lines: list[str] = []
+    seen_keys: set[str] = set()
+    names = list(_NAME_FIELD_RE.finditer(raw))
+    for i, name_match in enumerate(names):
+        end = names[i + 1].start() if i + 1 < len(names) else len(raw)
+        guidance_match = _GUIDANCE_FIELD_RE.search(raw, name_match.end(), end)
+        if not guidance_match:
+            continue
+        name = name_match.group(1).strip()
+        guidance = " ".join(guidance_match.group(1).replace('\\"', '"').split())
+        if not (name and guidance):
+            continue
+        canonical = _canonical_ingredient(name, ingredients)
+        key = _norm_ingredient_key(canonical or name) or name.lower()
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        lines.append(f"{_display_ingredient_name(name, canonical)}: {guidance}")
+    return "\n".join(lines) if lines else _UNREADABLE_GUIDANCE
 
 
 def _display_ingredient_name(name: str, canonical: str | None) -> str:
@@ -1014,8 +1036,16 @@ Real market data retrieved (USDA where matched, web-searched retail pricing othe
 
 Please provide sourcing/procurement guidance covering EVERY ingredient used in this week's menu."""
 
-        raw = llm_utils.chat_sync(_WHOLE_MENU_SYSTEM_PROMPT, user_message, timeout=45, **_LOOKUP)
+        # JSON mode keeps the reply parseable (seen live without it: an
+        # unquoted 2500g and misplaced braces, shown to the user raw). A
+        # week can have 35+ ingredients, each a name and a sentence --
+        # longer than the default reply cap, which cut this reply off
+        # mid-JSON live -- so this call gets room for every one.
+        raw = llm_utils.chat_sync(_WHOLE_MENU_SYSTEM_PROMPT, user_message, timeout=45,
+                                  max_tokens=_WHOLE_MENU_MAX_TOKENS, json_mode=True, **_LOOKUP)
         text = _render_ingredient_guidance(raw, ingredients)
+        logger.info("[Procurement] whole menu: %d ingredient(s) asked about, %d line(s) of guidance",
+                    len(ingredients), len(text.splitlines()))
         return {"text": text, "html": self._text_to_html_list(text)}
 
 

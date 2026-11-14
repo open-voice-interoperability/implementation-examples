@@ -59,6 +59,15 @@ logger = logging.getLogger(__name__)
 
 CONVENER_PORT = 8300
 
+# Only the agents that decide what's served are checked: the Menu Designer
+# (the menu) and Recipe & Portion (each dish's recipe, including a
+# replacement). The other agents only discuss that menu -- checking them
+# repeated findings in new words, and picked up ingredients that were never
+# on it (live: a recall alert for "turkey" from Menu Optimization's
+# commentary). A new menu from the Menu Designer starts the check fresh.
+MENU_DESIGNER_PORT = 8301
+MENU_SOURCE_PORTS = {MENU_DESIGNER_PORT, 8303}
+
 ALLERGEN_LABELS = {
     "peanut": "Peanuts",
     "tree_nut": "Tree nuts",
@@ -243,6 +252,33 @@ def find_allergens(text: str) -> list:
     return findings
 
 
+_DAY_LABEL_RE = re.compile(
+    r"^\s*(?:day\s*\d+|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*[:.)-]\s*", re.IGNORECASE)
+_FILLER_WORDS = {"with", "and", "the", "for", "served", "side", "of", "on", "in", "a"}
+
+
+def _words(text: str) -> frozenset:
+    return frozenset(w for w in re.findall(r"[a-z]{3,}", (text or "").lower()) if w not in _FILLER_WORDS)
+
+
+def _dish_words(item: str) -> frozenset:
+    """The words of the dish an item is about: its "<dish>:" label when it
+    has one ("Chicken Satay: 15ml peanut sauce"), else the whole item; a
+    leading day ("Day 5:") is not the dish."""
+    rest = _DAY_LABEL_RE.sub("", item or "", count=1)
+    dish = rest.split(":", 1)[0] if ":" in rest else rest
+    return _words(dish)
+
+
+def _already_reported(allergen: str, item: str, reported: list) -> bool:
+    """True when this allergen was already flagged for the same dish: every
+    word of the item's dish appears in an item already reported for it."""
+    dish = _dish_words(item)
+    if not dish:
+        return any(a == allergen and _words(item) <= words for a, words in reported)
+    return any(a == allergen and dish <= words for a, words in reported)
+
+
 def _short(line: str, limit: int = 90) -> str:
     line = re.sub(r"\s+", " ", line).strip()
     return line if len(line) <= limit else line[: limit - 1].rstrip() + "…"
@@ -283,7 +319,7 @@ class AllergySentinelAgent(BaseStrategyAgent):
 
     def __init__(self):
         super().__init__()
-        # conv_id -> {"restrictions": set, "reported": set of (allergen, item key)}
+        # conv_id -> {"restrictions": set, "reported": [(allergen, words of the flagged item)]}
         self._watch: dict[str, dict] = {}
         self._watch_lock = threading.Lock()
         # conv_id -> {"alerts": [text, ...], "requested_at": float}: alerts
@@ -315,14 +351,19 @@ class AllergySentinelAgent(BaseStrategyAgent):
             conv_id = getattr(getattr(in_envelope, "conversation", None), "id", "") or ""
             kind = self._speaker_kind(speaker_uri, in_envelope)
 
+            port = self._port_of(speaker_uri)
             with self._watch_lock:
-                watch = self._watch.setdefault(conv_id, {"restrictions": set(), "reported": set()})
+                watch = self._watch.setdefault(conv_id, {"restrictions": set(), "reported": []})
                 if kind in ("human", "convener"):
                     # The request (or the convener relaying it) is where
                     # restrictions are stated; its own wording is never
                     # flagged -- "no shrimp" isn't a shrimp dish.
                     watch["restrictions"] |= parse_restrictions(text)
                     return
+                if port not in MENU_SOURCE_PORTS:
+                    return  # discussion of the menu, not the menu (see MENU_SOURCE_PORTS)
+                if port == MENU_DESIGNER_PORT:
+                    watch["reported"] = []  # a new menu: check it afresh
                 alert = self._build_alert(text, watch)
             if alert:
                 self._hold_and_request(conv_id, alert, out_envelope)
@@ -414,10 +455,13 @@ class AllergySentinelAgent(BaseStrategyAgent):
                 bucket = severe
             else:
                 continue
-            key = (allergen, _short(line, 60).lower())
-            if key in watch["reported"]:
+            # Once per allergen and dish per menu: the peanut sauce in the
+            # Chicken Satay is one finding whether the menu or the dish's
+            # recipe mentions it, in whatever words (live: "satay" on the
+            # menu, then "peanut" in the recipe, raised a second alert).
+            if _already_reported(allergen, line, watch["reported"]):
                 continue
-            watch["reported"].add(key)
+            watch["reported"].append((allergen, _words(line)))
             # A recipe names its pesto in the title, the ingredient list and
             # the steps -- list it once.
             if (allergen, keyword) in named:

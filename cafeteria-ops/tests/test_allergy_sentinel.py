@@ -16,6 +16,8 @@ from agents.allergy_sentinel.allergy_sentinel_agent import (
 SENTINEL_URL = "http://127.0.0.1:8307/"
 MENU_DESIGNER_URL = "http://127.0.0.1:8301/"
 CONVENER_URL = "http://127.0.0.1:8300/"
+RECIPE_URL = "http://127.0.0.1:8303/"
+SHOPPING_URL = "http://127.0.0.1:8310/"
 HUMAN_URI = "openFloor://localhost:8090/CafeteriaOpsLineCheck"
 
 
@@ -70,7 +72,7 @@ class BuildAlertTests(unittest.TestCase):
         self.agent = AllergySentinelAgent()
 
     def _watch(self, request=""):
-        return {"restrictions": parse_restrictions(request), "reported": set()}
+        return {"restrictions": parse_restrictions(request), "reported": []}
 
     def test_silent_when_only_ordinary_allergens_and_no_restriction(self):
         self.assertEqual(self.agent._build_alert("Monday: Penne with tomato sauce and parmesan", self._watch()), "")
@@ -98,7 +100,7 @@ class EnvelopeTests(unittest.TestCase):
     def setUp(self):
         self.agent = AllergySentinelAgent()
 
-    def _send(self, events, conversants=(SENTINEL_URL, MENU_DESIGNER_URL, CONVENER_URL)):
+    def _send(self, events, conversants=(SENTINEL_URL, MENU_DESIGNER_URL, CONVENER_URL, RECIPE_URL, SHOPPING_URL)):
         envelope = {"openFloor": {
             "schema": {"version": "1.1"},
             "conversation": {"id": "conv-allergy", "conversants": [
@@ -217,6 +219,39 @@ class EnvelopeTests(unittest.TestCase):
         self._send([self._utterance(MENU_DESIGNER_URL, recipe)])
         alert = self._texts(self._grant())[0]
         self.assertEqual(alert.count("(pesto)"), 1)
+
+    def test_the_same_ingredient_in_a_recipe_is_not_reported_again(self):
+        # Live: the menu's "Shrimp and vegetable pad Thai" and its recipe's
+        # wording of the shrimp raised two shellfish alerts.
+        self._send([self._utterance(MENU_DESIGNER_URL, "Day 4: Shrimp and vegetable pad Thai")])
+        self._grant()
+        recipe = "Shrimp and vegetable pad Thai: 100g shrimp, 10g peanuts, rice noodles"
+        self.assertEqual([e["eventType"] for e in self._send([self._utterance(RECIPE_URL, recipe)])], ["requestFloor"])
+        alert = self._texts(self._grant())[0]
+        self.assertIn("Peanuts", alert)       # new in the recipe: reported
+        self.assertNotIn("Shellfish", alert)  # already reported from the menu
+
+    def test_the_same_dish_in_other_words_is_not_reported_again(self):
+        # Live: "satay" on the menu, then "peanut" in the dish's recipe.
+        self._send([self._utterance(MENU_DESIGNER_URL, "Day 5: Chicken Satay with peanut sauce")])
+        self._grant()
+        self.assertEqual(self._send([self._utterance(RECIPE_URL, "Chicken Satay: 15ml peanut sauce, 100g chicken")]), [])
+
+    def test_a_new_dish_with_an_allergen_already_reported_is_still_reported(self):
+        self._send([self._utterance(MENU_DESIGNER_URL, "Day 2: Grilled lamb chops with tahini sauce")])
+        self._grant()
+        events = self._send([self._utterance(RECIPE_URL, "Vegetarian Pad Thai: 1 tbsp roasted sesame oil")])
+        self.assertEqual([e["eventType"] for e in events], ["requestFloor"])
+        self.assertIn("Vegetarian Pad Thai", self._texts(self._grant())[0])
+
+    def test_other_agents_discussing_the_menu_are_not_checked(self):
+        self.assertEqual(self._send([self._utterance(SHOPPING_URL, "Seafood: shrimp 45 kg")]), [])
+
+    def test_a_new_menu_is_checked_afresh(self):
+        self._send([self._utterance(MENU_DESIGNER_URL, "Thursday: Shrimp tacos")])
+        self._grant()
+        events = self._send([self._utterance(MENU_DESIGNER_URL, "Thursday: Shrimp tacos with slaw")])
+        self.assertEqual([e["eventType"] for e in events], ["requestFloor"])
 
     def test_silent_reply_when_nothing_to_flag(self):
         events = self._send([self._utterance(MENU_DESIGNER_URL, "Monday: Grilled chicken with rice")])

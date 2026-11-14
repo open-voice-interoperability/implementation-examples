@@ -60,6 +60,15 @@ logger = logging.getLogger(__name__)
 
 CONVENER_PORT = 8300
 
+# Only the agents that decide what's served are checked: the Menu Designer
+# (the menu) and Recipe & Portion (each dish's recipe, including a
+# replacement). The other agents only discuss that menu -- checking them
+# repeated findings in new words, and picked up ingredients that were never
+# on it (live: a recall alert for "turkey" from Menu Optimization's
+# commentary). A new menu from the Menu Designer starts the check fresh.
+MENU_DESIGNER_PORT = 8301
+MENU_SOURCE_PORTS = {MENU_DESIGNER_PORT, 8303}
+
 # Reason token that opens this agent's requestFloor reason (see the module
 # docstring). Kept in sync by hand with convener.py's ISSUE_DETECTED_TOKEN
 # -- agents and the convener share no code.
@@ -95,6 +104,32 @@ _HAZARD_RE = re.compile(
 _COMPONENT_MARKER_RE = re.compile(r"\b(?:with|and|plus|w/|containing|contains)\b|&", re.IGNORECASE)
 # ... and a term right after these is absent: "Guacamole Dip No Tomatoes".
 _ABSENT_BEFORE_RE = re.compile(r"\b(?:no|without|free of|non)[\s-]+$", re.IGNORECASE)
+# A product that merely CONTAINS the ingredient -- a prepared food, a
+# condiment, seeds to grow it, food for pets -- isn't the ingredient a
+# cafeteria buys. Seen live: "Broccoli Seeds" for broccoli, "Rice & Bean
+# Burrito" for rice, "Tomato Salsa Fresca" for tomato, "Jalapeno Avocado
+# Dressing" for avocado. (A watched ingredient that is itself one of these
+# -- salsa, guacamole, hummus -- still matches its own recalls; and a
+# recall whose REASON names the ingredient is kept either way: salsa made
+# with contaminated jalapenos is a jalapeno problem.)
+_NOT_THE_INGREDIENT_RE = re.compile(
+    r"\b(?:burritos?|sandwich(?:es)?|wraps?|salsas?|dressings?|sauces?|dips?|soups?|pizzas?|pies?"
+    r"|cookies?|cakes?|bars?|chips?|crackers?|snacks?|meals?|kits?|bowls?|entrees?|dinners?|tacos?"
+    r"|quesadillas?|sushi|dumplings?|(?:spring|egg)\s+rolls?|lasagnas?|casseroles?|guacamole|hummus"
+    r"|salad(?!\s+(?:mix|blend)s?\b)|seasonings?|smoothies?|juices?|supplements?|capsules?|tablets?"
+    r"|cereals?|granola|muffins?|bagels?|popcorn|pretzels?|puffs?|crisps?"
+    r"|seeds?|sprouts?|sprouting|microgreens|pets?|dogs?|cats?|treats?)\b"
+)
+_SEED_FOODS = {"sesame"}  # "Sesame Seeds" is sesame
+# Different kinds of the same ingredient: bean sprouts aren't alfalfa
+# sprouts (seen live: an alfalfa recall for a dish with bean sprouts).
+_VARIETIES = {
+    "sprouts": {"alfalfa", "bean", "mung", "broccoli", "clover", "radish", "onion", "pea", "sunflower"},
+    # brie isn't the halloumi on the menu (seen live)
+    "cheese": {"brie", "camembert", "cheddar", "feta", "halloumi", "mozzarella", "parmesan", "gouda",
+               "swiss", "provolone", "manchego", "gorgonzola", "paneer", "cotija", "goat", "blue",
+               "havarti", "gruyere", "pecorino", "asiago", "colby", "muenster", "burrata", "cream"},
+}
 
 # Another sentinel's alert ("Allergy alert: ... Grilled Chicken with Romaine
 # ...") quotes dishes; reacting to it would re-flag what the menu already
@@ -162,24 +197,75 @@ def _clause_around(text: str, start: int, end: int) -> str:
     return line.strip()
 
 
-def relevant_recalls(term: str, recalls: list) -> list:
-    """Recalls that are about the ingredient itself (it's the product, or
-    the recall reason names it) and for a real hazard."""
+def relevant_recalls(term: str, recalls: list, clause: str = "") -> list:
+    """Recalls that are about the ingredient itself -- the product IS the
+    ingredient, or the recall reason names it -- and for a real hazard.
+    ``clause`` is where the menu mentions it, for telling varieties apart."""
     regex = _ingredient_re(term)
+    menu_variety = _variety(term, _fold(clause))
     kept = []
     for recall in recalls or []:
         reason = recall.get("reason") or ""
         if not _HAZARD_RE.search(reason):
             continue  # labeling-only, e.g. "undeclared milk"
-        if regex.search(_fold(reason)):
+        product_name = _fold(_INGREDIENT_LIST_RE.split(recall.get("product") or "", maxsplit=1)[0])
+        recall_varieties = _varieties_named(term, product_name)
+        if menu_variety and recall_varieties and menu_variety not in recall_varieties:
+            continue  # alfalfa sprouts aren't the bean sprouts on the menu
+        if _reason_is_about(term, _fold(reason), regex):
             kept.append(recall)
             continue
-        product_name = _fold(_INGREDIENT_LIST_RE.split(recall.get("product") or "", maxsplit=1)[0])
         head = _COMPONENT_MARKER_RE.split(product_name, maxsplit=1)[0]
         match = regex.search(head)
-        if match and not _ABSENT_BEFORE_RE.search(head[:match.start()]):
-            kept.append(recall)
+        if not match or _ABSENT_BEFORE_RE.search(head[:match.start()]):
+            continue
+        if _contains_rather_than_is(term, product_name, regex):
+            continue
+        kept.append(recall)
     return kept
+
+
+def _contains_rather_than_is(term: str, product_name: str, regex: re.Pattern) -> bool:
+    """True when the product is something made with the ingredient (see
+    _NOT_THE_INGREDIENT_RE) -- ignoring the ingredient's own name, so a
+    salsa recall still counts for salsa."""
+    rest = regex.sub(" ", product_name)
+    for found in _NOT_THE_INGREDIENT_RE.finditer(rest):
+        if found.group(0).startswith("seed") and term in _SEED_FOODS:
+            continue
+        return True
+    return False
+
+
+def _reason_is_about(term: str, reason: str, regex: re.Pattern) -> bool:
+    """The recall reason names the ingredient itself -- not something grown
+    from or made with it: "Broccoli seeds potentially contaminated" is about
+    seeds (seen live), "salsa made with jalapenos that may be contaminated"
+    is about jalapenos."""
+    for match in regex.finditer(reason):
+        following = reason[match.end():].split()
+        next_word = following[0].strip(".,;:()") if following else ""
+        if next_word and _NOT_THE_INGREDIENT_RE.fullmatch(next_word) and not (
+                next_word.startswith("seed") and term in _SEED_FOODS):
+            continue
+        return True
+    return False
+
+
+def _varieties_named(term: str, text: str) -> set:
+    """Every known kind of ``term`` named anywhere in text."""
+    kinds = _VARIETIES.get(term) or set()
+    return {word for word in re.findall(r"[a-z]+", text) if word in kinds}
+
+
+def _variety(term: str, text: str) -> str:
+    """The kind of ``term`` named right before it ("bean" in "bean sprouts"),
+    when term has known kinds and one is named, else ""."""
+    kinds = _VARIETIES.get(term)
+    if not kinds:
+        return ""
+    match = re.search(r"([a-z]+)\s+" + _ingredient_re(term).pattern, text)
+    return match.group(1) if match and match.group(1) in kinds else ""
 
 
 def _date(yyyymmdd: str) -> str:
@@ -266,10 +352,16 @@ class RecallSentinelAgent(BaseStrategyAgent):
                 return
             if self._speaker_kind(speaker_uri, in_envelope) != "agent":
                 return  # the request itself, or the convener relaying it
+            port = self._port_of(speaker_uri)
+            if port not in MENU_SOURCE_PORTS:
+                return  # discussion of the menu, not the menu (see MENU_SOURCE_PORTS)
             text = self._extract_utterance_text(event)
             if not text or _SENTINEL_ALERT_RE.match(text):
                 return  # nothing said, or another sentinel's alert quoting the menu
             conv_id = getattr(getattr(in_envelope, "conversation", None), "id", "") or ""
+            if port == MENU_DESIGNER_PORT:
+                with self._lock:
+                    self._watch.pop(conv_id, None)  # a new menu: check it afresh
             alert, summary = self._check(conv_id, text)
             if alert:
                 self._hold_and_request(conv_id, alert, summary, out_envelope)
@@ -337,7 +429,7 @@ class RecallSentinelAgent(BaseStrategyAgent):
                 results.extend(data.get("results") or [])
             with self._lock:
                 fresh = []
-                for r in relevant_recalls(term, results):
+                for r in relevant_recalls(term, results, found[term]):
                     if r.get("recall_number") not in watch["reported"]:
                         watch["reported"].add(r.get("recall_number"))
                         fresh.append(r)
@@ -391,6 +483,13 @@ class RecallSentinelAgent(BaseStrategyAgent):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _port_of(uri: str):
+        try:
+            return urlparse(uri or "").port
+        except ValueError:
+            return None
 
     def _speaker_kind(self, speaker_uri: str, in_envelope) -> str:
         """"human" | "convener" | "agent": the floor manager lists every

@@ -18,6 +18,8 @@ from agents.recall_sentinel.recall_sentinel_agent import (
 SENTINEL_URL = "http://127.0.0.1:8308/"
 MENU_DESIGNER_URL = "http://127.0.0.1:8301/"
 CONVENER_URL = "http://127.0.0.1:8300/"
+RECIPE_URL = "http://127.0.0.1:8303/"
+OPTIMIZATION_URL = "http://127.0.0.1:8304/"
 HUMAN_URI = "openFloor://localhost:8090/CafeteriaOpsLineCheck"
 
 
@@ -66,6 +68,43 @@ class FindWatchedIngredientsTests(unittest.TestCase):
 
 
 class RelevantRecallsTests(unittest.TestCase):
+    @staticmethod
+    def _kept(term, product, reason="Potential contamination with Salmonella", clause=""):
+        return bool(relevant_recalls(term, [{"product": product, "reason": reason}], clause))
+
+    def test_a_product_made_with_the_ingredient_is_not_the_ingredient(self):
+        # Each of these reached a live alert before the match was tightened.
+        self.assertFalse(self._kept("broccoli", "EDEN BROTHERS Broccoli Seeds - Calabrese"))
+        self.assertFalse(self._kept("rice", "Rice & Bean Burrito"))
+        self.assertFalse(self._kept("beef", "Spicy Roast Beef Sandwich (closed-face)"))
+        self.assertFalse(self._kept("tomato", "Tomato Salsa Fresca"))
+        self.assertFalse(self._kept("avocado", "Salata Salad Kitchen Jalapeno Avocado Dressing",
+                                    reason="Salmonella in diced jalapeno received from a supplier"))
+
+    def test_the_ingredient_itself_still_counts(self):
+        self.assertTrue(self._kept("lettuce", "MARKON LETTUCE SALAD MIX 4/5#", reason="Cyclospora"))
+        self.assertTrue(self._kept("ground beef", "Ground Beef 80/20 5 lb chub", reason="E. coli O157:H7"))
+        self.assertTrue(self._kept("salsa", "Tomato Salsa Fresca"))         # its own name isn't "made with"
+        self.assertTrue(self._kept("sesame", "Organic Sesame Seeds 16 oz"))  # a seed food
+
+    def test_a_reason_about_something_grown_from_it_does_not_count(self):
+        # Live: "Broccoli seeds potentially contaminated" alerted for broccoli.
+        self.assertFalse(self._kept("broccoli", "ZestiGreens Broccoli Seeds for Sprouting & Microgreens",
+                                    reason="Broccoli seeds potentially contaminated with Salmonella"))
+        self.assertFalse(self._kept("broccoli", "Evergreen Fresh Sprouts LLC, Broccoli Sprouts", reason="Salmonella"))
+        self.assertFalse(self._kept("cheese", "Spicy Cheddar Cheese Popcorn", reason="Potential Salmonella contamination"))
+
+    def test_a_different_cheese_does_not_count(self):
+        brie = ("Mon Sire Brie, soft-ripened French cheese, 1 kg", "Brie Cheese supplier sample results revealed Listeria")
+        self.assertFalse(self._kept("cheese", *brie, clause="grilled halloumi cheese"))
+        self.assertTrue(self._kept("cheese", *brie, clause="cheese plate"))      # menu doesn't say which
+        self.assertTrue(self._kept("cheese", *brie, clause="baked brie cheese"))
+
+    def test_a_different_kind_of_the_ingredient_does_not_count(self):
+        self.assertFalse(self._kept("sprouts", "LEASA Alfalfa Sprouts", reason="E.coli", clause="10g bean sprouts"))
+        self.assertTrue(self._kept("sprouts", "LEASA Alfalfa Sprouts", reason="E.coli", clause="alfalfa sprouts"))
+        self.assertTrue(self._kept("sprouts", "LEASA Alfalfa Sprouts", reason="E.coli", clause="sprouts"))
+
     def test_ingredient_named_in_the_reason_counts(self):
         self.assertEqual(relevant_recalls("jalapeno", [SALSA_RECALL]), [SALSA_RECALL])
 
@@ -107,7 +146,7 @@ class EnvelopeTests(unittest.TestCase):
         self.lookups = patcher.start()
         self.addCleanup(patcher.stop)
 
-    def _send(self, events, conversants=(SENTINEL_URL, MENU_DESIGNER_URL, CONVENER_URL)):
+    def _send(self, events, conversants=(SENTINEL_URL, MENU_DESIGNER_URL, CONVENER_URL, RECIPE_URL, OPTIMIZATION_URL)):
         envelope = {"openFloor": {
             "schema": {"version": "1.1"},
             "conversation": {"id": "conv-recall", "conversants": [
@@ -200,10 +239,23 @@ class EnvelopeTests(unittest.TestCase):
         self.lookups.assert_not_called()
 
     def test_each_ingredient_and_recall_is_reported_once(self):
+        # The recipe for a dish on the menu mentions its lettuce again: one finding.
         self._send([self._utterance(MENU_DESIGNER_URL, "Monday: Tacos with lettuce")])
         self._grant()
-        self.assertEqual(self._send([self._utterance(MENU_DESIGNER_URL, "Tuesday: Lettuce wraps")]), [])
+        self.assertEqual(self._send([self._utterance(RECIPE_URL, "Tacos: 30g shredded lettuce")]), [])
         self.assertEqual(self.lookups.call_count, 1)  # lettuce isn't looked up again
+
+    def test_a_new_menu_is_checked_afresh(self):
+        self._send([self._utterance(MENU_DESIGNER_URL, "Monday: Tacos with lettuce")])
+        self._grant()
+        events = self._send([self._utterance(MENU_DESIGNER_URL, "Monday: Lettuce wraps")])
+        self.assertEqual([e["eventType"] for e in events], ["requestFloor"])
+
+    def test_other_agents_discussing_the_menu_are_not_checked(self):
+        # Live: Menu Optimization's commentary raised an alert for "turkey",
+        # which was never on the menu.
+        self.assertEqual(self._send([self._utterance(OPTIMIZATION_URL, "Swap the lamb for turkey with lettuce")]), [])
+        self.lookups.assert_not_called()
 
     def test_another_sentinels_alert_is_not_rechecked(self):
         allergy_alert = "Allergy alert: these items contain severe allergens.\nTree nuts: Tacos with lettuce and pesto (pesto)"

@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "vercel": "^49.2.0"
+    "vercel": "^66.6.0"
   },
   "overrides": {
     "tar": "^7.5.19"
